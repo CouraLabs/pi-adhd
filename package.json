@@ -1,0 +1,26 @@
+{
+  "name": "pi-pack",
+  "version": "0.1.0",
+  "description": "A collection of pi extensions: tools, commands, and lifecycle hooks for the pi coding agent",
+  "keywords": ["pi-package"],
+  "type": "module",
+  "license": "MIT",
+  "pi": {
+    "extensions": ["extensions/*.ts", "extensions/*/index.ts", "!**/*.test.ts"],
+    "themes": ["themes/*.json"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-agent-core": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*",
+    "typescript": "^5.7.0"
+  }
+}
