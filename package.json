@@ -6,7 +6,12 @@
   "type": "module",
   "license": "MIT",
   "pi": {
-    "extensions": ["extensions/*.ts", "extensions/*/index.ts", "!**/*.test.ts"],
+    "extensions": [
+      "extensions/*.ts",
+      "extensions/*/index.ts",
+      "extensions/tools/*/index.ts",
+      "!**/*.test.ts"
+    ],
     "themes": ["themes/*.json"]
   },
   "peerDependencies": {

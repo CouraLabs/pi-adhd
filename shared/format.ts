@@ -7,6 +7,24 @@ export function formatTokens(count: number): string {
 	return `${Math.round(count / 1_000_000)}M`;
 }
 
+/**
+ * Left margin shared by the prompt editor box and the widgets above it. The
+ * editor insets its box by one column, so widgets use the same pad to line up
+ * with the prompt text instead of starting flush against the terminal edge.
+ */
+export const WIDGET_LEFT_PADDING = " ";
+
+/**
+ * Prefix every non-empty widget line with the shared left margin.
+ *
+ * Idempotent in effect rather than in form: renderers hand back unpadded lines
+ * and this is applied once at the point the lines leave the renderer, so a line
+ * is never padded twice. Empty lines are left alone so they cost no columns.
+ */
+export function padWidgetLines(lines: readonly string[]): string[] {
+	return lines.map((line) => (line.length > 0 ? `${WIDGET_LEFT_PADDING}${line}` : line));
+}
+
 /** Collapse the home directory to `~` for display. */
 export function formatCwd(cwd: string): string {
 	const home = process.env.HOME || process.env.USERPROFILE;

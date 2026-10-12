@@ -1,9 +1,10 @@
 /**
  * The pi-pack prompt editor: a closed field-style box drawn with terminal box
- * characters around the built-in editor, with a `⟫` marker on the first input
+ * characters around the built-in editor, with a `❯` marker on the first input
  * line, the working indicator embedded in the top border, and the working
- * directory + git state embedded in the bottom border. The box keeps a fixed
- * border color instead of tracking the thinking level.
+ * directory + git state embedded in the bottom border. The box border color
+ * follows the active agent mode (Pi is accented, Work keeps the default
+ * border) instead of tracking the thinking level.
  */
 
 import {
@@ -14,6 +15,7 @@ import {
 import type { EditorTheme, TUI } from "@earendil-works/pi-tui";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { formatCwd } from "../../shared/format.ts";
+import { agentModeBorderColor, getAgentMode } from "../../shared/modes.ts";
 import {
 	BOX_BOTTOM_LEFT,
 	BOX_BOTTOM_RIGHT,
@@ -56,6 +58,8 @@ export class FieldEditor extends CustomEditor {
 		private readonly getLocation: LocationProvider,
 	) {
 		super(tui, theme, keybindings, { paddingX: 0, embedWorkingStatus: true });
+		// Keep the embedded working indicator in step with the mode-colored box.
+		this.borderColor = (text) => this.paint(text);
 	}
 
 	setWorkingStatusIndicator(indicator: StatusIndicatorLike): void {
@@ -63,9 +67,9 @@ export class FieldEditor extends CustomEditor {
 		super.setWorkingStatusIndicator(indicator);
 	}
 
-	/** Paint a border fragment with the fixed editor border color (ignores the thinking level). */
+	/** Paint a border fragment with the active agent mode's border color. */
 	private paint(text: string): string {
-		return this.getLocation()?.theme.fg("border", text) ?? text;
+		return this.getLocation()?.theme.fg(agentModeBorderColor(getAgentMode()), text) ?? text;
 	}
 
 	render(width: number): string[] {
@@ -76,7 +80,7 @@ export class FieldEditor extends CustomEditor {
 		const boxWidth = width - margin * 2;
 		if (boxWidth < 8) return super.render(width);
 
-		// Columns: `│ ` + `⟫ ` + content + ` │`.
+		// Columns: `│ ` + `❯ ` + content + ` │`.
 		const contentWidth = Math.max(1, boxWidth - 6);
 		const lines = super.render(contentWidth);
 		if (lines.length < 2) return lines;

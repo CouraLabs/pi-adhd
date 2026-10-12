@@ -2,18 +2,19 @@
  * editor — a closed, field-style prompt editor for pi.
  *
  * Wraps the built-in editor in a field-style box drawn with terminal box
- * characters, with a `⟫` marker on the first input line. The streaming working
+ * characters, with a `❯` marker on the first input line. The streaming working
  * indicator is embedded in the top border and the working directory + git
- * state in the bottom border; the box keeps a fixed border color rather than
- * tracking the thinking level. The "Working" label is replaced with a random
+ * state in the bottom border; the box border follows the active agent mode
+ * rather than the thinking level. The "Working" label is replaced with a random
  * short joke phrase chosen fresh on every turn.
  *
- * Toggle it at any time with `/couralabs-prompt-ui [on|off]`.
+ * Toggle it at any time with `/prompt-ui [on|off]`.
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { TUI } from "@earendil-works/pi-tui";
 import { loadSettings, updateSettings } from "../../shared/settings.ts";
+import { agentModeBorderColor, getAgentMode, subscribeAgentMode } from "../../shared/modes.ts";
 import { FieldEditor, type LocationProvider } from "./field-editor.ts";
 import { emptyGit, parseNumstat, type GitInfo } from "./git.ts";
 import { JOKES } from "./jokes.ts";
@@ -25,10 +26,10 @@ const GIT_DEBOUNCE_MS = 350;
 export default function (pi: ExtensionAPI) {
 	let ctx: ExtensionContext | undefined;
 	let tui: TUI | undefined;
-	let currentEditor: FieldEditor | undefined;
 	let enabled = true;
 	let lastJoke = -1;
 	let git: GitInfo = emptyGit();
+	let unsubscribeMode: (() => void) | undefined;
 
 	let gitTimer: ReturnType<typeof setTimeout> | undefined;
 	let gitInterval: ReturnType<typeof setInterval> | undefined;
@@ -82,10 +83,11 @@ export default function (pi: ExtensionAPI) {
 		return { cwd: c.cwd, git, theme: c.ui.theme };
 	};
 
-	/** Install the dot spinner, colored to match the editor's thinking-level border. */
+	/** Install the dot spinner, colored to match the editor's mode-colored border. */
 	const applyWorkingIndicator = (context: ExtensionContext) => {
 		if (context.mode !== "tui") return;
-		const color = currentEditor?.borderColor ?? context.ui.theme.getThinkingBorderColor(pi.getThinkingLevel());
+		const border = agentModeBorderColor(getAgentMode());
+		const color = (text: string) => context.ui.theme.fg(border, text);
 		context.ui.setWorkingIndicator({
 			frames: SPINNER_FRAMES.map((frame) => color(frame)),
 			intervalMs: SPINNER_INTERVAL_MS,
@@ -104,8 +106,7 @@ export default function (pi: ExtensionAPI) {
 		if (context.mode !== "tui") return;
 		context.ui.setEditorComponent((editorTui, theme, keybindings) => {
 			tui = editorTui;
-			currentEditor = new FieldEditor(editorTui, theme, keybindings, locationProvider);
-			return currentEditor;
+			return new FieldEditor(editorTui, theme, keybindings, locationProvider);
 		});
 		applyWorkingIndicator(context);
 	};
@@ -113,12 +114,11 @@ export default function (pi: ExtensionAPI) {
 	const uninstallEditor = (context: ExtensionContext) => {
 		context.ui.setEditorComponent(undefined);
 		context.ui.setWorkingIndicator();
-		currentEditor = undefined;
 		tui = undefined;
 	};
 
-	pi.registerCommand("couralabs-prompt-ui", {
-		description: "Toggle the pi-pack prompt field (usage: /couralabs-prompt-ui [on|off])",
+	pi.registerCommand("prompt-ui", {
+		description: "Toggle the pi-pack prompt field (usage: /prompt-ui [on|off])",
 		handler: async (args, commandCtx) => {
 			const arg = args.trim().toLowerCase();
 			if (arg === "on") enabled = true;
@@ -142,6 +142,14 @@ export default function (pi: ExtensionAPI) {
 		enabled = loadSettings().editor.enabled;
 		git = emptyGit();
 		stopGitTimers();
+
+		// Recolor the box border (and spinner) when the agent mode changes.
+		unsubscribeMode?.();
+		unsubscribeMode = subscribeAgentMode(() => {
+			requestRender();
+			if (enabled && ctx) applyWorkingIndicator(ctx);
+		});
+
 		if (!enabled || context.mode !== "tui") return;
 		installEditor(context);
 		void refreshGit();
@@ -169,8 +177,9 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("session_shutdown", () => {
 		stopGitTimers();
+		unsubscribeMode?.();
+		unsubscribeMode = undefined;
 		ctx = undefined;
 		tui = undefined;
-		currentEditor = undefined;
 	});
 }

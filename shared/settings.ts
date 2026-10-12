@@ -15,12 +15,75 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { DEFAULT_AGENT_MODE, type AgentMode } from "./modes.ts";
+import { DEFAULT_SUBMODE, type Submode } from "./submodes.ts";
+
+/** Prompt-inheritance strategy a child session adopts for a provider. */
+export type PromptInheritance = "full" | "portable";
+
+/**
+ * Operational configuration for the `subagents` extension. It lives under the
+ * `subagents` key of the pi-pack settings file, next to its `enabled` toggle,
+ * so every pi-pack knob is in one place.
+ */
+export interface SubagentsConfig {
+	/** Master switch: when false the tools are hidden and the widget cleared. */
+	enabled: boolean;
+	/** Maximum number of background agents running at once; the rest queue. */
+	maxConcurrent: number;
+	/** Default turn ceiling for agents that declare none. 0 = unlimited. */
+	defaultMaxTurns: number;
+	/** Turns left when an agent is warned to wrap up. */
+	wrapUpTurns: number;
+	/** Minutes a consumed agent's session is retained. */
+	consumedSessionRetentionMinutes: number;
+	/** Minutes an unconsumed agent's session is retained (safety cap). */
+	unconsumedSessionRetentionMinutes: number;
+	/** When false, a parent interrupt leaves background agents running. */
+	abortAllOnInterrupt: boolean;
+	/** When false, background children cannot interrupt the parent mid-run. */
+	midRunUpdates: boolean;
+	/** Pi package sources whose extensions child sessions must not load. */
+	excludedExtensionPackages: string[];
+	/** Prompt-inheritance strategy per provider id; unlisted providers use "full". */
+	promptInheritance: Record<string, PromptInheritance>;
+	/** Model override per built-in agent name; written by `/subagent-model`. */
+	agentModels: Record<string, string>;
+}
+
+/** Configuration for the `thinking` extension's compact reasoning preview. */
+export interface ThinkingConfig {
+	/** Master switch: when false the compact renderer is not installed. */
+	enabled: boolean;
+	/** For OpenAI models, use the latest reasoning-summary heading as the live title. */
+	useSummaryTitlesAsThinkingTitle: boolean;
+	/** Rendered reasoning-preview lines kept while thinking is hidden; 0 hides the preview. */
+	previewLines: number;
+	/** Milliseconds between animation frames while the model is reasoning. */
+	animationIntervalMs: number;
+}
+
+/** Configuration for the `modes` extension: the active Pi/Work agent mode. */
+export interface ModesConfig {
+	/** Mode restored at session start; switched at runtime with /mode. */
+	current: AgentMode;
+}
+
+/** Configuration for the `submodes` extension: the active Plan/Grill submode. */
+export interface SubmodesConfig {
+	/** Submode restored at session start; set at runtime with `/submode`. */
+	current: Submode;
+}
 
 /** Persisted pi-pack configuration. */
 export interface CouralabsSettings {
 	footer: { enabled: boolean };
 	editor: { enabled: boolean };
 	messages: { enabled: boolean };
+	thinking: ThinkingConfig;
+	subagents: SubagentsConfig;
+	modes: ModesConfig;
+	submodes: SubmodesConfig;
 }
 
 /** A partial update; each provided leaf overrides the stored value. */
@@ -28,12 +91,41 @@ export interface SettingsPatch {
 	footer?: { enabled?: boolean };
 	editor?: { enabled?: boolean };
 	messages?: { enabled?: boolean };
+	thinking?: Partial<ThinkingConfig>;
+	subagents?: Partial<SubagentsConfig>;
+	modes?: Partial<ModesConfig>;
+	submodes?: Partial<SubmodesConfig>;
 }
 
 export const DEFAULT_SETTINGS: CouralabsSettings = {
 	footer: { enabled: true },
 	editor: { enabled: true },
 	messages: { enabled: true },
+	thinking: {
+		enabled: true,
+		useSummaryTitlesAsThinkingTitle: true,
+		previewLines: 5,
+		animationIntervalMs: 90,
+	},
+	subagents: {
+		enabled: true,
+		maxConcurrent: 4,
+		defaultMaxTurns: 0,
+		wrapUpTurns: 2,
+		consumedSessionRetentionMinutes: 10,
+		unconsumedSessionRetentionMinutes: 720,
+		abortAllOnInterrupt: true,
+		midRunUpdates: true,
+		excludedExtensionPackages: [],
+		promptInheritance: {},
+		agentModels: {},
+	},
+	modes: {
+		current: DEFAULT_AGENT_MODE,
+	},
+	submodes: {
+		current: DEFAULT_SUBMODE,
+	},
 };
 
 /** Path of the pi-pack settings file (`~/.pi/couralabs/settings.json`). */
