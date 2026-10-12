@@ -1,7 +1,9 @@
 /**
- * The pi-pack prompt editor: a closed, field-style box around the built-in
- * editor with a `❯` marker, the working indicator pushed to the top-right, and
- * cumulative token/cost usage on the bottom rule.
+ * The pi-pack prompt editor: a closed field-style box drawn with terminal box
+ * characters around the built-in editor, with a `⟫` marker on the first input
+ * line, the working indicator embedded in the top border, and the working
+ * directory + git state embedded in the bottom border. The box keeps a fixed
+ * border color instead of tracking the thinking level.
  */
 
 import {
@@ -11,24 +13,38 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { EditorTheme, TUI } from "@earendil-works/pi-tui";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { formatTokens } from "../../shared/format.ts";
-import { DB_GLYPH, PROMPT } from "../../shared/glyphs.ts";
-import type { UsageTotals } from "../../shared/usage.ts";
+import { formatCwd } from "../../shared/format.ts";
+import {
+	BOX_BOTTOM_LEFT,
+	BOX_BOTTOM_RIGHT,
+	BOX_HORIZONTAL,
+	BOX_TOP_LEFT,
+	BOX_TOP_RIGHT,
+	BOX_VERTICAL,
+	ELLIPSIS,
+	PROMPT,
+	SEPARATOR,
+} from "../../shared/glyphs.ts";
+import type { GitInfo } from "./git.ts";
 
 type StatusIndicatorLike = Parameters<CustomEditor["setWorkingStatusIndicator"]>[0];
+
+/** Blank columns kept between the box and the terminal edges. */
+const BOX_MARGIN = 1;
 
 /** Fields the editor exposes at runtime but not through its public type. */
 interface EditorInternals {
 	renderedVisibleLineCount?: number;
 }
 
-/** Cumulative token/cost usage plus the theme needed to draw the segment. */
-export interface EditorUsageInfo {
-	totals: UsageTotals;
+/** Working directory plus git state, and the theme needed to draw the segment. */
+export interface EditorLocationInfo {
+	cwd: string;
+	git: GitInfo;
 	theme: Theme;
 }
 
-export type UsageProvider = () => EditorUsageInfo | undefined;
+export type LocationProvider = () => EditorLocationInfo | undefined;
 
 export class FieldEditor extends CustomEditor {
 	private indicator: StatusIndicatorLike = undefined;
@@ -37,7 +53,7 @@ export class FieldEditor extends CustomEditor {
 		tui: TUI,
 		theme: EditorTheme,
 		keybindings: KeybindingsManager,
-		private readonly getUsage: UsageProvider,
+		private readonly getLocation: LocationProvider,
 	) {
 		super(tui, theme, keybindings, { paddingX: 0, embedWorkingStatus: true });
 	}
@@ -47,18 +63,21 @@ export class FieldEditor extends CustomEditor {
 		super.setWorkingStatusIndicator(indicator);
 	}
 
-	/** Paint a border/prompt fragment with the thinking-level color pi assigns to the editor. */
+	/** Paint a border fragment with the fixed editor border color (ignores the thinking level). */
 	private paint(text: string): string {
-		return this.borderColor(text);
+		return this.getLocation()?.theme.fg("border", text) ?? text;
 	}
 
 	render(width: number): string[] {
 		if (width <= 0) return [];
-		// Too narrow for the prompt marker: fall back to the plain editor.
-		if (width < 3) return super.render(width);
 
-		// Reserve two columns for the `❯ ` marker.
-		const contentWidth = Math.max(1, width - 2);
+		// Shrink the side margin before giving up on the box.
+		const margin = width >= 8 + BOX_MARGIN * 2 ? BOX_MARGIN : 0;
+		const boxWidth = width - margin * 2;
+		if (boxWidth < 8) return super.render(width);
+
+		// Columns: `│ ` + `⟫ ` + content + ` │`.
+		const contentWidth = Math.max(1, boxWidth - 6);
 		const lines = super.render(contentWidth);
 		if (lines.length < 2) return lines;
 
@@ -68,59 +87,62 @@ export class FieldEditor extends CustomEditor {
 		const content = lines.slice(1, 1 + visibleCount);
 		const trailing = lines.slice(1 + visibleCount + 1);
 
-		const out: string[] = [this.topLine(width)];
+		const info = this.getLocation();
+		const pad = " ".repeat(margin);
+		const status = this.indicator?.renderInBorder(Math.max(0, boxWidth - 8)) ?? "";
+		const out: string[] = [pad + this.borderLine(boxWidth, BOX_TOP_LEFT, BOX_TOP_RIGHT, status) + pad];
 		content.forEach((line, index) => {
-			const prefix = index === 0 ? `${PROMPT} ` : "  ";
-			out.push(`${this.paint(prefix)}${line}`);
+			const prefix = index === 0 ? `${info?.theme.fg('text', PROMPT)} ` : "  ";
+			const padded = line + " ".repeat(Math.max(0, contentWidth - visibleWidth(line)));
+			out.push(pad + this.paint(`${BOX_VERTICAL} ${prefix}`) + padded + this.paint(` ${BOX_VERTICAL}`) + pad);
 		});
-		out.push(this.bottomLine(width));
+		out.push(pad + this.borderLine(boxWidth, BOX_BOTTOM_LEFT, BOX_BOTTOM_RIGHT, this.locationSegment()) + pad);
 
 		// Autocomplete suggestions are rendered after the editor; keep them full width.
 		for (const line of trailing) {
-			out.push(line + " ".repeat(Math.max(0, width - visibleWidth(line))));
+			out.push(pad + line + " ".repeat(Math.max(0, boxWidth - visibleWidth(line))) + pad);
 		}
 		return out;
 	}
 
-	/** Token/cost usage, matching the pi-pack footer. */
-	private usageSegment(): string {
-		const info = this.getUsage();
-		if (!info) return "";
-		const { totals, theme } = info;
-		const parts: string[] = [];
-		if (totals.input > 0) parts.push(theme.fg("success", `↑${formatTokens(totals.input)}`));
-		if (totals.output > 0) parts.push(theme.fg("accent", `↓${formatTokens(totals.output)}`));
-		const promptTokens = totals.input + totals.cacheRead + totals.cacheWrite;
-		if (promptTokens > 0) {
-			const cacheHit = (totals.cacheRead / promptTokens) * 100;
-			parts.push(theme.fg("text", `${DB_GLYPH} ${cacheHit.toFixed(0)}%`));
+	/** Draw a full-width border with corners and an optional right-aligned label. */
+	private borderLine(width: number, leftCorner: string, rightCorner: string, label: string): string {
+		if (width <= 0) return "";
+		if (width < 2) return this.paint(leftCorner.slice(0, width));
+
+		const inner = width - 2;
+		let text = label;
+		if (visibleWidth(text) + 3 > inner) {
+			const room = Math.max(0, inner - 3);
+			text = room > 0 ? truncateToWidth(text, room, ELLIPSIS) : "";
 		}
-		if (totals.cost > 0) parts.push(theme.fg("warning", `$${totals.cost.toFixed(3)}`));
-		return parts.join(theme.fg("dim", " · "));
+		const labelWidth = visibleWidth(text);
+		if (labelWidth === 0) {
+			return this.paint(leftCorner + BOX_HORIZONTAL.repeat(inner) + rightCorner);
+		}
+
+		const fill = inner - labelWidth - 3;
+		return (
+			this.paint(`${leftCorner}${BOX_HORIZONTAL.repeat(fill)} `) +
+			text +
+			this.paint(` ${BOX_HORIZONTAL}${rightCorner}`)
+		);
 	}
 
-	/** Top rule with the working indicator pushed to the right. */
-	private topLine(width: number): string {
-		if (width <= 0) return "";
-		const status = this.indicator?.renderInBorder(Math.max(0, width - 3)) ?? "";
-		const statusWidth = visibleWidth(status);
-		if (statusWidth === 0) return this.paint("─".repeat(width));
+	/** Working directory and git branch/diff, embedded in the bottom border. */
+	private locationSegment(): string {
+		const info = this.getLocation();
+		if (!info) return "";
+		const { cwd, git, theme } = info;
+		const parts: string[] = [];
+		if (cwd) parts.push(theme.fg("text", formatCwd(cwd)));
 
-		const left = Math.max(0, width - 3 - statusWidth);
-		return `${this.paint(`${"─".repeat(left)} `)}${status}${this.paint(" ─")}`;
-	}
+		const gitParts: string[] = [];
+		if (git.branch) gitParts.push(theme.fg("accent", `⌥ ${git.branch}`));
+		if (git.additions > 0) gitParts.push(theme.fg("success", `+${git.additions}`));
+		if (git.removals > 0) gitParts.push(theme.fg("error", `-${git.removals}`));
+		if (gitParts.length > 0) parts.push(gitParts.join(" "));
 
-	/** Bottom rule with the token/cost usage pushed to the right. */
-	private bottomLine(width: number): string {
-		if (width <= 0) return "";
-		const usage = this.usageSegment();
-		if (visibleWidth(usage) === 0) return this.paint("─".repeat(width));
-
-		const available = Math.max(0, width - 3);
-		const trimmed = visibleWidth(usage) > available ? truncateToWidth(usage, available, "") : usage;
-		const left = Math.max(0, width - 3 - visibleWidth(trimmed));
-		const rule = this.paint("─".repeat(left) + " ");
-		const tail = this.paint(" ─");
-		return rule + trimmed + tail;
+		return parts.join(theme.fg("dim", SEPARATOR));
 	}
 }

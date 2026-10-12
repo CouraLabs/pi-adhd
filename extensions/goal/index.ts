@@ -1,0 +1,863 @@
+/**
+ * pi-goal — oh-my-pi goal mode migrated to a pi extension.
+ *
+ * Source: oh-my-pi (github.com/can1357/oh-my-pi, a fork of badlogic/pi-mono)
+ *   - packages/coding-agent/src/goals/state.ts            → state.ts
+ *   - packages/coding-agent/src/goals/runtime.ts          → runtime.ts
+ *   - packages/coding-agent/src/goals/tools/goal-tool.ts  → tool.ts (+render.ts)
+ *   - packages/coding-agent/src/prompts/tools/goal.md     → prompts/goal.md
+ *   - packages/coding-agent/src/prompts/goals/*.md        → prompts/*.md
+ *   - packages/coding-agent/src/session/agent-session.ts  → index.ts host wiring
+ *   - packages/coding-agent/src/modes/interactive-mode.ts → index.ts continuation
+ *     loop + commands.ts (/goal, /guided-goal)
+ *
+ * Adaptations for pi's extension API (each maps an omp-internal surface to
+ * the public extension boundary):
+ *
+ *   omp surface                            → pi adaptation
+ *   ─────────────────────────────────────────────────────────────────────────
+ *   session getGoalModeState/setGoalModeState
+ *                                          → closure state + goal-state
+ *                                            custom entries (full snapshots)
+ *   appendModeChange goal/goal_paused/none → "goal-state" / "goal-cleared"
+ *                                            entries (see restore.ts)
+ *   appendCustomEntry goal-completed       → "goal-completed" entry
+ *   session stats getCurrentUsage          → sessionManager entries scan
+ *                                            (same sums as getSessionStats)
+ *   goal_updated session event             → pi.events.emit("goal_updated")
+ *   sendHiddenMessage (budget steer)       → pi.sendMessage display:false
+ *   prompt-time prependMessages goal context
+ *                                          → context_with_system per-request
+ *                                            injection (0.87.0): survives
+ *                                            compaction, supersedes transcript
+ *                                            copies instead of accumulating
+ *   #scheduleGoalContinuation 800ms TUI timer
+ *                                          → agent_before_settle actionable
+ *                                            boundary (0.87.0):
+ *                                            { entries: [continuation draft],
+ *                                              continue: true } — exactly one
+ *                                            next provider request; sendMessage
+ *                                            fallback kept for continuations
+ *                                            withheld after settlement
+ *   setActiveToolsByName                   → pi.setActiveTools
+ *   status-line segment                    → ctx.ui.setStatus("goal", ...)
+ *   settings goal.enabled / continuationModes / statusInFooter
+ *                                          → dropped (extension is opt-in:
+ *                                            installing it enables goal mode)
+ *
+ * omp operation semantics are kept verbatim: one live goal per session,
+ * budget accounting includes cache writes but not cache reads, budget limit
+ * steers exactly once per goal, interrupt pauses (never completes) the goal,
+ * resume pauses active goals again, and completion requires a verified
+ * `goal({op:"complete"})` call.
+ *
+ * Integration contract for other extensions:
+ *   - `pi.events.emit("goal_updated", { goal, state })` after every runtime
+ *     transition (goal may be null; state undefined after drop)
+ *   - reads `todo_updated` events + "todo-phases" entries from pi-todo to
+ *     render the goal todo context and the footer task progress (works
+ *     without pi-todo installed)
+ */
+
+// Prompt lives in a static .md asset next to this module (published with the
+// package). Loaded at runtime: pi loads extensions through jiti, which does
+// not support bundler-style text imports (pi-todo precedent).
+import { readFileSync } from "node:fs";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+import type {
+	ContextEditEntryDraft,
+	ExtensionAPI,
+	ExtensionContext,
+	SessionBoundaryDraft,
+} from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
+import {
+	createGoalCommand,
+	createGuidedGoalCommand,
+	type GoalCommandDeps,
+	goalArgumentCompletions,
+	renderGuidedGoalKickoff,
+} from "./commands.ts";
+import { formatDuration, formatNumber } from "./format.ts";
+import {
+	GOAL_CLEARED_ENTRY_TYPE,
+	GOAL_COMPLETED_ENTRY_TYPE,
+	GOAL_STATE_ENTRY_TYPE,
+	restoreGoalFromEntries,
+} from "./restore.ts";
+import { GoalRuntime } from "./runtime.ts";
+import type { Goal, GoalModeState, GoalTokenUsage } from "./state.ts";
+import { cloneGoal } from "./state.ts";
+import { renderTemplate } from "./template.ts";
+import {
+	buildTodoContext,
+	parseTodoPhases,
+	restoreTodoPhases,
+	todoProgress,
+	type TodoPhase,
+} from "./todo-bridge.ts";
+import { runGoalEvaluator } from "./evaluator.ts";
+import { createGoalTool, type GoalToolDeps } from "./tool.ts";
+
+const goalModeContextPrompt = readFileSync(
+	path.join(path.dirname(fileURLToPath(import.meta.url)), "prompts", "goal-mode-context.md"),
+	"utf8",
+);
+
+interface EntryMessageLike {
+	role?: string;
+	stopReason?: string;
+	errorMessage?: string;
+	usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number } | undefined;
+}
+
+interface EntryUsageLike {
+	usage?: EntryMessageLike["usage"];
+}
+
+/** Budget slimming drafts (opt-in via PI_GOAL_SLIM_ON_BUDGET=1, attached once
+ *  per goal at the budget-limited flip): omit toolResult entries that precede
+ *  the newest real user message from future provider context via append-only
+ *  context-edit drafts — superseded turns' work products. Raw history, usage
+ *  and UI history stay untouched (context_edit contract). Pure: returns the
+ *  drafts; the settle boundary attaches them. */
+export function contextSlimDrafts(branch: unknown[]): ContextEditEntryDraft[] {
+	const drafts: ContextEditEntryDraft[] = [];
+	let keepFrom = -1;
+	for (let i = branch.length - 1; i >= 0; i--) {
+		const entry = branch[i] as { type?: string; message?: { role?: string } } | undefined;
+		if (entry?.type === "message" && entry.message?.role === "user") {
+			keepFrom = i;
+			break;
+		}
+	}
+	if (keepFrom <= 0) return drafts;
+	const seen = new Set<string>();
+	for (let i = 0; i < keepFrom; i++) {
+		const entry = branch[i] as { type?: string; id?: string; message?: { role?: string } } | undefined;
+		if (entry?.type !== "message" || entry.message?.role !== "toolResult") continue;
+		if (!entry.id || seen.has(entry.id)) continue;
+		seen.add(entry.id);
+		drafts.push({ type: "context_edit", targetId: entry.id, replacement: null });
+	}
+	return drafts;
+}
+
+export default function piGoalExtension(pi: ExtensionAPI): void {
+	// ------------------------------------------------------------------
+	// Closure state (omp session fields)
+	// ------------------------------------------------------------------
+	let goalState: GoalModeState | undefined;
+	/** Active tool set saved when goal mode took over (omp #goalModePreviousTools). */
+	let savedTools: string[] | undefined;
+	let turnCounter = 0;
+	/** A continuation submitted by this extension is being processed. */
+	let continuationInFlight = false;
+	/** Last continuation turn produced no tool calls: stop auto-continuing. */
+	let suppressNextContinuation = false;
+	/** Any tool ran during the current agent run (suppression heuristic). */
+	let runHadToolCalls = false;
+	/** pi-todo phases for the goal todo context (empty without pi-todo). */
+	let todoPhases: TodoPhase[] = [];
+	/** Latest event context: gives the runtime synchronous entry access. */
+	let currentCtx: ExtensionContext | undefined;
+	/** A blocking ctx.ui dialog is open (ui_prompt_start/end). While open, no
+	 *  continuation may fire: the modal would hide a turn starting behind it. */
+	let uiPromptOpen = false;
+	/** Goal id whose budget-limited flip already armed context slimming. */
+	let slimmedBudgetGoalId: string | undefined;
+	/** Context-slimming drafts pending attachment at the next settle boundary. */
+	let pendingSlim = false;
+
+	// ------------------------------------------------------------------
+	// Usage accounting (mirror of pi getSessionStats().tokens sums)
+	// ------------------------------------------------------------------
+	function currentUsage(ctx: ExtensionContext | undefined): GoalTokenUsage {
+		const totals: GoalTokenUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+		if (!ctx) return totals;
+		const add = (usage: EntryMessageLike["usage"]): void => {
+			if (!usage) return;
+			totals.input += usage.input ?? 0;
+			totals.output += usage.output ?? 0;
+			totals.cacheRead += usage.cacheRead ?? 0;
+			totals.cacheWrite += usage.cacheWrite ?? 0;
+		};
+		for (const entry of ctx.sessionManager.getEntries()) {
+			const typed = entry as { type?: string; message?: EntryMessageLike } & EntryUsageLike;
+			if (typed.type === "branch_summary" || typed.type === "compaction") {
+				add(typed.usage);
+				continue;
+			}
+			if (typed.type !== "message") continue;
+			const message = typed.message;
+			if (!message) continue;
+			if (message.role === "toolResult" || message.role === "assistant") {
+				add(message.usage);
+			}
+		}
+		return totals;
+	}
+
+	// ------------------------------------------------------------------
+	// UI surfaces
+	// ------------------------------------------------------------------
+	/** omp status-line footer segment icons (unicode symbol set). */
+	function goalStatusIcon(status: Goal["status"]): string {
+		switch (status) {
+			case "paused":
+				return "⏸";
+			case "complete":
+				return "✔";
+			case "budget-limited":
+				return "⚠";
+			case "dropped":
+				return "⏹";
+			default:
+				return "🎯";
+		}
+	}
+
+/** omp status-line/segments.ts renderGoalMode: segment visible only while
+	 *  enabled or paused; text "<icon> Goal used[/budget]" (goal.statusInFooter
+	 *  defaults to true, so usage always renders). pi-goal deviation: with
+	 *  live pi-todo phases a ` · <closed>/<total> tasks` suffix is appended. */
+	function updateStatus(): void {
+		const ctx = currentCtx;
+		if (!ctx) return;
+		const state = goalState;
+		if (!state || !(state.enabled || state.goal.status === "paused")) {
+			ctx.ui.setStatus("goal", undefined);
+			return;
+		}
+		const goal = state.goal;
+		const used = formatNumber(goal.tokensUsed);
+		const budget = goal.tokenBudget !== undefined ? `/${formatNumber(goal.tokenBudget)}` : "";
+		const progress = todoProgress(todoPhases);
+		const tasks = progress ? ` · ${progress.closed}/${progress.total} tasks` : "";
+		ctx.ui.setStatus("goal", `${goalStatusIcon(goal.status)} Goal ${used}${budget}${tasks}`);
+	}
+
+	function notify(text: string, severity: "info" | "warning" | "error" = "info"): void {
+		const ctx = currentCtx;
+		if (!ctx) return;
+		if (ctx.hasUI) {
+			ctx.ui.notify(text, severity);
+			return;
+		}
+		console.error(text);
+	}
+
+	// ------------------------------------------------------------------
+	// Goal toolset management (omp setActiveToolsByName dance)
+	// ------------------------------------------------------------------
+	function ensureGoalToolActive(): void {
+		const active = pi.getActiveTools().filter((name) => name !== "goal");
+		savedTools = active;
+		pi.setActiveTools([...new Set([...active, "goal"])]);
+	}
+
+	function restoreSavedTools(): void {
+		if (savedTools !== undefined) {
+			pi.setActiveTools(savedTools);
+			savedTools = undefined;
+		}
+	}
+
+	// ------------------------------------------------------------------
+	// Exit (omp #exitGoalMode)
+	// ------------------------------------------------------------------
+	async function exitGoalMode(options?: { reason?: "completed" | "dropped" | "paused" }): Promise<void> {
+		const currentState = goalState;
+		if (options?.reason === "completed") {
+			goalState = undefined;
+			pi.appendEntry(GOAL_CLEARED_ENTRY_TYPE, { clearedAt: Date.now() });
+			pi.appendEntry(GOAL_COMPLETED_ENTRY_TYPE, {
+				objective: currentState?.goal?.objective,
+				tokensUsed: currentState?.goal?.tokensUsed,
+				tokenBudget: currentState?.goal?.tokenBudget,
+				timeUsedSeconds: currentState?.goal?.timeUsedSeconds,
+			});
+		}
+		restoreSavedTools();
+		continuationInFlight = false;
+		updateStatus();
+		if (options?.reason === "completed") notify("Goal mode completed.");
+		else if (options?.reason === "dropped") notify("Goal dropped.");
+		else if (options?.reason === "paused") notify("Goal mode paused.");
+	}
+
+	// ------------------------------------------------------------------
+	// goal_updated handling (omp #handleGoalSessionEvent)
+	// ------------------------------------------------------------------
+	function handleGoalUpdated(goal: Goal | null, state: GoalModeState | undefined): void {
+		pi.events.emit("goal_updated", { goal, state });
+		if (state?.goal?.status === "dropped") {
+			// omp runtime.dropGoal commits state undefined (persist "none"), so the
+			// dropped goal must vanish from session state entirely.
+			goalState = undefined;
+			void exitGoalMode({ reason: "dropped" });
+			return;
+		}
+		goalState = state;
+		if (
+			state?.goal.status === "budget-limited" &&
+			process.env.PI_GOAL_SLIM_ON_BUDGET === "1" &&
+			slimmedBudgetGoalId !== state.goal.id
+		) {
+			slimmedBudgetGoalId = state.goal.id;
+			pendingSlim = true;
+		}
+		if (!state?.enabled) {
+			continuationInFlight = false;
+		}
+		updateStatus();
+	}
+
+	// ------------------------------------------------------------------
+	// Runtime host (omp AgentSession GoalRuntimeHost)
+	// ------------------------------------------------------------------
+	const runtime = new GoalRuntime({
+		getState: () => goalState,
+		setState: (state) => {
+			goalState = state;
+		},
+		getCurrentUsage: () => currentUsage(currentCtx),
+		emit: (event) => {
+			if (event.type === "goal_updated") {
+				handleGoalUpdated(event.goal, event.state);
+			}
+		},
+		persist: (mode, state) => {
+			if (mode === "none") {
+				pi.appendEntry(GOAL_CLEARED_ENTRY_TYPE, { clearedAt: Date.now() });
+			} else if (state) {
+				pi.appendEntry(GOAL_STATE_ENTRY_TYPE, { enabled: state.enabled, goal: cloneGoal(state.goal) });
+			}
+		},
+		sendHiddenMessage: async (message) => {
+			pi.sendMessage(
+				{ customType: message.customType, content: message.content, display: false },
+				{ deliverAs: message.deliverAs ?? "steer" },
+			);
+		},
+	});
+
+	// ------------------------------------------------------------------
+	// Enter/replace/resume (omp #enterGoalMode and friends)
+	// ------------------------------------------------------------------
+	async function startGoal(objective: string): Promise<void> {
+		if (goalState?.enabled) return;
+		ensureGoalToolActive();
+		const state = await runtime.createGoal({ objective });
+		goalState = state;
+		suppressNextContinuation = false;
+		updateStatus();
+		if (currentCtx && !currentCtx.isIdle()) {
+			await sendGoalModeContext("steer");
+		}
+	}
+
+	async function replaceGoal(objective: string): Promise<void> {
+		const state = await runtime.replaceGoal({ objective });
+		goalState = state;
+		ensureGoalToolActive();
+		suppressNextContinuation = false;
+		updateStatus();
+		if (currentCtx && !currentCtx.isIdle()) {
+			await sendGoalModeContext("steer");
+		}
+	}
+
+	async function resumeGoal(): Promise<void> {
+		// omp #resumeGoalAction guard: exactly a persisted paused goal resumes.
+		if (!goalState || goalState.enabled || goalState.goal.status !== "paused") {
+			notify("No paused goal to resume.", "warning");
+			return;
+		}
+		ensureGoalToolActive();
+		const state = await runtime.resumeGoal();
+		goalState = state;
+		suppressNextContinuation = false;
+		updateStatus();
+		notify("Goal mode resumed.");
+	}
+
+	async function pauseGoal(): Promise<void> {
+		if (!goalState?.enabled) {
+			notify("No active goal to pause.", "warning");
+			return;
+		}
+		await runtime.pauseGoal();
+		await exitGoalMode({ reason: "paused" });
+	}
+
+	/** A provider/agent error ended the run (borrowed from mitsuhiko/agent-stuff
+	 *  goal.ts): pause the active goal instead of letting scheduleContinuation
+	 *  fire into a likely retry loop, and classify the failure for the user.
+	 *  Usage/rate/quota errors read differently from generic faults. */
+	async function pauseOnRunError(messages: unknown[]): Promise<void> {
+		if (!goalState?.enabled || goalState.goal.status !== "active") return;
+		const errorMessage = lastAssistantErrorMessage(messages) ?? "";
+		const usageLimited = /\b(usage|rate|quota|limit)\b/i.test(errorMessage);
+		await runtime.pauseGoal();
+		notify(
+			usageLimited
+				? "Goal paused: the last turn hit provider usage/rate limits. /goal resume when ready."
+				: "Goal paused: the last turn ended with an error. /goal resume to continue.",
+			"error",
+		);
+	}
+
+	async function dropGoal(): Promise<void> {
+		if (!goalState) {
+			notify("No goal to drop.", "warning");
+			return;
+		}
+		// runtime.dropGoal emits goal_updated (handled above: state → undefined,
+		// exit notification) then commits undefined — no local state to reassign.
+		await runtime.dropGoal();
+	}
+
+	/** omp #startGoalFromObjective: the objective text kicks off the work. */
+	async function submitObjective(objective: string): Promise<void> {
+		const streaming = currentCtx !== undefined && !currentCtx.isIdle();
+		pi.sendUserMessage(objective, streaming ? { deliverAs: "steer" } : undefined);
+	}
+
+	async function setBudget(raw: string): Promise<void> {
+		if (!goalState?.enabled) {
+			notify("No active goal.", "warning");
+			return;
+		}
+		if (goalState.goal.status === "complete") {
+			notify("Goal is already complete.");
+			return;
+		}
+		const trimmed = raw.trim().toLowerCase();
+		let nextBudget: number | undefined;
+		if (trimmed !== "off") {
+			const parsed = Number.parseInt(trimmed, 10);
+			if (!Number.isInteger(parsed) || parsed <= 0) {
+				notify("Goal budget must be a positive integer or `off`.", "error");
+				return;
+			}
+			nextBudget = parsed;
+		}
+		await runtime.onBudgetMutated(nextBudget);
+		suppressNextContinuation = false;
+		scheduleContinuation();
+		notify(nextBudget === undefined ? "Goal budget cleared." : `Goal budget set to ${nextBudget}.`);
+	}
+
+	// ------------------------------------------------------------------
+	// Goal context injection + continuation loop
+	// ------------------------------------------------------------------
+	async function sendGoalModeContext(deliverAs: "steer" | "followUp" | "nextTurn"): Promise<void> {
+		const message = buildGoalModeMessage();
+		if (!message) return;
+		pi.sendMessage({ customType: "goal-mode-context", content: message, display: false }, { deliverAs });
+	}
+
+	function buildGoalModeMessage(): string | undefined {
+		const content = runtime.buildActivePrompt();
+		if (!content) return undefined;
+		const todoToolActive = pi.getActiveTools().includes("todo");
+		const todoContext = buildTodoContext(todoPhases, todoToolActive);
+		return renderTemplate(goalModeContextPrompt, { goalContext: content, todoContext });
+	}
+
+	/** omp #scheduleGoalContinuation. Post-settlement fallback path only: the
+	 *  primary continuation decision lives in the agent_before_settle boundary
+	 *  below (0.87.0). */
+	function scheduleContinuation(): void {
+		if (!goalState?.enabled || goalState.goal.status !== "active") return;
+		if (suppressNextContinuation) return;
+		if (uiPromptOpen) return; // modal open: never start a turn behind it
+		if (currentCtx?.hasPendingMessages()) return;
+		const prompt = runtime.buildContinuationPrompt();
+		if (!prompt) return;
+		continuationInFlight = true;
+		pi.sendMessage(
+			// details.goalId keys context pruning (see the "context" handler below):
+			// only the newest continuation of the CURRENTLY active goal survives.
+			{ customType: "goal-continuation", content: prompt, display: false, details: { goalId: goalState.goal.id } },
+			{ triggerTurn: true, deliverAs: "followUp" },
+		);
+	}
+
+	/** omp #scheduleGoalContinuation decision chain, settled into a draft:
+	 *  guards pass → one custom_message draft carrying the continuation
+	 *  prompt (details.goalId keys context pruning). */
+	function continuationDraft(ctx: ExtensionContext): SessionBoundaryDraft | undefined {
+		if (!goalState?.enabled || goalState.goal.status !== "active") return undefined;
+		if (suppressNextContinuation) return undefined;
+		if (uiPromptOpen) return undefined; // modal open: never start a turn behind it
+		if (ctx.hasPendingMessages()) return undefined;
+		const prompt = runtime.buildContinuationPrompt();
+		if (!prompt) return undefined;
+		continuationInFlight = true;
+		return {
+			type: "custom_message",
+			customType: "goal-continuation",
+			content: prompt,
+			display: false,
+			details: { goalId: goalState.goal.id },
+		};
+	}
+
+	// ------------------------------------------------------------------
+	// Tool + command registration
+	// ------------------------------------------------------------------
+	const goalToolDeps: GoalToolDeps = {
+		getRuntime: () => runtime,
+		getState: () => goalState,
+		// Grounded independent evaluator: a fresh `pi -p` subprocess in the
+		// session cwd that re-verifies completion/impossibility claims itself
+		// (evaluator.ts). currentCtx is undefined during registration, so
+		// fall back to the process cwd.
+		runEvaluator: (request, opts) =>
+			runGoalEvaluator(request, { cwd: opts.cwd ?? currentCtx?.cwd ?? process.cwd(), signal: opts.signal }),
+		// Mid-run activation (tool create/resume): inject the goal context into
+		// the CURRENT run as a steer — before_agent_start only covers the next run.
+		onActivated: async () => {
+			if (currentCtx && !currentCtx.isIdle()) await sendGoalModeContext("steer");
+		},
+	};
+	pi.registerTool(createGoalTool(goalToolDeps));
+
+	const commandDeps: GoalCommandDeps = {
+		getState: () => (goalState ? { enabled: goalState.enabled, goal: goalState.goal } : undefined),
+		hasPausedGoal: () => goalState !== undefined && !goalState.enabled,
+		// Command-driven start/replace mirror omp: create the goal, then submit
+		// the objective text as the working prompt (steered when streaming).
+		startGoal: async (objective) => {
+			await startGoal(objective);
+			await submitObjective(objective);
+		},
+		replaceGoal: async (objective) => {
+			await replaceGoal(objective);
+			await submitObjective(objective);
+		},
+		resumeGoal,
+		pauseGoal,
+		dropGoal,
+		setBudget,
+		startGuidedInterview: async (initial) => {
+			// Expose the goal tool for the interview so the agent can finish by
+			// calling `goal create` (omp handleGuidedGoalCommand). The kickoff
+			// rides in as a hidden message; the interview is normal conversation.
+			// omp queues behind an in-flight run (followUp) instead of steering it.
+			ensureGoalToolActive();
+			const kickoff = renderGuidedGoalKickoff(initial);
+			pi.sendMessage(
+				{ customType: "guided-goal", content: kickoff, display: false },
+				{ triggerTurn: true, deliverAs: "followUp" },
+			);
+		},
+	};
+	pi.registerCommand("goal", {
+		description: "Toggle goal mode (persistent autonomous objective for this session)",
+		getArgumentCompletions: goalArgumentCompletions,
+		handler: createGoalCommand(commandDeps),
+	});
+	pi.registerCommand("guided-goal", {
+		description: "Have the agent interview you in chat, then set up goal mode",
+		handler: createGuidedGoalCommand(commandDeps),
+	});
+
+	// Persistent transcript summary for completed goals (docs: appendEntry
+	// entries "can render inside the chat transcript when paired with
+	// pi.registerEntryRenderer()"). Invisible in the live flow (the goal tool
+	// result already reports completion); renders on reload/history review.
+	pi.registerEntryRenderer<{
+		objective?: string;
+		tokensUsed?: number;
+		tokenBudget?: number;
+		timeUsedSeconds?: number;
+	}>(GOAL_COMPLETED_ENTRY_TYPE, (entry, _options, theme) => {
+		const data = entry.data;
+		const objective = typeof data?.objective === "string" ? data.objective : "";
+		const used = typeof data?.tokensUsed === "number" ? formatNumber(data.tokensUsed) : "0";
+		const budget = typeof data?.tokenBudget === "number" ? ` / ${formatNumber(data.tokenBudget)}` : " (no budget)";
+		const seconds = typeof data?.timeUsedSeconds === "number" ? data.timeUsedSeconds : 0;
+		const text = theme.fg(
+			"success",
+			`● Goal completed${objective ? `: ${objective}` : ""} · ${used}${budget} tokens · ${formatDuration(seconds * 1000)}`,
+		);
+		return new Text(text, 0, 0);
+	});
+
+	// ------------------------------------------------------------------
+	// Lifecycle events (omp agent-session + interactive-mode handlers)
+	// ------------------------------------------------------------------
+	pi.on("session_start", async (_event, ctx) => {
+		currentCtx = ctx;
+		// Branch-aware restore: latest valid snapshot on the current branch wins.
+		const branch = ctx.sessionManager.getBranch();
+		todoPhases = restoreTodoPhases(branch);
+		const restored = restoreGoalFromEntries(branch);
+		if (!restored) {
+			goalState = undefined;
+			// omp sdk.ts excludes the goal tool from the initial set; mirror that in
+			// TUI where /goal and /guided-goal re-arm it. In non-interactive modes
+			// (print/json/rpc) no slash command exists, so removing the tool would
+			// leave the model unable to create a goal at all (found via live
+			// goal-mode testing): keep it active there.
+			if (ctx.mode === "tui") {
+				const active = pi.getActiveTools();
+				if (active.includes("goal")) {
+					pi.setActiveTools(active.filter((name) => name !== "goal"));
+				}
+			}
+			updateStatus();
+			return;
+		}
+		goalState = restored;
+		ensureGoalToolActive();
+		// omp onThreadResumed: a persisted ACTIVE goal is paused again on cold
+		// resume (the run that owned it is gone); paused/budget-limited goals
+		// keep their state and re-arm accounting.
+		const resumed = await runtime.onThreadResumed();
+		goalState = resumed;
+		updateStatus();
+	});
+
+	pi.on("agent_start", () => {
+		runHadToolCalls = false;
+	});
+
+	pi.on("turn_start", (_event, ctx) => {
+		currentCtx = ctx;
+		runtime.onTurnStart(`turn-${++turnCounter}`, currentUsage(ctx));
+	});
+
+	pi.on("tool_execution_start", (_event, _ctx) => {
+		runHadToolCalls = true;
+		if (!continuationInFlight) {
+			suppressNextContinuation = false;
+		}
+	});
+
+	pi.on("tool_execution_end", async (event, ctx) => {
+		currentCtx = ctx;
+		if (event.toolName === "goal") {
+			await runtime.onGoalToolCompleted();
+		} else {
+			await runtime.onToolCompleted(event.toolName);
+		}
+	});
+
+	pi.on("message_start", (event) => {
+		// A real user message re-arms the continuation loop (omp watches
+		// non-synthetic user message_start; goal-continuation messages are
+		// custom role and never match).
+		if (event.message.role === "user") {
+			suppressNextContinuation = false;
+		}
+	});
+
+	// Goal context injection (0.87.0 context_with_system): runs after `context`
+	// handlers on the full transcript including system messages; the result is
+	// sent verbatim. Per-request injection survives compaction (re-applied every
+	// call) and the fresh copy supersedes any steer-injected transcript copies.
+	pi.on("context_with_system", (event, ctx) => {
+		currentCtx = ctx;
+		const content = buildGoalModeMessage();
+		if (!content) return undefined;
+		const messages = event.messages.filter((message) => {
+			const msg = message as { role?: string; customType?: string } | undefined;
+			return !(msg?.role === "custom" && msg.customType === "goal-mode-context");
+		});
+		messages.push({
+			role: "custom",
+			customType: "goal-mode-context",
+			content,
+			display: false,
+		} as (typeof event.messages)[number]);
+		return { messages };
+	});
+
+	// Context hygiene (borrowed from mitsuhiko/agent-stuff goal.ts): hidden goal
+	// messages otherwise accumulate one per run/continuation and burn context
+	// every LLM call. Keep only the newest goal-mode-context and
+	// goal-budget-limit, plus the newest continuation stamped for the currently
+	// active goal id; stale ones (including all continuations once no goal is
+	// active) are dropped from the model's view, not from the transcript.
+	pi.on("context", (event) => {
+		const activeGoalId = goalState?.enabled && goalState.goal.status === "active" ? goalState.goal.id : undefined;
+		// The budget-limit steer stays in the model view while the goal that hit
+		// the limit is still live (active or budget-limited); once the goal is
+		// completed/dropped/paused or mode exits, the last steer is pruned too.
+		const steerGoalId =
+			goalState?.enabled && (goalState.goal.status === "active" || goalState.goal.status === "budget-limited")
+				? goalState.goal.id
+				: undefined;
+		let lastContext = -1;
+		let lastBudget = -1;
+		let lastContinuation = -1;
+		for (let i = 0; i < event.messages.length; i++) {
+			const msg = event.messages[i] as
+				| { role?: string; customType?: string; details?: { goalId?: string } }
+				| undefined;
+			if (msg?.role !== "custom") continue;
+			if (msg.customType === "goal-mode-context") lastContext = i;
+			else if (msg.customType === "goal-budget-limit" && steerGoalId !== undefined && msg.details?.goalId === steerGoalId) {
+				lastBudget = i;
+			}
+			else if (msg.customType === "goal-continuation" && activeGoalId !== undefined && msg.details?.goalId === activeGoalId) {
+				lastContinuation = i;
+			}
+		}
+		if (lastContext === -1 && lastBudget === -1 && lastContinuation === -1) return undefined;
+		return {
+			messages: event.messages.filter((message, index) => {
+				const msg = message as { role?: string; customType?: string } | undefined;
+				if (msg?.role !== "custom") return true;
+				if (msg.customType === "goal-mode-context") return index === lastContext;
+				if (msg.customType === "goal-budget-limit") return index === lastBudget;
+				if (msg.customType === "goal-continuation") return index === lastContinuation;
+				return true;
+			}),
+		};
+	});
+
+	pi.on("agent_end", async (event, ctx) => {
+		currentCtx = ctx;
+		// omp separates onAgentEnd (session) from continuation scheduling
+		// (interactive-mode); both subscribe to the same end-of-run moment.
+		const stopReason = lastAssistantStopReason(event.messages);
+		if (stopReason === "aborted") {
+			await runtime.onTaskAborted({ reason: "interrupted" });
+		} else {
+			await runtime.onAgentEnd({ currentUsage: currentUsage(ctx) });
+			if (stopReason === "error") await pauseOnRunError(event.messages);
+		}
+
+		if (continuationInFlight) {
+			suppressNextContinuation = !runHadToolCalls;
+			continuationInFlight = false;
+		}
+		if (goalState?.mode === "exiting") {
+			await exitGoalMode({ reason: "completed" });
+			return;
+		}
+		updateStatus();
+	});
+
+	// omp #scheduleGoalContinuation migrated to the 0.87.0 actionable boundary:
+	// at settle time decide ONCE whether exactly one more provider request
+	// should run, attaching the continuation prompt as a custom_message draft.
+	// No timer, no followUp scheduling — pi owns the request. Guards mirror the
+	// old scheduleContinuation chain; continuations withheld after settlement
+	// (modal closed late, budget set while idle) still recover via the
+	// sendMessage fallback in scheduleContinuation().
+	pi.on("agent_before_settle", (_event, ctx) => {
+		currentCtx = ctx;
+		// Context slimming (opt-in): attach pending context_edit drafts first —
+		// they persist even when the continuation itself is withheld.
+		const drafts: SessionBoundaryDraft[] = [];
+		if (pendingSlim) {
+			pendingSlim = false;
+			drafts.push(...contextSlimDrafts(ctx.sessionManager.getBranch()));
+		}
+		const continuation = continuationDraft(ctx);
+		if (continuation) drafts.push(continuation);
+		if (drafts.length === 0) return undefined;
+		// Absent `continue` = no opinion on auto-continuation (budget-limited
+		// goals settle without one); `continue: true` guarantees exactly one
+		// next provider request.
+		return continuation !== undefined ? { entries: drafts, continue: true } : { entries: drafts };
+	});
+
+	pi.on("turn_end", (_event, ctx) => {
+		currentCtx = ctx;
+		updateStatus();
+	});
+
+	// pi-todo contract: { phases } arrives over the shared event bus after
+	// every successful todo mutation. Keeps the goal todo context and the
+	// footer task progress live between session restores.
+	pi.events.on("todo_updated", (data) => {
+		const phases = parseTodoPhases((data as { phases?: unknown } | undefined)?.phases);
+		if (!phases) return;
+		todoPhases = phases;
+		updateStatus();
+	});
+
+	// Blocking ctx.ui dialogs (drop confirm, objective editor, /goal menu,
+	// budget input — plus other extensions' ask_user). While one is open the
+	// agent is not running, and a continuation must not start behind the modal.
+	pi.on("ui_prompt_start", (_event, ctx) => {
+		currentCtx = ctx;
+		uiPromptOpen = true;
+		updateStatus();
+	});
+
+	pi.on("ui_prompt_end", (_event, ctx) => {
+		currentCtx = ctx;
+		uiPromptOpen = false;
+		updateStatus();
+		// Recover a continuation withheld while the dialog was open. Only when
+		// idle: if the agent is still streaming (e.g. another extension's
+		// ask_user just closed), its own agent_end schedules the continuation.
+		if (ctx.isIdle()) {
+			scheduleContinuation();
+		}
+	});
+
+	// Docs: "Use agent_settled for status integrations that need to know Pi
+	// will not continue running automatically" — final usage is visible here.
+	pi.on("agent_settled", (_event, ctx) => {
+		currentCtx = ctx;
+		updateStatus();
+	});
+
+	pi.on("session_tree", async (_event, ctx) => {
+		currentCtx = ctx;
+		// Tree navigation: omp reconciles with preserveActiveGoal — an active goal
+		// stays live (the run continues), but accounting re-anchors to the
+		// restored branch state.
+		const branch = ctx.sessionManager.getBranch();
+		todoPhases = restoreTodoPhases(branch);
+		const restored = restoreGoalFromEntries(branch);
+		if (!restored) {
+			goalState = undefined;
+			updateStatus();
+			return;
+		}
+		goalState = restored;
+		ensureGoalToolActive();
+		const resumed = await runtime.onThreadResumed({ preserveActiveGoal: true });
+		goalState = resumed;
+		updateStatus();
+	});
+
+	pi.on("session_shutdown", () => {
+		// Runtime replacement (quit/reload/session switch): drop closure state so
+		// a stale instance never acts after teardown.
+		goalState = undefined;
+		currentCtx = undefined;
+	});
+}
+
+function lastAssistantStopReason(messages: unknown[]): string | undefined {
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const message = messages[i] as EntryMessageLike | undefined;
+		if (message?.role === "assistant") return message.stopReason;
+	}
+	return undefined;
+}
+
+function lastAssistantErrorMessage(messages: unknown[]): string | undefined {
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const message = messages[i] as EntryMessageLike | undefined;
+		if (message?.role === "assistant") return message.errorMessage;
+	}
+	return undefined;
+}
+
+export type { GoalRuntimeHost } from "./runtime.ts";
+// Re-exported for consumers that compose the pieces directly (tests, tools).
+export { GoalRuntime } from "./runtime.ts";
+export type { Goal, GoalModeState, GoalRuntimeEvent, GoalStatus, GoalToolDetails } from "./state.ts";

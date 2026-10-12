@@ -1,20 +1,26 @@
 /**
  * editor — a closed, field-style prompt editor for pi.
  *
- * Wraps the built-in editor in a box with a `❯` marker, moves the streaming
- * working indicator to the top-right of the box, and shows cumulative
- * token/cost usage at the far right of the bottom rule. The "Working" label is
- * replaced with a random short joke phrase chosen fresh on every turn.
+ * Wraps the built-in editor in a field-style box drawn with terminal box
+ * characters, with a `⟫` marker on the first input line. The streaming working
+ * indicator is embedded in the top border and the working directory + git
+ * state in the bottom border; the box keeps a fixed border color rather than
+ * tracking the thinking level. The "Working" label is replaced with a random
+ * short joke phrase chosen fresh on every turn.
  *
  * Toggle it at any time with `/couralabs-prompt-ui [on|off]`.
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { TUI } from "@earendil-works/pi-tui";
-import { computeUsage, type UsageTotals } from "../../shared/usage.ts";
-import { FieldEditor, type UsageProvider } from "./field-editor.ts";
+import { loadSettings, updateSettings } from "../../shared/settings.ts";
+import { FieldEditor, type LocationProvider } from "./field-editor.ts";
+import { emptyGit, parseNumstat, type GitInfo } from "./git.ts";
 import { JOKES } from "./jokes.ts";
 import { SPINNER_FRAMES, SPINNER_INTERVAL_MS } from "./spinner.ts";
+
+const GIT_REFRESH_INTERVAL_MS = 10_000;
+const GIT_DEBOUNCE_MS = 350;
 
 export default function (pi: ExtensionAPI) {
 	let ctx: ExtensionContext | undefined;
@@ -22,19 +28,58 @@ export default function (pi: ExtensionAPI) {
 	let currentEditor: FieldEditor | undefined;
 	let enabled = true;
 	let lastJoke = -1;
-	let usageCache: { key: string; value: UsageTotals } | undefined;
+	let git: GitInfo = emptyGit();
+
+	let gitTimer: ReturnType<typeof setTimeout> | undefined;
+	let gitInterval: ReturnType<typeof setInterval> | undefined;
 
 	const requestRender = () => tui?.requestRender();
+	const isTui = () => ctx?.mode === "tui";
 
-	const usageProvider: UsageProvider = () => {
+	const refreshGit = async () => {
+		const c = ctx;
+		if (!c) return;
+		try {
+			const branchResult = await pi.exec("git", ["branch", "--show-current"], { cwd: c.cwd });
+			// `git diff HEAD` fails on a repository with no commits; fall back to the worktree diff.
+			let diffResult = await pi.exec("git", ["diff", "--numstat", "HEAD"], { cwd: c.cwd });
+			if (diffResult.code !== 0) {
+				diffResult = await pi.exec("git", ["diff", "--numstat"], { cwd: c.cwd });
+			}
+			const branch = branchResult.code === 0 ? branchResult.stdout.trim() || null : null;
+			const { additions, removals } =
+				diffResult.code === 0 ? parseNumstat(diffResult.stdout) : { additions: 0, removals: 0 };
+			git = { branch, additions, removals };
+		} catch {
+			git = emptyGit();
+		}
+		requestRender();
+	};
+
+	const scheduleGitRefresh = () => {
+		if (!isTui()) return;
+		if (gitTimer) clearTimeout(gitTimer);
+		gitTimer = setTimeout(() => {
+			gitTimer = undefined;
+			void refreshGit();
+		}, GIT_DEBOUNCE_MS);
+	};
+
+	const stopGitTimers = () => {
+		if (gitTimer) {
+			clearTimeout(gitTimer);
+			gitTimer = undefined;
+		}
+		if (gitInterval) {
+			clearInterval(gitInterval);
+			gitInterval = undefined;
+		}
+	};
+
+	const locationProvider: LocationProvider = () => {
 		const c = ctx;
 		if (!c) return undefined;
-		const manager = c.sessionManager;
-		const key = `${manager.getSessionId()}:${manager.getLeafId() ?? ""}:${c.model?.id ?? ""}`;
-		if (usageCache?.key !== key) {
-			usageCache = { key, value: computeUsage(manager.getEntries()) };
-		}
-		return { totals: usageCache.value, theme: c.ui.theme };
+		return { cwd: c.cwd, git, theme: c.ui.theme };
 	};
 
 	/** Install the dot spinner, colored to match the editor's thinking-level border. */
@@ -59,7 +104,7 @@ export default function (pi: ExtensionAPI) {
 		if (context.mode !== "tui") return;
 		context.ui.setEditorComponent((editorTui, theme, keybindings) => {
 			tui = editorTui;
-			currentEditor = new FieldEditor(editorTui, theme, keybindings, usageProvider);
+			currentEditor = new FieldEditor(editorTui, theme, keybindings, locationProvider);
 			return currentEditor;
 		});
 		applyWorkingIndicator(context);
@@ -80,6 +125,8 @@ export default function (pi: ExtensionAPI) {
 			else if (arg === "off") enabled = false;
 			else enabled = !enabled;
 
+			updateSettings({ editor: { enabled } });
+
 			if (enabled) {
 				installEditor(commandCtx);
 				commandCtx.ui.notify("pi-pack prompt field enabled", "info");
@@ -92,9 +139,13 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("session_start", (_event, context) => {
 		ctx = context;
-		usageCache = undefined;
-		if (!enabled) return;
+		enabled = loadSettings().editor.enabled;
+		git = emptyGit();
+		stopGitTimers();
+		if (!enabled || context.mode !== "tui") return;
 		installEditor(context);
+		void refreshGit();
+		gitInterval = setInterval(() => void refreshGit(), GIT_REFRESH_INTERVAL_MS);
 	});
 
 	// Swap in a new joke phrase for every turn and refresh the spinner colors.
@@ -104,19 +155,20 @@ export default function (pi: ExtensionAPI) {
 		applyWorkingIndicator(ctx);
 	});
 
-	// Keep the usage segment fresh when tokens or the model change.
+	// Keep the location segment fresh as the working tree changes.
+	pi.on("tool_execution_end", () => {
+		if (enabled) scheduleGitRefresh();
+	});
 	pi.on("turn_end", () => requestRender());
 	pi.on("agent_settled", () => requestRender());
-	pi.on("model_select", () => {
-		usageCache = undefined;
-		requestRender();
-	});
+	pi.on("model_select", () => requestRender());
 	pi.on("thinking_level_select", () => {
 		if (enabled && ctx) applyWorkingIndicator(ctx);
 	});
 	pi.on("session_info_changed", () => requestRender());
 
 	pi.on("session_shutdown", () => {
+		stopGitTimers();
 		ctx = undefined;
 		tui = undefined;
 		currentEditor = undefined;
