@@ -2,7 +2,9 @@
 
 A collection of [pi](https://pi.dev) extensions, packaged for easy installation.
 
-![pi-pack in action](./demo.png)
+## Demo
+
+![pi-pack in action: the editor box, working indicator, todo widget, and footer](./demo.png)
 
 ## Install
 
