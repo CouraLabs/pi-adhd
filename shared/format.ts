@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+
 /** Compact token counts shared by the footer gauge and usage segments. */
 export function formatTokens(count: number): string {
 	if (count < 1000) return `${count}`;
@@ -25,11 +27,21 @@ export function padWidgetLines(lines: readonly string[]): string[] {
 	return lines.map((line) => (line.length > 0 ? `${WIDGET_LEFT_PADDING}${line}` : line));
 }
 
-/** Collapse the home directory to `~` for display. */
-export function formatCwd(cwd: string): string {
-	const home = process.env.HOME || process.env.USERPROFILE;
-	if (home && (cwd === home || cwd.startsWith(`${home}/`))) {
-		return `~${cwd.slice(home.length)}`;
+/**
+ * Format the working directory for the prompt-field footer.
+ *
+ * When `full` is true the home directory is collapsed to `~` and any other
+ * path is shown in full. When false only the last path segment is shown. The
+ * home directory itself is always rendered as `~`, so the toggle never turns
+ * it into the bare user-name folder.
+ */
+export function formatCwd(cwd: string, full = false): string {
+	const home = homedir();
+	if (cwd === home) return "~";
+	if (full) {
+		return cwd.startsWith(`${home}/`) ? `~${cwd.slice(home.length)}` : cwd;
 	}
-	return cwd;
+	const trimmed = cwd.replace(/\/+$/, "");
+	const last = trimmed.slice(trimmed.lastIndexOf("/") + 1);
+	return "./" + (last || cwd);
 }

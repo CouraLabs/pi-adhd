@@ -2,8 +2,8 @@
  * thinking/config — the compact renderer's knobs.
  *
  * Unlike the upstream `pi-compact-thinking` extension (which keeps its own
- * `compact-thinking.json`), the settings live in pi-pack's shared
- * `~/.pi/couralabs/settings.json` under the `thinking` key, so every pi-pack
+ * `compact-thinking.json`), the settings live in pi-tdah's shared
+ * `~/.pi/couralabs/settings.json` under the `thinking` key, so every pi-tdah
  * knob stays in one file. The defaults themselves live next to the schema in
  * `shared/settings.ts` (`DEFAULT_SETTINGS.thinking`), so this module holds no
  * second copy. The shared loader merges in defaults, so a missing key is

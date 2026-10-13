@@ -10,7 +10,7 @@
  *     set only by explicit ops (`start`/`done`/`drop`/`block`/`unblock`)
  *   - no stop-reminder machinery (question guards, nag cycle)
  * Dropped from the omp source (host-internal surfaces with no pi counterpart):
- *   - prompt-line analysis machines          - subagent description matching
+ *   - prompt-line analysis machines          - spawn description matching
  *   - nextActionableTask (prewalk consumer)  - tool examples (omp-only field)
  * Kept despite the omp header listing them as host-internal: the markdown
  * round-trip (commands.ts /todo edit|import) and the collapsed-viewport
@@ -184,7 +184,7 @@ function formatMoreItems(remaining: number, itemType: string): string {
 }
 
 /** A todo the collapsed viewport treats as current work: the literal
- *  `in_progress` task. (omp also matched pending tasks a live subagent was
+ *  `in_progress` task. (omp also matched pending tasks a live spawn was
  *  executing; that matcher was removed with the cognitive-neutral refactor.) */
 function isActiveTodo<T extends { status: TodoStatus }>(task: T): boolean {
 	return task.status === "in_progress";

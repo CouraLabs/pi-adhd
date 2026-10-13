@@ -1,14 +1,14 @@
 /**
- * modes — shared agent-mode state for pi-pack.
+ * modes — shared agent-mode state for pi-tdah.
  *
- * pi-pack has two agent modes:
+ * pi-tdah has two agent modes:
  *
  *   - `"work"` (default): replaces pi's default system prompt with the
- *     pi-pack Work rules and makes the agent orchestrate via subagents.
+ *     pi-tdah Work rules and makes the agent orchestrate via spawned agents.
  *   - `"pi"`: leaves pi's default system prompt untouched.
  *
  * The state lives on `globalThis`, keyed by a registered symbol, so every
- * pi-pack extension — the `modes` extension that owns the toggle, the
+ * pi-tdah extension — the `modes` extension that owns the toggle, the
  * `footer` that draws the label, and the `editor` that colors its border —
  * reads and mutates the same value even when their modules are loaded twice.
  * Extensions subscribe to re-render when the mode changes.
@@ -32,11 +32,11 @@ export const AGENT_MODE_LABEL: Record<AgentMode, string> = {
 
 /** One-sentence explanation of what a mode does, shown when it becomes active. */
 export const MODE_NOTICE: Record<AgentMode, string> = {
-	pi: `${AGENT_MODE_LABEL.pi}. pi's default system prompt is in effect — no pi-pack rules are added, so the agent answers in its own voice with pi's built-in guidance and the full toolset.`,
-	work: `${AGENT_MODE_LABEL.work}. The pi-pack Work rules replace the default system prompt: the agent orchestrates, delegating exploration and implementation to subagents, asks before assuming, and tracks progress with the todo tool.`,
+	pi: `${AGENT_MODE_LABEL.pi}. pi's default system prompt is in effect — no pi-tdah rules are added, so the agent answers in its own voice with pi's built-in guidance and the full toolset.`,
+	work: `${AGENT_MODE_LABEL.work}. The pi-tdah Work rules replace the default system prompt: the agent orchestrates, delegating exploration and implementation to spawned agents, asks before assuming, and tracks progress with the todo tool.`,
 };
 
-const store = createGlobalStore<AgentMode>(Symbol.for("couralabs.pi-pack:agent-mode"), DEFAULT_AGENT_MODE);
+const store = createGlobalStore<AgentMode>(Symbol.for("@couralabs/pi-tdah/agent-mode"), DEFAULT_AGENT_MODE);
 
 /** The current agent mode. */
 export function getAgentMode(): AgentMode {

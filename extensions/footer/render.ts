@@ -1,5 +1,5 @@
 /**
- * Pure rendering for the pi-pack footer: a single stats line with the agent
+ * Pure rendering for the pi-tdah footer: a single stats line with the agent
  * mode, submode, model, thinking level, context gauge, and cumulative
  * token/cost usage, followed by extension statuses on their own line and any
  * registered sections (see `shared/footer-sections.ts`) last of all.
@@ -27,8 +27,8 @@ export interface FooterState {
 	thinkingLevel: ThinkingLevel;
 	contextUsage: ContextUsage | undefined;
 	usage: UsageTotals;
-	/** Cumulative cost of the session's subagent runs, shown parenthesized after the session cost. */
-	subagentCost: number;
+	/** Cumulative cost of the session's spawn runs, shown parenthesized after the session cost. */
+	spawnCost: number;
 	statuses: ReadonlyMap<string, string>;
 	/**
 	 * Pre-rendered lines contributed by other extensions (see
@@ -88,7 +88,7 @@ export function renderFooter(state: FooterState, width: number, theme: Theme): s
 			: `${modeLabel}${theme.fg("dim", `${SEPARATOR}`)}${theme.fg(submodeColor(state.submode), SUBMODE_LABEL[state.submode])}`,
 	);
 	if (state.model) {
-		parts.push(theme.fg("accent", `${state.model.provider}/${state.model.id}`));
+		parts.push(theme.fg("text", `${state.model.provider}/${state.model.id}`));
 		if (state.model.reasoning) {
 			const level = state.thinkingLevel;
 			const glyph = THINKING_LEVELS[level];
@@ -100,9 +100,8 @@ export function renderFooter(state: FooterState, width: number, theme: Theme): s
 	const contextWindow = contextUsage?.contextWindow ?? state.model?.contextWindow;
 	if (contextUsage && contextUsage.percent !== null && contextWindow) {
 		const percent = contextUsage.percent;
-		const consumed = contextUsage.tokens ?? Math.round((percent / 100) * contextWindow);
-		const label = `${formatTokens(consumed)}/${formatTokens(contextWindow)} (${Math.round(percent)}%)`;
-		parts.push(`${contextBar(theme, percent)} ${contextColor(theme, percent, label)}`);
+		const label = `${formatTokens(contextUsage.tokens ?? 0)}/${formatTokens(contextWindow)}`;
+		parts.push(`${theme.fg("dim", `${Math.round(percent)}%`)} ${contextBar(theme, percent)} ${contextColor(theme, percent, label)}`);
 	} else if (contextWindow) {
 		parts.push(theme.fg("dim", `ctx ?/${formatTokens(contextWindow)}`));
 	}
@@ -110,7 +109,7 @@ export function renderFooter(state: FooterState, width: number, theme: Theme): s
 	const totals = state.usage;
 	const group = usageGroup(totals, theme);
 	if (group) parts.push(group);
-	const cost = usageCost(totals, theme, state.subagentCost);
+	const cost = usageCost(totals, theme, state.spawnCost);
 	if (cost) parts.push(cost);
 
 	lines.push(truncateToWidth(`  ${joinSegments(parts, theme)}`, width, ELLIPSIS));

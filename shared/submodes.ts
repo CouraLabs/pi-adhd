@@ -1,5 +1,5 @@
 /**
- * submodes — shared agent-submode state for pi-pack.
+ * submodes — shared agent-submode state for pi-tdah.
  *
  * A submode is a temporary, additive mode layered on top of the main agent
  * mode (see `shared/modes.ts`). Unlike the main mode, which *replaces* pi's
@@ -16,7 +16,7 @@
  *     toolset.
  *
  * The state lives on `globalThis`, keyed by a registered symbol, so every
- * pi-pack extension instance reads and mutates the same value. Extensions
+ * pi-tdah extension instance reads and mutates the same value. Extensions
  * subscribe to re-render when the submode changes.
  */
 
@@ -53,7 +53,7 @@ export type ActiveSubmode = Exclude<Submode, "none">;
 
 /**
  * Tools every read-only submode may use, by registered name: the read/search
- * tools plus the subagent tools and the exit tool. Plan and Grill share this
+ * tools plus the spawn tools and the exit tool. Plan and Grill share this
  * set; Plan adds `plan-write`.
  */
 const READ_ONLY_TOOLS = [
@@ -63,14 +63,12 @@ const READ_ONLY_TOOLS = [
 	"ls",
 	"ask",
 	"submode-exit",
-	"subagent",
-	"get_subagent_result",
-	"steer_subagent",
+	"spawn",
 ] as const;
 
 /**
  * Tools the model may use inside each submode, by registered name. Plan and
- * Grill are read-only plus the subagent tools: they can delegate exploration
+ * Grill are read-only plus the spawn tools: they can delegate exploration
  * and plan review, but cannot edit or write files. Straight is the only
  * submode that may change code — it implements the approved feature itself —
  * so it keeps the full toolset.
@@ -95,9 +93,7 @@ export const SUBMODE_TOOLS: Record<ActiveSubmode, readonly string[]> = {
 		"ls",
 		"ask",
 		"todo",
-		"subagent",
-		"get_subagent_result",
-		"steer_subagent",
+		"spawn",
 		"submode-exit",
 	],
 };
@@ -114,7 +110,7 @@ export const STRAIGHT_SECTION = "straight_mode";
  */
 export const POLICY_SECTION = "submode_policy";
 
-const store = createGlobalStore<Submode>(Symbol.for("couralabs.pi-pack:agent-submode"), DEFAULT_SUBMODE);
+const store = createGlobalStore<Submode>(Symbol.for("@couralabs/pi-tdah/agent-submode"), DEFAULT_SUBMODE);
 
 /** The current submode. */
 export function getSubmode(): Submode {
@@ -147,7 +143,7 @@ const SUBMODE_COLOR: Record<Submode, ThemeColor> = {
 /** One-sentence explanation of what a submode does, shown when it becomes active. */
 export const SUBMODE_NOTICE: Record<Submode, string> = {
 	none: "Submode off. The full toolset is restored and the normal coder agent is in charge.",
-	plan: `${SUBMODE_LABEL.plan} submode. Read-only architect: studies the codebase and submits an implementation plan for line-by-line review. The toolset narrows to read-only plus the subagent tools.`,
+	plan: `${SUBMODE_LABEL.plan} submode. Read-only architect: studies the codebase and submits an implementation plan for line-by-line review. The toolset narrows to read-only plus the spawn tools.`,
 	grill: `${SUBMODE_LABEL.grill} submode. Read-only designer: interviews you to a shared understanding across a design tree before any plan or code exists.`,
 	straight: `${SUBMODE_LABEL.straight} submode. Guided feature development: asks clarifying questions, explores the codebase, proposes designs, then implements with the full toolset.`,
 };

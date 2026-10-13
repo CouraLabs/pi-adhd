@@ -16,7 +16,7 @@
  *
  * Enter with `/submode plan` / `/submode grill` / `/submode straight` (or toggle
  * with `/plan` / `/grill` / `/straight`); the model leaves or switches with the
- * `submode-exit` tool. The active submode is persisted in the pi-pack settings
+ * `submode-exit` tool. The active submode is persisted in the pi-tdah settings
  * file and restored on the next session.
  */
 
@@ -78,6 +78,17 @@ const SUBMODE_SWITCH_RESULT: Record<ActiveSubmode, string> = {
 	straight: "Switched to the Straight submode. The next run uses the guided implementer prompt and the full tool set.",
 };
 
+/**
+ * Kickoff text for the hidden message that starts the target submode's run after
+ * a switch. The target submode's own prompt carries the detailed instructions;
+ * this only hands the conversation over so the new run has something to act on.
+ */
+const SUBMODE_KICKOFF_PROMPT: Record<ActiveSubmode, string> = {
+	plan: "The design is settled. Continue in the Plan submode and produce the implementation plan now.",
+	grill: "Continue in the Grill submode and resume the design interview.",
+	straight: "The design is approved. Continue in the Straight submode and implement it now.",
+};
+
 /** Description of the `/plan`, `/grill`, and `/straight` toggle commands. */
 const TOGGLE_DESCRIPTION: Record<ActiveSubmode, string> = {
 	plan: "Toggle the Plan submode",
@@ -98,6 +109,16 @@ interface PendingPlan {
 	comments: PlanLineComment[];
 }
 
+/**
+ * A run to start once the current one settles, so the target mode's
+ * `before_agent_start` applies before it runs. A `switch` starts a hidden
+ * kickoff run in the target submode; `plan` sends the approved plan as a user
+ * turn in the normal coder mode.
+ */
+type PendingHandoff =
+	| { kind: "switch"; mode: ActiveSubmode }
+	| { kind: "plan"; markdown: string };
+
 function isSubmode(value: unknown): value is Submode {
 	return value === "none" || value === "plan" || value === "grill" || value === "straight";
 }
@@ -111,6 +132,8 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 	let pendingPlan: PendingPlan | undefined;
 	/** A plan whose approval asked for compaction before implementation. */
 	let pendingCompactPlan: string | undefined;
+	/** A submode switch or approved plan waiting for the current run to settle. */
+	let pendingHandoff: PendingHandoff | undefined;
 
 	const applyTools = (submode: Submode) => {
 		if (submode === "none") {
@@ -153,6 +176,10 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 		if (mode !== "exit") {
 			if (!enterSubmode(mode)) return switchBlockedByGoalMessage();
 			ctx.ui.notify(SUBMODE_NOTICE[mode], "info");
+			// The tool ends this run, so the target submode takes effect in the next one,
+			// started from the `agent_settled` handler. Queueing a follow-up here would
+			// drain inside this run, which keeps the previous submode's system prompt.
+			pendingHandoff = { kind: "switch", mode };
 			return SUBMODE_SWITCH_RESULT[mode];
 		}
 
@@ -166,8 +193,10 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 			return "Submode exited. The session will be compacted, then the approved plan is sent as the next prompt.";
 		}
 		if (plan && plan.verdict === "approve") {
-			pi.sendUserMessage(`Implement the approved plan below.\n\n${plan.markdown}`, { deliverAs: "followUp" });
-			return "Submode exited. The approved plan is queued as the next prompt; implementation begins in a fresh run.";
+			// Start the coder run after this one settles, so the normal prompt and full
+			// toolset apply; a same-run follow-up would still carry the Plan prompt.
+			pendingHandoff = { kind: "plan", markdown: plan.markdown };
+			return "Submode exited. The approved plan starts the next run; implementation begins there.";
 		}
 		return "Submode exited. Back to the normal coder agent.";
 	};
@@ -274,9 +303,25 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 		}
 	});
 
-	// "Approve and Compact": the tool ended the run, so compact now (idle) and
-	// send the plan once compaction completes, starting the coder run.
-	pi.on("agent_settled", (_event, ctx) => {
+	// A submode switch and an approved plan both need a fresh run so the target
+	// mode's `before_agent_start` applies. The `submode-exit` tool ends the current
+	// run, so start the next one here, once the run has settled. Starting it as a
+	// same-run follow-up would keep the previous submode's prompt and tool policy.
+	pi.on("agent_settled", (event, ctx) => {
+		if (pendingHandoff) {
+			const handoff = pendingHandoff;
+			pendingHandoff = undefined;
+			if (event.aborted) return;
+			if (handoff.kind === "switch") {
+				pi.sendMessage(
+					{ customType: "submode-handoff", content: SUBMODE_KICKOFF_PROMPT[handoff.mode], display: false },
+					{ triggerTurn: true },
+				);
+			} else {
+				pi.sendUserMessage(`Implement the approved plan below.\n\n${handoff.markdown}`);
+			}
+			return;
+		}
 		if (!pendingCompactPlan) return;
 		const plan = pendingCompactPlan;
 		pendingCompactPlan = undefined;

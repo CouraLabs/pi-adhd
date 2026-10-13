@@ -24,7 +24,7 @@ import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
 export { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
-/** Small pure helpers shared with the rest of pi-pack (`shared/util.ts`). */
+/** Small pure helpers shared with the rest of pi-tdah (`shared/util.ts`). */
 export { clamp, replaceTabs, clipIndicator } from "../../../shared/util.ts";
 
 /** omp Ellipsis.Unicode ("…"). pi's truncateToWidth takes the glyph directly. */

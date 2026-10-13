@@ -96,65 +96,17 @@ export function commitPhases(deps: TodoToolDeps, next: TodoPhase[]): void {
 	deps.broadcast(committed);
 }
 
-/** Compact transcript rows: one dim line per call, one line for the outcome.
- *  The widget above the editor remains the persistent list view; these rows
- *  make each todo call — including failed ones — visible in the transcript. */
+/** Compact transcript row: a single line per todo update, rendered by the
+ *  result slot (the call slot stays empty). The widget above the editor remains
+ *  the persistent list view; this row makes each todo call — including failed
+ *  ones — visible in the transcript. */
 
-const CALL_LINE_MAX = 100;
+const LINE_MAX = 100;
 const RESULT_LINE_CAP = 8;
 
 function clip(text: string): string {
 	const single = text.replace(/[\t\n\r]+/g, " ");
-	return single.length > CALL_LINE_MAX ? `${single.slice(0, CALL_LINE_MAX - 1)}…` : single;
-}
-
-function quoteTask(task: string | undefined): string {
-	return task ? ` "${clip(task)}"` : "";
-}
-
-/** One-line summary of the raw call args. Defensive: args may be unprepared or
- *  invalid at render time (renderCall also runs for rejected calls). */
-function callLine(args: unknown): string {
-	const raw = (args && typeof args === "object" && !Array.isArray(args) ? args : {}) as Record<string, unknown>;
-	const op = typeof raw.op === "string" ? raw.op : undefined;
-	const task = typeof raw.task === "string" ? raw.task : undefined;
-	const phase = typeof raw.phase === "string" ? raw.phase : undefined;
-	const reason = typeof raw.reason === "string" ? raw.reason : undefined;
-	const count = (key: string): number => (Array.isArray(raw[key]) ? (raw[key] as unknown[]).length : 0);
-	switch (op) {
-		case "init": {
-			const list = Array.isArray(raw.list) ? (raw.list as unknown[]) : undefined;
-			if (list && list.length > 0) {
-				const tasks = list.reduce<number>((sum, entry) => {
-					const items =
-						entry && typeof entry === "object" && Array.isArray((entry as { items?: unknown }).items)
-							? (entry as { items: unknown[] }).items.length
-							: 0;
-					return sum + items;
-				}, 0);
-				return `init · ${list.length} phase${list.length === 1 ? "" : "s"}, ${tasks} task${tasks === 1 ? "" : "s"}`;
-			}
-			const items = count("items");
-			return `init · ${items} task${items === 1 ? "" : "s"}`;
-		}
-		case "append":
-			return `append · ${phase ?? "?"} +${count("items")}`;
-		case "start":
-			return `start ·${quoteTask(task)}`;
-		case "done":
-		case "drop":
-			return task ? `${op} ·${quoteTask(task)}` : phase ? `${op} · phase "${clip(phase)}"` : `${op} · all`;
-		case "block":
-			return `block ·${quoteTask(task)}${reason ? ` (${clip(reason)})` : ""}`;
-		case "unblock":
-			return `unblock ·${quoteTask(task)}`;
-		case "rm":
-			return task ? `rm ·${quoteTask(task)}` : phase ? `rm · phase "${clip(phase)}"` : "rm · all";
-		case "view":
-			return "view";
-		default:
-			return `todo ${clip(JSON.stringify(raw))}`;
-	}
+	return single.length > LINE_MAX ? `${single.slice(0, LINE_MAX - 1)}…` : single;
 }
 
 /** One-line summary of the outcome, computed in execute() where the op, the
@@ -194,16 +146,18 @@ function resultLine(
 
 /** Model-facing result text (thrown todo errors put their message there too). */
 function resultText(result: AgentToolResult<TodoToolDetails>): string {
-	return (
-		result.content
-			.map(block => (block.type === "text" ? block.text : ""))
-			.join("\n")
-			.trim() || "todo call failed"
-	);
+	return result.content
+		.map(block => (block.type === "text" ? block.text : ""))
+		.join("\n")
+		.trim();
 }
 
-function renderTodoCall(args: unknown, theme: Theme): Text {
-	return new Text(theme.fg("dim", callLine(args)), 0, 0);
+/** The result line below carries the whole update — icon, action, content, and
+ *  status transition — so the call slot renders nothing rather than repeating
+ *  it above the result. (Returning a component, rather than omitting
+ *  `renderCall`, avoids pi's fallback call line.) */
+function renderTodoCall(): Text {
+	return new Text("", 0, 0);
 }
 
 function renderTodoResult(
@@ -216,19 +170,19 @@ function renderTodoResult(
 		// Thrown/failed call: pi's error result carries the message (and for todo
 		// errors the unchanged list) in content. Surface it — this is where a
 		// silent failure used to disappear into an empty render.
-		const lines = resultText(result).split("\n");
+		const lines = (resultText(result) || "todo call failed").split("\n");
 		const shown = lines.slice(0, RESULT_LINE_CAP).join("\n");
 		const more = lines.length > RESULT_LINE_CAP ? `\n… +${lines.length - RESULT_LINE_CAP} more` : "";
-		return new Text(theme.fg("error", `✗ ${shown}${more}`), 0, 0);
+		return new Text(theme.fg("error", `✗ todo ${shown}${more}`), 0, 0);
 	}
 	const line = (result.details as TodoToolDetails | undefined)?.line;
 	if (typeof line === "string") {
-		return new Text(theme.fg("success", `✓ ${line}`), 0, 0);
+		return new Text(theme.fg("success", `✓ todo ${line}`), 0, 0);
 	}
 	// Entries predating details.line (restored from older sessions): render the
 	// summary's first line rather than misreading success as failure.
-	const first = resultText(result).split("\n")[0] ?? "";
-	return new Text(theme.fg("dim", first ? `✓ ${clip(first)}` : "✓ todo"), 0, 0);
+	const first = resultText(result).split("\n")[0]?.trim() ?? "";
+	return new Text(theme.fg("dim", first ? `✓ todo ${clip(first)}` : "✓ todo"), 0, 0);
 }
 
 export function createTodoTool(deps: TodoToolDeps): ToolDefinition<typeof TodoParamsSchema, TodoToolDetails> {
@@ -239,9 +193,10 @@ export function createTodoTool(deps: TodoToolDeps): ToolDefinition<typeof TodoPa
 		parameters: TodoParamsSchema,
 		executionMode: "sequential",
 		// The todo list renders as a persistent widget above the editor (see
-		// index.ts), so the transcript shows only a compact row per call: one dim
-		// line for the call, one for the outcome. Failures render in full (error
-		// color) — a failed call must never disappear into an empty render.
+		// index.ts), so the transcript shows a single compact row per call —
+		// `✓ todo <action> · <content> <from> → <to>` — produced by the result
+		// slot. Failures render in full (error color) — a failed call must never
+		// disappear into an empty render.
 		renderShell: "self",
 		renderCall: renderTodoCall,
 		renderResult: renderTodoResult,

@@ -152,7 +152,7 @@ export default function piGoalExtension(pi: ExtensionAPI): void {
 	// ------------------------------------------------------------------
 	let goalState: GoalModeState | undefined;
 	/**
-	 * Whether this extension instance belongs to a subagent child session. A child
+	 * Whether this extension instance belongs to a spawned child session. A child
 	 * inherits the full extension set, and the goal interlock flag is
 	 * process-global, so a child instance that published `setGoalActive(false)` on
 	 * start/shutdown would disarm the parent's goal and re-open `/mode` and

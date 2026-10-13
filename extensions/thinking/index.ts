@@ -1,7 +1,7 @@
 /**
  * thinking — compact animated reasoning previews.
  *
- * A vendored, pi-pack-adapted port of `pi-compact-thinking` (MIT). It replaces
+ * A vendored, pi-tdah-adapted port of `pi-compact-thinking` (MIT). It replaces
  * pi's built-in hidden-thinking renderer with a single compact run: an animated
  * heading (the OpenAI summary title, or `Thinking...`), the elapsed time, and a
  * few preview lines. Visible mode is left exactly as pi renders it, so
@@ -162,10 +162,8 @@ export default function thinkingExtension(pi: ExtensionAPI): void {
 		const after = characters.slice(Math.max(0, end)).join("");
 
 		return (
-			baseStyle(before) +
-			(highlighted
-				? activeTheme.italic(activeTheme.bold(activeTheme.fg("text", highlighted)))
-				: "") +
+			baseStyle(before) + 
+			(highlighted ? activeTheme.italic(activeTheme.bold(activeTheme.fg("text", highlighted))) : "") + 
 			baseStyle(after)
 		);
 	}
@@ -273,10 +271,6 @@ export default function thinkingExtension(pi: ExtensionAPI): void {
 					const contentIsActive =
 						activeThinking?.messageTimestamp === message.timestamp &&
 						activeThinking.contentIndex === index;
-					// While streaming, thinkingSignature may only hold previously
-					// completed summary parts. Prefer the live text so a new title
-					// replaces the old one immediately; once complete, the structured
-					// signature is canonical.
 					latestSummary = contentIsActive
 						? parseLatestStreamingSummary(thinking) ??
 							getLatestOpenAiSummary(thinkingContent.thinkingSignature) ??
@@ -311,16 +305,13 @@ export default function thinkingExtension(pi: ExtensionAPI): void {
 					animatedText(latestSummary.title, summaryTitleStyle, true) +
 					(durationText ? summaryTitleStyle(` · ${durationText}`) : "");
 			} else if (active) {
-				const label = self.hiddenThinkingLabel || "Reasoning";
-				heading =
-					animatedText(label, summaryTitleStyle, true) +
+				const label = "Reasoning";
+				heading = animatedText(label, summaryTitleStyle, true) +
 					(durationText ? summaryTitleStyle(` · ${durationText}`) : "");
 			} else {
 				// Completed compact blocks use one provider-independent status line.
 				heading = summaryTitleStyle(
-					durationText
-						? `Thought for ${durationText}`
-						: self.hiddenThinkingLabel || "Reasoning",
+					durationText ? `Thought for ${durationText}` : "Reasoning",
 				);
 			}
 			const previewSource = latestSummary?.body ?? thinkingBlocks.join("\n\n");

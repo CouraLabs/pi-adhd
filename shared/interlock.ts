@@ -7,7 +7,7 @@
  * a submode had narrowed. Each feature asks this module before it starts.
  *
  * The goal flag lives on `globalThis`, keyed by a registered symbol, so every
- * pi-pack extension instance reads and writes the same value (see
+ * pi-tdah extension instance reads and writes the same value (see
  * `shared/store.ts`). The goal extension publishes it whenever the armed goal
  * changes.
  */
@@ -16,7 +16,7 @@ import { loadSettings } from "./settings.ts";
 import { createGlobalStore } from "./store.ts";
 import { SUBMODE_NAME, getSubmode, type Submode } from "./submodes.ts";
 
-const store = createGlobalStore<boolean>(Symbol.for("couralabs.pi-pack:goal-active"), false);
+const store = createGlobalStore<boolean>(Symbol.for("@couralabs/pi-tdah/goal-active"), false);
 
 /** Whether goal mode is armed: a goal exists and its accounting is live. */
 export function isGoalActive(): boolean {

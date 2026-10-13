@@ -10,7 +10,7 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { TUI } from "@earendil-works/pi-tui";
-import { getSubagentsService, type SubagentsServiceConsumer } from "../../shared/subagents-service.ts";
+import { getSpawnService, type SpawnServiceConsumer } from "../../shared/spawn-service.ts";
 import { getFooterSections, subscribeFooterSections } from "../../shared/footer-sections.ts";
 import { loadSettings, updateSettings } from "../../shared/settings.ts";
 import { getAgentMode, subscribeAgentMode } from "../../shared/modes.ts";
@@ -37,21 +37,21 @@ export default function (pi: ExtensionAPI) {
 		const manager = c.sessionManager;
 		const key = `${manager.getSessionId()}:${manager.getLeafId() ?? ""}:${c.model?.id ?? ""}`;
 		if (usageCache?.key !== key) {
-			usageCache = { key, value: computeUsage(manager.getEntries()) };
+			usageCache = { key, value: computeUsage(manager.buildContextEntries()) };
 		}
 		return usageCache.value;
 	};
 
 	/**
-	 * Cumulative cost of every subagent this session has run.
+	 * Cumulative cost of every spawned agent this session has run.
 	 *
-	 * Read live from the published SubagentsService rather than cached: a child
-	 * accrues cost between parent turns, and the service may be absent (subagents
+	 * Read live from the published SpawnService rather than cached: a child
+	 * accrues cost between parent turns, and the service may be absent (spawn
 	 * not installed, or published by a child session), in which case the footer
 	 * shows only the session cost.
 	 */
-	const subagentCost = (): number => {
-		const service = getSubagentsService<SubagentsServiceConsumer>();
+	const spawnCost = (): number => {
+		const service = getSpawnService<SpawnServiceConsumer>();
 		if (!service) return 0;
 		return service.listAgents().reduce((sum, record) => sum + (record.lifetimeUsage?.cost ?? 0), 0);
 	};
@@ -80,7 +80,7 @@ export default function (pi: ExtensionAPI) {
 							thinkingLevel: pi.getThinkingLevel(),
 							contextUsage: ctx?.getContextUsage(),
 							usage: usageTotals(),
-							subagentCost: subagentCost(),
+							spawnCost: spawnCost(),
 							statuses: footerData.getExtensionStatuses(),
 							sections,
 						},
@@ -103,7 +103,7 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	pi.registerCommand("footer-ui", {
-		description: "Toggle the pi-pack footer (usage: /footer-ui [on|off])",
+		description: "Toggle the pi-tdah footer (usage: /footer-ui [on|off])",
 		handler: async (args, commandCtx) => {
 			const arg = args.trim().toLowerCase();
 			if (arg === "on") enabled = true;
@@ -114,7 +114,7 @@ export default function (pi: ExtensionAPI) {
 
 			if (enabled) {
 				installFooter(commandCtx);
-				commandCtx.ui.notify("pi-pack footer enabled", "info");
+				commandCtx.ui.notify("pi-tdah footer enabled", "info");
 			} else {
 				uninstallFooter(commandCtx);
 				commandCtx.ui.notify("Default footer restored", "info");

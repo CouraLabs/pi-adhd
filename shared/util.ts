@@ -1,5 +1,5 @@
 /**
- * util — small pure helpers shared across pi-pack extensions.
+ * util — small pure helpers shared across pi-tdah extensions.
  */
 
 /** Clamp `value` to the inclusive range `[min, max]`. */

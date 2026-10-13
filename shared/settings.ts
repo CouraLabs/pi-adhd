@@ -1,14 +1,14 @@
 /**
- * settings — persistent configuration shared by every pi-pack extension.
+ * settings — persistent configuration shared by every pi-tdah extension.
  *
- * All pi-pack ("couralabs") configuration lives in a single JSON file,
+ * All pi-tdah ("couralabs") configuration lives in a single JSON file,
  * organized as `{ feature: { option: value } }`:
  *
  *   ~/.pi/couralabs/settings.json
  *
  * The file is created with the defaults on first load. Extensions read the
  * current values at session start and write them back when a command changes
- * them. Unknown keys are preserved so a newer version of pi-pack (or a hand
+ * them. Unknown keys are preserved so a newer version of pi-tdah (or a hand
  * edit) never loses data.
  */
 
@@ -21,16 +21,22 @@ import { DEFAULT_SUBMODE, type Submode } from "./submodes.ts";
 /** Prompt-inheritance strategy a child session adopts for a provider. */
 export type PromptInheritance = "full" | "portable";
 
-/**
- * Operational configuration for the `subagents` extension. It lives under the
- * `subagents` key of the pi-pack settings file, next to its `enabled` toggle,
- * so every pi-pack knob is in one place.
- */
-export interface SubagentsConfig {
-	/** Master switch: when false the tools are hidden and the widget cleared. */
+/** Configuration for the `editor` extension: the pi-tdah prompt field. */
+export interface EditorConfig {
+	/** Master switch: when false the built-in editor is restored. */
 	enabled: boolean;
-	/** Maximum number of background agents running at once; the rest queue. */
-	maxConcurrent: number;
+	/** When true the footer shows the full working directory; otherwise only its last folder. */
+	fullCwd: boolean;
+}
+
+/**
+ * Operational configuration for the `spawn` extension. It lives under the
+ * `spawn` key of the pi-tdah settings file, next to its `enabled` toggle,
+ * so every pi-tdah knob is in one place.
+ */
+export interface SpawnConfig {
+	/** Master switch: when false the tools are hidden. */
+	enabled: boolean;
 	/** Default turn ceiling for agents that declare none. 0 = unlimited. */
 	defaultMaxTurns: number;
 	/** Turns left when an agent is warned to wrap up. */
@@ -39,16 +45,14 @@ export interface SubagentsConfig {
 	consumedSessionRetentionMinutes: number;
 	/** Minutes an unconsumed agent's session is retained (safety cap). */
 	unconsumedSessionRetentionMinutes: number;
-	/** When false, a parent interrupt leaves background agents running. */
-	abortAllOnInterrupt: boolean;
-	/** When false, background children cannot interrupt the parent mid-run. */
-	midRunUpdates: boolean;
 	/** Pi package sources whose extensions child sessions must not load. */
 	excludedExtensionPackages: string[];
 	/** Prompt-inheritance strategy per provider id; unlisted providers use "full". */
 	promptInheritance: Record<string, PromptInheritance>;
-	/** Model override per built-in agent name; written by `/subagent-model`. */
+	/** Model override per built-in agent name; written by `/spawn:model`. */
 	agentModels: Record<string, string>;
+	/** Thinking-level override per built-in agent name; written by `/spawn:model`. */
+	agentThinking: Record<string, string>;
 }
 
 /** Configuration for the `thinking` extension's compact reasoning preview. */
@@ -75,31 +79,50 @@ export interface SubmodesConfig {
 	current: Submode;
 }
 
-/** Persisted pi-pack configuration. */
+/** Provider selection for one `web` service (fetch or search). */
+export interface WebProviderConfig {
+	/** Provider id, or "auto" to try every configured provider in order. */
+	provider: string;
+	/** Model the 9Router aggregator fetches/searches with. */
+	nineRouterModel: string;
+}
+
+/** Configuration for the `web` extension's fetch and search providers. */
+export interface WebConfigSection {
+	fetch: WebProviderConfig;
+	search: WebProviderConfig;
+}
+
+/** Persisted pi-tdah configuration. */
 export interface CouralabsSettings {
 	footer: { enabled: boolean };
-	editor: { enabled: boolean };
+	editor: EditorConfig;
 	messages: { enabled: boolean };
 	thinking: ThinkingConfig;
-	subagents: SubagentsConfig;
+	spawn: SpawnConfig;
 	modes: ModesConfig;
 	submodes: SubmodesConfig;
+	web: WebConfigSection;
 }
 
 /** A partial update; each provided leaf overrides the stored value. */
 export interface SettingsPatch {
 	footer?: { enabled?: boolean };
-	editor?: { enabled?: boolean };
+	editor?: { enabled?: boolean; fullCwd?: boolean };
 	messages?: { enabled?: boolean };
 	thinking?: Partial<ThinkingConfig>;
-	subagents?: Partial<SubagentsConfig>;
+	spawn?: Partial<SpawnConfig>;
 	modes?: Partial<ModesConfig>;
 	submodes?: Partial<SubmodesConfig>;
+	web?: {
+		fetch?: Partial<WebProviderConfig>;
+		search?: Partial<WebProviderConfig>;
+	};
 }
 
 export const DEFAULT_SETTINGS: CouralabsSettings = {
 	footer: { enabled: true },
-	editor: { enabled: true },
+	editor: { enabled: true, fullCwd: false },
 	messages: { enabled: true },
 	thinking: {
 		enabled: true,
@@ -107,18 +130,16 @@ export const DEFAULT_SETTINGS: CouralabsSettings = {
 		previewLines: 5,
 		animationIntervalMs: 90,
 	},
-	subagents: {
+	spawn: {
 		enabled: true,
-		maxConcurrent: 4,
 		defaultMaxTurns: 0,
 		wrapUpTurns: 2,
 		consumedSessionRetentionMinutes: 10,
 		unconsumedSessionRetentionMinutes: 720,
-		abortAllOnInterrupt: true,
-		midRunUpdates: true,
 		excludedExtensionPackages: [],
 		promptInheritance: {},
 		agentModels: {},
+		agentThinking: {},
 	},
 	modes: {
 		current: DEFAULT_AGENT_MODE,
@@ -126,9 +147,13 @@ export const DEFAULT_SETTINGS: CouralabsSettings = {
 	submodes: {
 		current: DEFAULT_SUBMODE,
 	},
+	web: {
+		fetch: { provider: "auto", nineRouterModel: "exa" },
+		search: { provider: "auto", nineRouterModel: "exa" },
+	},
 };
 
-/** Path of the pi-pack settings file (`~/.pi/couralabs/settings.json`). */
+/** Path of the pi-tdah settings file (`~/.pi/couralabs/settings.json`). */
 export function getSettingsPath(): string {
 	return join(dirname(getAgentDir()), "couralabs", "settings.json");
 }
@@ -160,7 +185,11 @@ function readRaw(): Record<string, unknown> {
 }
 
 function coerce(raw: Record<string, unknown>): CouralabsSettings {
+	// SAFETY: CouralabsSettings is a plain nested object, so its runtime shape is
+	// a string-keyed map; merge only walks own enumerable properties.
 	const merged = merge(DEFAULT_SETTINGS as unknown as Record<string, unknown>, raw);
+	// SAFETY: `merged` starts from DEFAULT_SETTINGS and only overlays stored
+	// values, so every required key is present — the merge cannot drop one.
 	return merged as unknown as CouralabsSettings;
 }
 
@@ -184,6 +213,8 @@ export function saveSettings(settings: CouralabsSettings): void {
 /** Merge a patch into the stored settings and persist the result. */
 export function updateSettings(patch: SettingsPatch): CouralabsSettings {
 	const current = loadSettings();
+	// SAFETY: both settings and patch are plain nested objects; merge treats them
+	// as string-keyed maps and preserves every key it does not override.
 	const next = coerce(merge(current as unknown as Record<string, unknown>, patch as Record<string, unknown>));
 	saveSettings(next);
 	return next;

@@ -1,7 +1,7 @@
 /**
  * store — a process-global value with change notifications.
  *
- * pi-pack extension instances are not guaranteed to share module state (jiti
+ * pi-tdah extension instances are not guaranteed to share module state (jiti
  * reloads, child sessions, duplicate installs), so cross-extension state lives
  * on `globalThis` under a registered symbol. This helper owns that pattern: the
  * value and its listeners are created lazily on first use, and the first caller

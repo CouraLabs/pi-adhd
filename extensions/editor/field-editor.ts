@@ -1,5 +1,5 @@
 /**
- * The pi-pack prompt editor: a closed field-style box drawn with terminal box
+ * The pi-tdah prompt editor: a closed field-style box drawn with terminal box
  * characters around the built-in editor, with a `❯` marker on the first input
  * line, the working indicator embedded in the top border, and the working
  * directory + git state embedded in the bottom border. The box border color
@@ -44,6 +44,8 @@ export interface EditorLocationInfo {
 	cwd: string;
 	git: GitInfo;
 	theme: Theme;
+	/** When true the full working directory is shown; otherwise only its last folder. */
+	fullCwd: boolean;
 }
 
 export type LocationProvider = () => EditorLocationInfo | undefined;
@@ -94,7 +96,7 @@ export class FieldEditor extends CustomEditor {
 		const info = this.getLocation();
 		const pad = " ".repeat(margin);
 		const status = this.indicator?.renderInBorder(Math.max(0, boxWidth - 8)) ?? "";
-		const out: string[] = [pad + this.borderLine(boxWidth, BOX_TOP_LEFT, BOX_TOP_RIGHT, status) + pad];
+		const out: string[] = [pad + this.borderLine(boxWidth, BOX_TOP_LEFT, BOX_TOP_RIGHT, status, "left") + pad];
 		content.forEach((line, index) => {
 			const prefix = index === 0 ? `${info?.theme.fg('text', PROMPT)} ` : "  ";
 			const padded = line + " ".repeat(Math.max(0, contentWidth - visibleWidth(line)));
@@ -109,8 +111,18 @@ export class FieldEditor extends CustomEditor {
 		return out;
 	}
 
-	/** Draw a full-width border with corners and an optional right-aligned label. */
-	private borderLine(width: number, leftCorner: string, rightCorner: string, label: string): string {
+	/**
+	 * Draw a full-width border with corners and an optional label. The label is
+	 * right-aligned by default; the top border passes `"left"` so the working
+	 * indicator sits at the start of the box, matching pi's built-in editor.
+	 */
+	private borderLine(
+		width: number,
+		leftCorner: string,
+		rightCorner: string,
+		label: string,
+		align: "left" | "right" = "right",
+	): string {
 		if (width <= 0) return "";
 		if (width < 2) return this.paint(leftCorner.slice(0, width));
 
@@ -126,6 +138,13 @@ export class FieldEditor extends CustomEditor {
 		}
 
 		const fill = inner - labelWidth - 3;
+		if (align === "left") {
+			return (
+				this.paint(`${leftCorner}${BOX_HORIZONTAL} `) +
+				text +
+				this.paint(` ${BOX_HORIZONTAL.repeat(fill)}${rightCorner}`)
+			);
+		}
 		return (
 			this.paint(`${leftCorner}${BOX_HORIZONTAL.repeat(fill)} `) +
 			text +
@@ -137,9 +156,9 @@ export class FieldEditor extends CustomEditor {
 	private locationSegment(): string {
 		const info = this.getLocation();
 		if (!info) return "";
-		const { cwd, git, theme } = info;
+		const { cwd, git, theme, fullCwd } = info;
 		const parts: string[] = [];
-		if (cwd) parts.push(theme.fg("text", formatCwd(cwd)));
+		if (cwd) parts.push(theme.fg("text", formatCwd(cwd, fullCwd)));
 
 		const gitParts: string[] = [];
 		if (git.branch) gitParts.push(theme.fg("accent", `⌥ ${git.branch}`));

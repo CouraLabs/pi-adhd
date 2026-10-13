@@ -17,7 +17,7 @@ import { loadSettings, updateSettings } from "../../shared/settings.ts";
 import { agentModeBorderColor, getAgentMode, subscribeAgentMode } from "../../shared/modes.ts";
 import { FieldEditor, type LocationProvider } from "./field-editor.ts";
 import { emptyGit, parseNumstat, type GitInfo } from "./git.ts";
-import { JOKES } from "./jokes.ts";
+import { LOADING_PHRASES } from "./phrases.ts";
 import { SPINNER_FRAMES, SPINNER_INTERVAL_MS } from "./spinner.ts";
 
 const GIT_REFRESH_INTERVAL_MS = 10_000;
@@ -27,6 +27,7 @@ export default function (pi: ExtensionAPI) {
 	let ctx: ExtensionContext | undefined;
 	let tui: TUI | undefined;
 	let enabled = true;
+	let fullCwd = false;
 	let lastJoke = -1;
 	let git: GitInfo = emptyGit();
 	let unsubscribeMode: (() => void) | undefined;
@@ -80,7 +81,7 @@ export default function (pi: ExtensionAPI) {
 	const locationProvider: LocationProvider = () => {
 		const c = ctx;
 		if (!c) return undefined;
-		return { cwd: c.cwd, git, theme: c.ui.theme };
+		return { cwd: c.cwd, git, theme: c.ui.theme, fullCwd };
 	};
 
 	/** Install the dot spinner, colored to match the editor's mode-colored border. */
@@ -95,11 +96,11 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	const pickJoke = (): string => {
-		if (JOKES.length === 0) return "Working";
-		let index = Math.floor(Math.random() * JOKES.length);
-		if (JOKES.length > 1 && index === lastJoke) index = (index + 1) % JOKES.length;
+		if (LOADING_PHRASES.length === 0) return "Working";
+		let index = Math.floor(Math.random() * LOADING_PHRASES.length);
+		if (LOADING_PHRASES.length > 1 && index === lastJoke) index = (index + 1) % LOADING_PHRASES.length;
 		lastJoke = index;
-		return JOKES[index] ?? "Working";
+		return LOADING_PHRASES[index] ?? "Working";
 	};
 
 	const installEditor = (context: ExtensionContext) => {
@@ -118,7 +119,7 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	pi.registerCommand("prompt-ui", {
-		description: "Toggle the pi-pack prompt field (usage: /prompt-ui [on|off])",
+		description: "Toggle the pi-tdah prompt field (usage: /prompt-ui [on|off])",
 		handler: async (args, commandCtx) => {
 			const arg = args.trim().toLowerCase();
 			if (arg === "on") enabled = true;
@@ -129,7 +130,7 @@ export default function (pi: ExtensionAPI) {
 
 			if (enabled) {
 				installEditor(commandCtx);
-				commandCtx.ui.notify("pi-pack prompt field enabled", "info");
+				commandCtx.ui.notify("pi-tdah prompt field enabled", "info");
 			} else {
 				uninstallEditor(commandCtx);
 				commandCtx.ui.notify("Default editor restored", "info");
@@ -137,9 +138,28 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
+	pi.registerCommand("full-cwd", {
+		description: "Toggle the full working directory in the prompt field (usage: /full-cwd [on|off])",
+		handler: async (args, commandCtx) => {
+			const arg = args.trim().toLowerCase();
+			if (arg === "on") fullCwd = true;
+			else if (arg === "off") fullCwd = false;
+			else fullCwd = !fullCwd;
+
+			updateSettings({ editor: { fullCwd } });
+			requestRender();
+			commandCtx.ui.notify(
+				fullCwd ? "Showing full working directory" : "Showing last folder of working directory",
+				"info",
+			);
+		},
+	});
+
 	pi.on("session_start", (_event, context) => {
 		ctx = context;
-		enabled = loadSettings().editor.enabled;
+		const settings = loadSettings();
+		enabled = settings.editor.enabled;
+		fullCwd = settings.editor.fullCwd;
 		git = emptyGit();
 		stopGitTimers();
 
