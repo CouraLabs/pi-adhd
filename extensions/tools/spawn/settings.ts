@@ -37,7 +37,7 @@ import type { PromptInheritance } from "./types.ts";
  * - `agentThinking`: thinking-level override per built-in agent name, also
  *   written by `/spawn:model`.
  */
-export type SpawnSettings = Partial<Omit<SpawnConfig, "enabled">> & {
+export type SpawnSettings = Partial<SpawnConfig> & {
   /**
    * Load-only marker: a settings file still names the removed `graceTurns`.
    * `load()` warns and strips it, so it is never applied, emitted, or saved.

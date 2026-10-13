@@ -15,7 +15,6 @@ import { DEFAULT_SETTINGS, loadSettings, type ThinkingConfig } from "../../../sh
 
 function normalize(raw: ThinkingConfig): ThinkingConfig {
 	return {
-		enabled: raw.enabled !== false,
 		useSummaryTitlesAsThinkingTitle: raw.useSummaryTitlesAsThinkingTitle !== false,
 		previewLines:
 			Number.isInteger(raw.previewLines) && raw.previewLines >= 0

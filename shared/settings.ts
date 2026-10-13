@@ -2,7 +2,8 @@
  * settings — persistent configuration shared by every pi-adhd extension.
  *
  * All pi-adhd ("couralabs") configuration lives in a single JSON file,
- * organized as `{ feature: { option: value } }`:
+ * organized as `{ feature: { option: value } }` plus a top-level `extensions`
+ * array naming which extensions the barrel loads:
  *
  *   ~/.pi/couralabs/settings.json
  *
@@ -15,6 +16,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { DEFAULT_EXTENSION_NAMES } from "./extension-catalog.ts";
 import { DEFAULT_AGENT_MODE, type AgentMode } from "./modes.ts";
 import { DEFAULT_SUBMODE, type Submode } from "./submodes.ts";
 
@@ -23,20 +25,16 @@ export type PromptInheritance = "full" | "portable";
 
 /** Configuration for the `editor` extension: the pi-adhd prompt field. */
 export interface EditorConfig {
-	/** Master switch: when false the built-in editor is restored. */
-	enabled: boolean;
 	/** When true the footer shows the full working directory; otherwise only its last folder. */
 	fullCwd: boolean;
 }
 
 /**
  * Operational configuration for the `spawn` extension. It lives under the
- * `spawn` key of the pi-adhd settings file, next to its `enabled` toggle,
- * so every pi-adhd knob is in one place.
+ * `spawn` key of the pi-adhd settings file, so every pi-adhd knob is in one
+ * place.
  */
 export interface SpawnConfig {
-	/** Master switch: when false the tools are hidden. */
-	enabled: boolean;
 	/** Default turn ceiling for agents that declare none. 0 = unlimited. */
 	defaultMaxTurns: number;
 	/** Turns left when an agent is warned to wrap up. */
@@ -57,8 +55,6 @@ export interface SpawnConfig {
 
 /** Configuration for the `thinking` extension's compact reasoning preview. */
 export interface ThinkingConfig {
-	/** Master switch: when false the compact renderer is not installed. */
-	enabled: boolean;
 	/** For OpenAI models, use the latest reasoning-summary heading as the live title. */
 	useSummaryTitlesAsThinkingTitle: boolean;
 	/** Rendered reasoning-preview lines kept while thinking is hidden; 0 hides the preview. */
@@ -95,9 +91,9 @@ export interface WebConfigSection {
 
 /** Persisted pi-adhd configuration. */
 export interface CouralabsSettings {
-	footer: { enabled: boolean };
+	/** Canonical names of the extensions to load; anything absent is not loaded. */
+	extensions: string[];
 	editor: EditorConfig;
-	messages: { enabled: boolean };
 	thinking: ThinkingConfig;
 	spawn: SpawnConfig;
 	modes: ModesConfig;
@@ -107,9 +103,8 @@ export interface CouralabsSettings {
 
 /** A partial update; each provided leaf overrides the stored value. */
 export interface SettingsPatch {
-	footer?: { enabled?: boolean };
-	editor?: { enabled?: boolean; fullCwd?: boolean };
-	messages?: { enabled?: boolean };
+	extensions?: string[];
+	editor?: { fullCwd?: boolean };
 	thinking?: Partial<ThinkingConfig>;
 	spawn?: Partial<SpawnConfig>;
 	modes?: Partial<ModesConfig>;
@@ -121,17 +116,14 @@ export interface SettingsPatch {
 }
 
 export const DEFAULT_SETTINGS: CouralabsSettings = {
-	footer: { enabled: true },
-	editor: { enabled: true, fullCwd: false },
-	messages: { enabled: true },
+	extensions: [...DEFAULT_EXTENSION_NAMES],
+	editor: { fullCwd: false },
 	thinking: {
-		enabled: true,
 		useSummaryTitlesAsThinkingTitle: true,
 		previewLines: 5,
 		animationIntervalMs: 90,
 	},
 	spawn: {
-		enabled: true,
 		defaultMaxTurns: 0,
 		wrapUpTurns: 2,
 		consumedSessionRetentionMinutes: 10,
@@ -194,12 +186,15 @@ function coerce(raw: Record<string, unknown>): CouralabsSettings {
 }
 
 /** Read the settings file, filling in defaults for anything missing. Creates
- *  the file with the defaults when it does not exist yet. */
+ *  the file with the defaults when it does not exist yet, and writes the
+ *  `extensions` array once when upgrading a file that predates it, so the
+ *  enabled set is visible on disk rather than only applied in memory. */
 export function loadSettings(): CouralabsSettings {
 	const path = getSettingsPath();
 	const existed = existsSync(path);
-	const settings = coerce(readRaw());
-	if (!existed) saveSettings(settings);
+	const raw = readRaw();
+	const settings = coerce(raw);
+	if (!existed || !("extensions" in raw)) saveSettings(settings);
 	return settings;
 }
 

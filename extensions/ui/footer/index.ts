@@ -5,14 +5,14 @@
  * provider/model, thinking level, context-window gauge, and cumulative
  * token/cost usage. Statuses published by other extensions render on their own
  * line below, and any sections they register (see `shared/footer-sections.ts`)
- * render last of all. Toggle it with `/footer-ui [on|off]`.
+ * render last of all. Enable or disable it with `/couralabs:enable footer` and
+ * `/couralabs:disable footer`.
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { TUI } from "@earendil-works/pi-tui";
 import { getSpawnService, type SpawnServiceConsumer } from "../../../shared/spawn-service.ts";
 import { getFooterSections, subscribeFooterSections } from "../../../shared/footer-sections.ts";
-import { loadSettings, updateSettings } from "../../../shared/settings.ts";
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import { getAgentMode, subscribeAgentMode } from "../../../shared/modes.ts";
 import { getSubmode, subscribeSubmode } from "../../../shared/submodes.ts";
@@ -24,7 +24,6 @@ export default function (pi: ExtensionAPI) {
 	let ctx: ExtensionContext | undefined;
 	let tui: TUI | undefined;
 
-	let enabled = true;
 	let usageCache: { key: string; value: UsageTotals } | undefined;
 	let unsubscribeMode: (() => void) | undefined;
 	let unsubscribeSubmode: (() => void) | undefined;
@@ -97,36 +96,8 @@ export default function (pi: ExtensionAPI) {
 		requestRender();
 	};
 
-	const uninstallFooter = (context: ExtensionContext) => {
-		context.ui.setFooter(undefined);
-		unsubscribeSections?.();
-		unsubscribeSections = undefined;
-		tui = undefined;
-	};
-
-	pi.registerCommand("footer-ui", {
-		description: "Toggle the pi-adhd footer (usage: /footer-ui [on|off])",
-		handler: async (args, commandCtx) => {
-			const arg = args.trim().toLowerCase();
-			if (arg === "on") enabled = true;
-			else if (arg === "off") enabled = false;
-			else enabled = !enabled;
-
-			updateSettings({ footer: { enabled } });
-
-			if (enabled) {
-				installFooter(commandCtx);
-				commandCtx.ui.notify("pi-adhd footer enabled", "info");
-			} else {
-				uninstallFooter(commandCtx);
-				commandCtx.ui.notify("Default footer restored", "info");
-			}
-		},
-	});
-
 	pi.on("session_start", (_event, context) => {
 		ctx = context;
-		enabled = loadSettings().footer.enabled;
 		usageCache = undefined;
 
 		// Re-render when /mode switches the agent mode or /plan / /grill the submode.
@@ -135,7 +106,7 @@ export default function (pi: ExtensionAPI) {
 		unsubscribeSubmode?.();
 		unsubscribeSubmode = subscribeSubmode(() => requestRender());
 
-		if (!enabled || context.mode !== "tui") return;
+		if (context.mode !== "tui") return;
 		installFooter(context);
 	});
 

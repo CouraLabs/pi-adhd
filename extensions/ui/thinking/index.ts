@@ -10,8 +10,8 @@
  * The upstream extension patches `AssistantMessageComponent.prototype.updateContent`
  * — pi exposes no hook for the hidden-thinking body — and that internal API is
  * why the port keeps its touch surface in `types.ts`. The patch is installed on
- * `session_start`, removed on `session_shutdown`, and can be toggled at runtime
- * with `/thinking-ui [on|off]`.
+ * `session_start` and removed on `session_shutdown`. Enable or disable it with
+ * `/couralabs:enable thinking` and `/couralabs:disable thinking`.
  */
 
 import type { AssistantMessage } from "@earendil-works/pi-ai";
@@ -22,7 +22,6 @@ import {
 	type Theme,
 } from "@earendil-works/pi-coding-agent";
 import { Markdown, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
-import { updateSettings } from "../../../shared/settings.ts";
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import { refreshThinkingConfig, thinkingConfig } from "./config.ts";
 import { DURATION_ENTRY_TYPE, restoreDurationEntries } from "./durations.ts";
@@ -510,7 +509,7 @@ export default function thinkingExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.on("session_start", (_event, ctx) => {
-		if (!refreshThinkingConfig().enabled) return;
+		refreshThinkingConfig();
 		install(ctx);
 	});
 
@@ -522,24 +521,5 @@ export default function thinkingExtension(pi: ExtensionAPI): void {
 
 	pi.on("session_shutdown", (_event, ctx) => {
 		uninstall(ctx);
-	});
-
-	pi.registerCommand("thinking-ui", {
-		description:
-			"Toggle the Coura Labs compact thinking preview (usage: /thinking-ui [on|off])",
-		handler: async (args, commandCtx) => {
-			const arg = args.trim().toLowerCase();
-			const enabled = arg === "on" ? true : arg === "off" ? false : !thinkingConfig().enabled;
-
-			updateSettings({ thinking: { enabled } });
-			refreshThinkingConfig();
-			if (enabled) install(commandCtx);
-			else uninstall(commandCtx);
-
-			commandCtx.ui.notify(
-				enabled ? "Compact thinking enabled" : "Default thinking renderer restored",
-				"info",
-			);
-		},
 	});
 }

@@ -8,7 +8,8 @@
  * rather than the thinking level. The "Working" label is replaced with a random
  * short joke phrase chosen fresh on every turn.
  *
- * Toggle it at any time with `/prompt-ui [on|off]`.
+ * Enable or disable it with `/couralabs:enable editor` and
+ * `/couralabs:disable editor`.
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -28,7 +29,6 @@ export default function (pi: ExtensionAPI) {
 	markExtensionLoaded("editor");
 	let ctx: ExtensionContext | undefined;
 	let tui: TUI | undefined;
-	let enabled = true;
 	let fullCwd = false;
 	let lastJoke = -1;
 	let git: GitInfo = emptyGit();
@@ -114,32 +114,6 @@ export default function (pi: ExtensionAPI) {
 		applyWorkingIndicator(context);
 	};
 
-	const uninstallEditor = (context: ExtensionContext) => {
-		context.ui.setEditorComponent(undefined);
-		context.ui.setWorkingIndicator();
-		tui = undefined;
-	};
-
-	pi.registerCommand("prompt-ui", {
-		description: "Toggle the pi-adhd prompt field (usage: /prompt-ui [on|off])",
-		handler: async (args, commandCtx) => {
-			const arg = args.trim().toLowerCase();
-			if (arg === "on") enabled = true;
-			else if (arg === "off") enabled = false;
-			else enabled = !enabled;
-
-			updateSettings({ editor: { enabled } });
-
-			if (enabled) {
-				installEditor(commandCtx);
-				commandCtx.ui.notify("pi-adhd prompt field enabled", "info");
-			} else {
-				uninstallEditor(commandCtx);
-				commandCtx.ui.notify("Default editor restored", "info");
-			}
-		},
-	});
-
 	pi.registerCommand("full-cwd", {
 		description: "Toggle the full working directory in the prompt field (usage: /full-cwd [on|off])",
 		handler: async (args, commandCtx) => {
@@ -160,7 +134,6 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_start", (_event, context) => {
 		ctx = context;
 		const settings = loadSettings();
-		enabled = settings.editor.enabled;
 		fullCwd = settings.editor.fullCwd;
 		git = emptyGit();
 		stopGitTimers();
@@ -169,10 +142,10 @@ export default function (pi: ExtensionAPI) {
 		unsubscribeMode?.();
 		unsubscribeMode = subscribeAgentMode(() => {
 			requestRender();
-			if (enabled && ctx) applyWorkingIndicator(ctx);
+			if (ctx) applyWorkingIndicator(ctx);
 		});
 
-		if (!enabled || context.mode !== "tui") return;
+		if (context.mode !== "tui") return;
 		installEditor(context);
 		void refreshGit();
 		gitInterval = setInterval(() => void refreshGit(), GIT_REFRESH_INTERVAL_MS);
@@ -180,20 +153,20 @@ export default function (pi: ExtensionAPI) {
 
 	// Swap in a new joke phrase for every turn and refresh the spinner colors.
 	pi.on("turn_start", () => {
-		if (!enabled || !ctx || ctx.mode !== "tui") return;
+		if (!ctx || ctx.mode !== "tui") return;
 		ctx.ui.setWorkingMessage(pickJoke());
 		applyWorkingIndicator(ctx);
 	});
 
 	// Keep the location segment fresh as the working tree changes.
 	pi.on("tool_execution_end", () => {
-		if (enabled) scheduleGitRefresh();
+		scheduleGitRefresh();
 	});
 	pi.on("turn_end", () => requestRender());
 	pi.on("agent_settled", () => requestRender());
 	pi.on("model_select", () => requestRender());
 	pi.on("thinking_level_select", () => {
-		if (enabled && ctx) applyWorkingIndicator(ctx);
+		if (ctx) applyWorkingIndicator(ctx);
 	});
 	pi.on("session_info_changed", () => requestRender());
 

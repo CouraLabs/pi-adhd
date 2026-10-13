@@ -43,7 +43,6 @@ import { AgentTool } from "./tools/agent-tool.ts";
 import { SessionNavigatorHandler } from "./ui/session-navigator.ts";
 import { SpawnDefaultsHandler } from "./ui/spawn-defaults.ts";
 import { SpawnSettingsHandler } from "./ui/spawn-settings.ts";
-import { loadSettings, updateSettings } from "../../../shared/settings.ts";
 
 export default function (pi: ExtensionAPI) {
   markExtensionLoaded("spawn");
@@ -172,12 +171,14 @@ export default function (pi: ExtensionAPI) {
     },
   );
 
-  // ---- pi-adhd enable/disable toggle ----
-  // Tools stay registered so the command can re-arm them; enabling/disabling
-  // only changes the active tool set (what the model is offered). The choice
-  // persists in `~/.pi/couralabs/settings.json`.
+  // ---- tool activation ----
+  // The extension is loaded or not by the top-level `extensions` setting; this
+  // only guards a spawned child, whose own copy of the extension must never be
+  // offered the spawn tools (the SDK excludeTools denylist is not enough,
+  // because `setActiveTools()` re-checks the allowlist but not the denylist).
   const SPAWN_TOOL_NAMES: readonly string[] = ["spawn"];
   let spawnEnabled = true;
+  const SPAWN_CHILD_MESSAGE = "pi-adhd spawn is unavailable inside a spawned child session";
 
   const setSpawnToolsActive = (active: boolean): void => {
     const current = pi.getActiveTools();
@@ -203,7 +204,7 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", (event, ctx) => lifecycle.handleSessionStart(event, ctx));
   pi.on("session_start", (_event, ctx) => {
     const isChild = isChildSession(ctx.sessionManager.getSessionId());
-    spawnEnabled = isChild ? false : loadSettings().spawn.enabled;
+    spawnEnabled = !isChild;
     applySpawnEnabled(isChild);
   });
   pi.on("session_before_switch", () => lifecycle.handleSessionBeforeSwitch());
@@ -221,31 +222,6 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerTool(new AgentTool(manager, runtime, settings, registry).toToolDefinition());
 
-  // ---- /spawn command ----
-
-  pi.registerCommand("spawn", {
-    description: "Toggle pi-adhd spawn and their tools (usage: /spawn [on|off])",
-    handler: async (args, ctx) => {
-      if (isChildSession(ctx.sessionManager.getSessionId())) {
-        ctx.ui.notify("Spawn cannot be enabled inside a spawned child session", "warning");
-        return;
-      }
-      const arg = args.trim().toLowerCase();
-      if (arg === "on") spawnEnabled = true;
-      else if (arg === "off") spawnEnabled = false;
-      else spawnEnabled = !spawnEnabled;
-
-      updateSettings({ spawn: { enabled: spawnEnabled } });
-      applySpawnEnabled(false);
-      ctx.ui.notify(
-        spawnEnabled
-          ? "pi-adhd spawn enabled"
-          : "pi-adhd spawn disabled — tools hidden",
-        "info",
-      );
-    },
-  });
-
   // ---- /spawn:settings command ----
 
   const spawnSettings = new SpawnSettingsHandler(settings);
@@ -254,7 +230,7 @@ export default function (pi: ExtensionAPI) {
     description: "Configure pi-adhd spawn (turn limits, retention)",
     handler: async (_args, ctx) => {
       if (!spawnEnabled) {
-        ctx.ui.notify("pi-adhd spawn is disabled — run /spawn on", "warning");
+        ctx.ui.notify(SPAWN_CHILD_MESSAGE, "warning");
         return;
       }
       await spawnSettings.handle({ ui: ctx.ui });
@@ -269,7 +245,7 @@ export default function (pi: ExtensionAPI) {
     description: "View a spawned agent's session transcript (read-only)",
     handler: async (_args, ctx) => {
       if (!spawnEnabled) {
-        ctx.ui.notify("pi-adhd spawn is disabled — run /spawn on", "warning");
+        ctx.ui.notify(SPAWN_CHILD_MESSAGE, "warning");
         return;
       }
       await sessionNavigator.handle({
@@ -291,7 +267,7 @@ export default function (pi: ExtensionAPI) {
     description: "Set a spawned agent's default model and thinking level (built-in or .agents/agents/*.md)",
     handler: async (_args, ctx) => {
       if (!spawnEnabled) {
-        ctx.ui.notify("pi-adhd spawn is disabled — run /spawn on", "warning");
+        ctx.ui.notify(SPAWN_CHILD_MESSAGE, "warning");
         return;
       }
       await spawnDefaultsHandler.handle({

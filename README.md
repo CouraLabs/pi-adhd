@@ -31,7 +31,7 @@ About 2 minutes.
 
 ## What you get
 
-Eleven extensions, grouped by job. Each one can be toggled on its own.
+Eleven extensions, grouped by job. Enable or disable any of them with `/couralabs:enable <extension>` and `/couralabs:disable <extension>`.
 
 | Job | Extension | What it adds |
 |---|---|---|
@@ -54,14 +54,11 @@ Eleven extensions, grouped by job. Each one can be toggled on its own.
 | `/mode [pi\|work]` | Switch the system prompt and agent voice |
 | `/submode [plan\|grill\|straight\|none]` | Enter or leave a submode |
 | `/plan` `/grill` `/straight` | Toggle one submode |
-| `/footer-ui [on\|off]` | Toggle the footer |
-| `/prompt-ui [on\|off]` | Toggle the boxed prompt field |
+| `/couralabs:enable <extension>` | Enable an extension and reload |
+| `/couralabs:disable <extension>` | Disable an extension and reload |
 | `/full-cwd [on\|off]` | Show the full working directory or only its last folder |
-| `/messages-ui [on\|off]` | Toggle the left-rule message UI |
-| `/thinking-ui [on\|off]` | Toggle the compact thinking renderer |
 | `/todo` | View or edit the todo list |
 | `/goal` `/guided-goal` | Toggle goal mode; have the agent interview you first |
-| `/spawn [on\|off]` | Toggle spawn and its tools |
 | `/spawn:settings` `/spawn:sessions` `/spawn:model` | Tune limits, open a transcript, set agent defaults |
 | `/web` | Pick web fetch and search providers |
 
@@ -145,11 +142,11 @@ Wraps the prompt editor in a closed field drawn with terminal box characters (`�
  ╰──────────────────────────── pi-adhd ∙ ⌥ main +12 -3 ─╯
 ```
 
-The box border color follows the active agent mode (see [`modes`](#the-output-contract-modes)): the theme's `border` token in Work, the `accent` token in Pi, instead of tracking the thinking level. The bottom-border location segment shows the working directory followed by the git branch and the added/removed line counts from `git diff --numstat` (`+n` in success green, `-n` in error red). By default only the last folder of the working directory is shown; `/full-cwd` toggles the full path on and off (`/full-cwd on` / `/full-cwd off`), keeping the home directory itself rendered as `~` either way. Toggle the whole prompt field at any time with `/prompt-ui` (or `/prompt-ui on` / `/prompt-ui off`); disabling it restores pi's default editor and the plain "Working" label.
+The box border color follows the active agent mode (see [`modes`](#the-output-contract-modes)): the theme's `border` token in Work, the `accent` token in Pi, instead of tracking the thinking level. The bottom-border location segment shows the working directory followed by the git branch and the added/removed line counts from `git diff --numstat` (`+n` in success green, `-n` in error red). By default only the last folder of the working directory is shown; `/full-cwd` toggles the full path on and off (`/full-cwd on` / `/full-cwd off`), keeping the home directory itself rendered as `~` either way. Enable or disable the whole prompt field with `/couralabs:enable editor` and `/couralabs:disable editor`.
 
 ## Status bar: `footer`
 
-Replaces the built-in footer with a compact, theme-aware status bar. Toggle it at any time with `/footer-ui` (or `/footer-ui on` / `/footer-ui off`).
+Replaces the built-in footer with a compact, theme-aware status bar. Enable or disable it with `/couralabs:enable footer` and `/couralabs:disable footer`.
 
 ```
   ⛑ Work ∙ ⧉Plan ∙ anthropic/claude-sonnet-4 ∙ ▶▶ high ∙ [■■■■■■□□□□] 124k/200k (62%) ∙ ↑ 120k ∙ ↓ 8.4k ∙ ⭍ 87% ∙ $0.842
@@ -160,7 +157,7 @@ The stats line shows the active agent mode (see [`modes`](#the-output-contract-m
 
 ## Tool calls: `messages`
 
-Restyles tool calls to share the pi-adhd look. Built-in tool calls drop their full background and instead show a heavy left rule (`│`) colored with the tool's status background token, so it shifts from pending to success/error exactly like the old shell. Toggle it at any time with `/messages-ui` (or `/messages-ui on` / `/messages-ui off`).
+Restyles tool calls to share the pi-adhd look. Built-in tool calls drop their full background and instead show a heavy left rule (`│`) colored with the tool's status background token, so it shifts from pending to success/error exactly like the old shell. Enable or disable it with `/couralabs:enable messages` and `/couralabs:disable messages`.
 
 ```
 │ read src/index.ts
@@ -193,7 +190,7 @@ Reviewing the failing test · 4s (12 more lines, shift+tab to expand)
 
 When the run finishes the heading settles on `Thought for 4s`. Visible thinking is left exactly as pi renders it, so the thinking-visibility toggle still expands the full reasoning block. Durations render as `ms`, `s`, `m`, or `m Ns`.
 
-Compact mode activates when pi hides thinking (`hideThinkingBlock: true` in pi's settings, and `Shift+Tab` toggles it). The extension patches pi's internal assistant-message renderer — pi exposes no hook for the hidden-thinking body — so it may need updating after a pi upgrade. Toggle the extension itself with `/thinking-ui` (or `/thinking-ui on` / `/thinking-ui off`); disabling it restores pi's built-in hidden-thinking label.
+Compact mode activates when pi hides thinking (`hideThinkingBlock: true` in pi's settings, and `Shift+Tab` toggles it). The extension patches pi's internal assistant-message renderer — pi exposes no hook for the hidden-thinking body — so it may need updating after a pi upgrade. Enable or disable the extension with `/couralabs:enable thinking` and `/couralabs:disable thinking`.
 
 ## Progress list: `todo`
 
@@ -223,7 +220,7 @@ The model spawns agents with the `spawn` tool (`spawn_type`, `prompt`, `descript
 
 Agent types are defined in `.agents/agents/<name>.md` (project) and `~/.agents/agents/<name>.md` (global) with YAML frontmatter for the prompt, model, thinking level, tools, and `max_turns`. The built-in `general-purpose`, `plan-reviewer`, `Arquitect`, `Code-Review`, and `Explore` types cover the common cases. Lifecycle events (`spawn:started`, `completed`, `failed`, `resuming`, `resumed`, `compacted`, `settings_loaded`, `settings_changed`) are emitted on `pi.events`, and a typed `SpawnService` is published for other extensions.
 
-Toggle the whole extension with `/spawn` (or `/spawn on` / `/spawn off`). Disabling removes the `spawn` tool from the active set and makes `/spawn:settings` and `/spawn:sessions` report that spawn is disabled; the choice persists across reloads. An already-running agent keeps running until it settles.
+Disable the whole extension with `/couralabs:disable spawn`; an already-running agent keeps running until it settles, and `/spawn:settings` and `/spawn:sessions` are unavailable in a spawned child session.
 
 ## Web access: `web`
 
@@ -251,21 +248,30 @@ Every pi-adhd setting lives in a single JSON file:
 ~/.pi/couralabs/settings.json
 ```
 
-It is organized as `{ feature: { option: value } }` and created with the defaults the first time pi-adhd loads, so it always contains the complete set of knobs:
+It is organized as `{ feature: { option: value } }`, plus a top-level `extensions` array naming which extensions the barrel loads, and is created with the defaults the first time pi-adhd loads, so it always contains the complete set of knobs:
 
 ```json
 {
-  "footer": { "enabled": true },
-  "editor": { "enabled": true, "fullCwd": false },
-  "messages": { "enabled": true },
+  "extensions": [
+    "editor",
+    "footer",
+    "messages",
+    "thinking",
+    "modes",
+    "submodes",
+    "ask-user",
+    "goal",
+    "spawn",
+    "todo",
+    "web"
+  ],
+  "editor": { "fullCwd": false },
   "thinking": {
-    "enabled": true,
     "useSummaryTitlesAsThinkingTitle": true,
     "previewLines": 5,
     "animationIntervalMs": 90
   },
   "spawn": {
-    "enabled": true,
     "defaultMaxTurns": 0,
     "wrapUpTurns": 2,
     "consumedSessionRetentionMinutes": 10,
@@ -285,15 +291,11 @@ It is organized as `{ feature: { option: value } }` and created with the default
 
 | Feature | Option | Default | Description |
 |---|---|---|---|
-| `footer` | `enabled` | `true` | pi-adhd footer (toggle with `/footer-ui`) |
-| `editor` | `enabled` | `true` | pi-adhd prompt field (toggle with `/prompt-ui`) |
+| `extensions` | — | every extension | Extensions the barrel loads; anything absent is not loaded (edit with `/couralabs:enable` / `/couralabs:disable`) |
 | `editor` | `fullCwd` | `false` | Show the full working directory instead of only its last folder (toggle with `/full-cwd`) |
-| `messages` | `enabled` | `true` | pi-adhd message UI (toggle with `/messages-ui`) |
-| `thinking` | `enabled` | `true` | Compact hidden-thinking renderer (toggle with `/thinking-ui`) |
 | `thinking` | `useSummaryTitlesAsThinkingTitle` | `true` | Use the latest OpenAI reasoning-summary heading as the live title |
 | `thinking` | `previewLines` | `5` | Reasoning-preview lines retained; `0` hides the preview |
 | `thinking` | `animationIntervalMs` | `90` | Milliseconds between animation frames while reasoning |
-| `spawn` | `enabled` | `true` | pi-adhd spawn and its tools (toggle with `/spawn`) |
 | `spawn` | `defaultMaxTurns` | `0` | Default turn ceiling; `0` = unlimited |
 | `spawn` | `wrapUpTurns` | `2` | Turns left when an agent is warned to wrap up |
 | `spawn` | `consumedSessionRetentionMinutes` | `10` | Minutes a consumed agent's session is retained |
@@ -309,7 +311,7 @@ It is organized as `{ feature: { option: value } }` and created with the default
 | `web` | `search.provider` | `"auto"` | Default web search provider; `auto` tries every configured one in order |
 | `web` | `search.nineRouterModel` | `"exa"` | Model the 9Router aggregator searches with |
 
-The `on`/`off` forms of each toggle write the new value back to this file, so the choice survives reloads and new sessions. Missing keys fall back to the defaults and unknown keys are preserved, so the file can be edited by hand. `/spawn:settings` edits the operational `spawn` options (numeric values open an input prompt).
+The `/couralabs:enable` and `/couralabs:disable` commands rewrite the `extensions` array and reload, so the choice survives reloads and new sessions. Missing keys fall back to the defaults and unknown keys are preserved, so the file can be edited by hand. `/spawn:settings` edits the operational `spawn` options (numeric values open an input prompt).
 
 ## Themes
 
@@ -453,6 +455,8 @@ pi-adhd/
 │           └── prompts/         # static .md prompt assets
 ├── shared/
 │   ├── child-sessions.ts    # spawned child-session registry
+│   ├── extension-catalog.ts # toggleable extensions and their aliases
+│   ├── extension-control.ts # `/couralabs:enable` / `disable` + enabled set
 │   ├── extension-registry.ts # which optional pi-adhd extensions are loaded
 │   ├── format.ts            # compact token counts + cwd formatting
 │   ├── footer-sections.ts   # extra footer blocks registered by extensions
@@ -472,7 +476,7 @@ pi-adhd/
 └── package.json
 ```
 
-Each extension is a directory whose `index.ts` exports the default factory. Helper modules sit beside it and are imported with explicit `.ts` extensions. Cross-extension helpers live in `shared/`. Extensions are grouped by kind — `extensions/ui/` (editor, footer, messages, thinking), `extensions/agent/` (modes, submodes), and `extensions/tools/` (ask-user, goal, spawn, todo, web) — and every `index.ts` is loadable on its own. The `pi.extensions` manifest in `package.json` points at `extensions/index.ts`, a barrel that calls every extension factory in one place (ui → agent → tools), so the package loads from a single entry and helper modules are never loaded as extensions on their own.
+Each extension is a directory whose `index.ts` exports the default factory. Helper modules sit beside it and are imported with explicit `.ts` extensions. Cross-extension helpers live in `shared/`. Extensions are grouped by kind — `extensions/ui/` (editor, footer, messages, thinking), `extensions/agent/` (modes, submodes), and `extensions/tools/` (ask-user, goal, spawn, todo, web) — and every `index.ts` is loadable on its own. The `pi.extensions` manifest in `package.json` points at `extensions/index.ts`, a barrel that reads the enabled set from `~/.pi/couralabs/settings.json` and calls only those factories (ui → agent → tools), so the package loads from a single entry and helper modules are never loaded as extensions on their own. `/couralabs:enable` and `/couralabs:disable` edit that settings array and reload.
 
 ### Loading extensions individually
 
@@ -489,7 +493,7 @@ Every extension can be loaded alone (`pi -e extensions/tools/todo/index.ts`), an
 1. Create `extensions/my-thing/index.ts` (or a single `extensions/my-thing.ts`).
 2. Export a default factory receiving `ExtensionAPI`.
 3. Run `pi -e ./extensions/my-thing/index.ts` to test it.
-4. To ship it with the package, import it in `extensions/index.ts` and call it from the barrel.
+4. To ship it with the package, add it to `shared/extension-catalog.ts`, import it in `extensions/index.ts`, and call it from the barrel.
 
 ```typescript
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";

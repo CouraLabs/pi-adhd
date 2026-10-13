@@ -1,11 +1,13 @@
 /**
- * pi-adhd — single entry point that loads every bundled extension.
+ * pi-adhd — single entry point that loads the enabled bundled extensions.
  *
  * Each extension keeps its own default factory and stays individually loadable
- * (`pi -e extensions/tools/todo/index.ts`); this barrel only wires them into
- * one path so the package can be loaded from a single manifest entry. Calling
- * the factories directly is the same as pi loading each file: they register
- * their tools, commands, and event handlers against the shared `ExtensionAPI`.
+ * (`pi -e extensions/tools/todo/index.ts`); this barrel wires them into one
+ * path so the package can be loaded from a single manifest entry. It reads the
+ * top-level `extensions` array in `~/.pi/couralabs/settings.json` and calls
+ * only the listed factories, so an extension absent from the array is never
+ * loaded. `/couralabs:enable <extension>` and `/couralabs:disable <extension>`
+ * edit that array and reload.
  *
  * Load order is deliberate and matches the previous manifest glob order:
  *   ui → agent → tools
@@ -16,6 +18,9 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+
+import { loadEnabledExtensions, registerExtensionControlCommands } from "../shared/extension-control.ts";
+import { resetExtensionRegistry } from "../shared/extension-registry.ts";
 
 import editor from "./ui/editor/index.ts";
 import footer from "./ui/footer/index.ts";
@@ -32,20 +37,29 @@ import todo from "./tools/todo/index.ts";
 import web from "./tools/web/index.ts";
 
 export default function piAdhd(pi: ExtensionAPI): void {
+	// Reflect the settings the operator just saved, not a previous load's marks.
+	resetExtensionRegistry();
+
+	// Always available, whatever the settings enable, so a disabled extension
+	// can be turned back on.
+	registerExtensionControlCommands(pi);
+
+	const enabled = loadEnabledExtensions();
+
 	// UI: editor, footer, tool-call rendering, thinking display.
-	editor(pi);
-	footer(pi);
-	messages(pi);
-	thinking(pi);
+	if (enabled.has("editor")) editor(pi);
+	if (enabled.has("footer")) footer(pi);
+	if (enabled.has("messages")) messages(pi);
+	if (enabled.has("thinking")) thinking(pi);
 
 	// Agent behavior: Pi/Work mode + Plan/Grill/Straight submodes.
-	modes(pi);
-	submodes(pi);
+	if (enabled.has("modes")) modes(pi);
+	if (enabled.has("submodes")) submodes(pi);
 
 	// Tools: ask, goal, spawn, todo, web.
-	askUser(pi);
-	goal(pi);
-	spawn(pi);
-	todo(pi);
-	web(pi);
+	if (enabled.has("ask-user")) askUser(pi);
+	if (enabled.has("goal")) goal(pi);
+	if (enabled.has("spawn")) spawn(pi);
+	if (enabled.has("todo")) todo(pi);
+	if (enabled.has("web")) web(pi);
 }
