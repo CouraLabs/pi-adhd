@@ -362,6 +362,9 @@ export class SpawnState {
 		this._error = undefined;
 		this._consumedAt = undefined;
 		this._turnBudget = undefined;
+		// A run ended by abort mid-tool never sees `tool_execution_end`, so its
+		// entry would otherwise linger as phantom activity on the resumed record.
+		this._activeTools.clear();
 		// A resumed run answers the old question; whether it asks a new one is
 		// decided when it terminates.
 		this._pendingQuestion = undefined;

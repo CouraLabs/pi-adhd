@@ -319,6 +319,7 @@ export class Spawn {
 		}
 
 		const runConfig = this.execution.getRunConfig?.();
+		if (this.stoppedBeforeFirstTurn()) return;
 		try {
 			this.spawnSession = await this.execution.createSpawnSession({
 				snapshot: this.execution.snapshot,
@@ -339,6 +340,8 @@ export class Spawn {
 			onCompact: (info) => this.execution.observer?.onCompacted?.(this, info),
 		}));
 		this.execution.observer?.onSessionCreated?.(this);
+
+		if (this.stoppedBeforeFirstTurn()) return;
 
 		try {
 			const result = await this.spawnSession.runTurnLoop(this.execution.prompt, {
@@ -400,6 +403,8 @@ export class Spawn {
 			onCompact: (info) => this.execution.observer?.onCompacted?.(this, info),
 		}));
 
+		if (this.stoppedBeforeFirstTurn(true)) return;
+
 		try {
 			this.completeResume(await spawnSession.resumeTurnLoop(prompt, {
 				signal: this.abortController.signal,
@@ -415,12 +420,16 @@ export class Spawn {
 		// The harness ending the resume at its turn limit ends the run for good,
 		// as it does for an initial run.
 		const exhausted = result.turnBudget.phase === "exhausted";
-		const finalStatus: SpawnStatus = exhausted ? "aborted" : "completed";
+		// A run the operator stopped while the turn loop was settling is not a
+		// completion: report the record's own terminal status to the provider.
+		const finalStatus: SpawnStatus = this.isRunning() ? (exhausted ? "aborted" : "completed") : this.status;
 		// A child answering one question may need to ask another, which holds the
 		// workspace for the next resume the same way the original run did.
-		const finalResult = !exhausted && this.pendingQuestion !== undefined
+		const holdForResume =
+			!exhausted && this.pendingQuestion !== undefined && finalStatus === "completed";
+		const finalResult = holdForResume
 			? result.responseText
-			: result.responseText + this.workspaceBracket.dispose({ status: finalStatus, description: this.description });
+			: result.responseText + this.disposeWorkspaceFolded(finalStatus);
 		if (exhausted) this.markAborted(finalResult);
 		else this.markCompleted(finalResult);
 		this.listeners.release();
@@ -519,7 +528,9 @@ export class Spawn {
 		// The harness ending the run at its turn limit is the one way a run that
 		// returned is not complete.
 		const exhausted = result.turnBudget.phase === "exhausted";
-		const finalStatus: SpawnStatus = exhausted ? "aborted" : "completed";
+		// A run the operator stopped while the turn loop was settling is not a
+		// completion: report the record's own terminal status to the provider.
+		const finalStatus: SpawnStatus = this.isRunning() ? (exhausted ? "aborted" : "completed") : this.status;
 		// A completed child that declared a question is inviting a resume, so its
 		// workspace stays live for the resume to re-enter. Every other outcome ends
 		// the run for good and tears it down here, including a run that wrapped up
@@ -529,10 +540,12 @@ export class Spawn {
 			finalStatus === "completed" &&
 			this.pendingQuestion !== undefined &&
 			!wrappedUpAtTurnLimit({ status: finalStatus, turnBudget: result.turnBudget });
+		// The disposal goes through the guarded helper: a throwing provider must
+		// degrade to a notice, not convert a finished child's run into an error
+		// and discard its result text.
 		const finalResult = holdForResume
 			? result.responseText
-			: result.responseText +
-				this.workspaceBracket.dispose({ status: finalStatus, description: this.description });
+			: result.responseText + this.disposeWorkspaceFolded(finalStatus);
 
 		if (exhausted) this.markAborted(finalResult);
 		else this.markCompleted(finalResult);
@@ -581,6 +594,25 @@ export class Spawn {
 	}
 
 	/**
+	 * Tear down a run whose signal was already aborted before its first turn —
+	 * an operator stop that landed during workspace prepare or session creation.
+	 * abort() has already marked the record stopped; this only releases the
+	 * expensive resources the run had gathered so far. Returns whether the run
+	 * was in fact stopped, so the caller can skip the turn loop. The terminal
+	 * notification follows the run kind: a resume reports through
+	 * `onResumeFinished` so `spawn:completed`/`spawn:failed` subscribers keep
+	 * their once-per-run semantics.
+	 */
+	private stoppedBeforeFirstTurn(resume = false): boolean {
+		if (!this.abortController.signal.aborted) return false;
+		this.listeners.release();
+		void this.disposeSession();
+		if (resume) this.execution.observer?.onResumeFinished?.(this);
+		else this.execution.observer?.onRunFinished?.(this);
+		return true;
+	}
+
+	/**
 	 * Drop a question the child recorded before the run failed.
 	 *
 	 * Every carrier renders a pending question as "answer by resuming me", which
@@ -609,19 +641,28 @@ export class Spawn {
 	}
 
 	/**
-	 * Dispose the workspace without letting a provider failure escape, recording
-	 * what it reported and handing that back.
-	 *
-	 * These are the paths with no result text left to fold the addendum into, so
-	 * it is kept on the record for the carriers to report instead. The value is
-	 * returned as well as stored, so a caller can tell an addendum this call
-	 * produced from one an earlier disposal already recorded.
+	 * Dispose the workspace without letting a provider failure escape. Used on
+	 * the failure paths and on the success paths' disposal in completeRun and
+	 * completeResume, so a throwing provider degrades to a debug note instead of
+	 * converting a finished run into an error or losing its result text.
 	 */
 	private disposeWorkspaceQuietly(status: SpawnStatus): string {
 		try {
 			const notice = this.workspaceBracket.dispose({ status, description: this.description });
 			if (notice) this.state.setWorkspaceNotice(notice);
 			return notice;
+		} catch (err) { debugLog(`workspace dispose (${status})`, err); return ""; }
+	}
+
+	/**
+	 * Dispose the workspace on a path that folds the addendum into result text
+	 * (completeRun/completeResume). The addendum rides the result, so unlike
+	 * {@link disposeWorkspaceQuietly} it must NOT also be recorded as the
+	 * record's workspace notice — every carrier would report it a second time.
+	 */
+	private disposeWorkspaceFolded(status: SpawnStatus): string {
+		try {
+			return this.workspaceBracket.dispose({ status, description: this.description });
 		} catch (err) { debugLog(`workspace dispose (${status})`, err); return ""; }
 	}
 }

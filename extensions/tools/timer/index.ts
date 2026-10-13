@@ -18,6 +18,7 @@ import { notifyOperatingSystem, ringTerminalBell } from "../../../shared/os-noti
 import { loadSettings } from "../../../shared/settings.ts";
 import { TIMER_GLYPH } from "../../../shared/glyphs.ts";
 import {
+	cancelTimerById,
 	formatCountdown,
 	formatDuration,
 	getTimers,
@@ -112,9 +113,18 @@ export default function timerExtension(pi: ExtensionAPI): void {
 			emit(ctx, `"${query}" matches ${matches.length} timers; use the id.`, "warning");
 			return;
 		}
-		handles.get(matches[0].id)?.cancel();
+		// Cancel through the shared handle registry: after a reload this
+		// instance's local map no longer holds the scheduled timeout, and
+		// claiming success without clearing it would let the timer still fire.
+		const cancelled = cancelTimerById(matches[0].id);
 		handles.delete(matches[0].id);
-		emit(ctx, `Cancelled timer ${matches[0].name}.`);
+		emit(
+			ctx,
+			cancelled
+				? `Cancelled timer ${matches[0].name}.`
+				: `Timer ${matches[0].name} had no live countdown; removed it from the list.`,
+			cancelled ? undefined : "warning",
+		);
 	};
 
 	const clear = (ctx: ExtensionCommandContext): void => {

@@ -18,7 +18,10 @@ export interface GlobalStore<T> {
 	get(): T;
 	/** Set the value and notify subscribers. No-op when unchanged. */
 	set(value: T): void;
-	/** Subscribe to changes; returns an unsubscribe function. */
+	/** Subscribe to changes; returns an unsubscribe function. Listeners live on
+ *  `globalThis` and survive module reloads, so a subscriber that is torn down
+ *  (extension unload, session end) must call the unsubscriber or its closure
+ *  fires forever. */
 	subscribe(listener: (value: T) => void): () => void;
 }
 

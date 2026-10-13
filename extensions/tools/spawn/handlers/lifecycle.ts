@@ -10,7 +10,7 @@ import type { SessionContext } from "../types.ts";
 /** Narrow manager interface — only the methods lifecycle handlers call. */
 export interface LifecycleManager {
   clearCompleted(): Promise<void>;
-  abortAll(): void;
+  abortAllAndSettle(): Promise<number>;
   dispose(): Promise<void>;
 }
 
@@ -47,13 +47,14 @@ export class SessionLifecycleHandler {
   // Cleanup order matters:
   // 1. Unpublish service — prevent new cross-extension calls
   // 2. Clear session context — no more session state
-  // 3. Abort all agents — stop running work
+  // 3. Abort all agents — stop running work, then give the in-flight turns a
+  //    bounded grace period to observe the abort
   // 4. Dispose manager — final cleanup, awaited so each child's extensions get
   //    their `session_shutdown` before Pi tears the parent down (#709)
-  handleSessionShutdown(): Promise<void> {
+  async handleSessionShutdown(): Promise<void> {
     this.unpublishService();
     this.runtime.clearSessionContext();
-    this.manager.abortAll();
-    return this.manager.dispose();
+    await this.manager.abortAllAndSettle();
+    await this.manager.dispose();
   }
 }

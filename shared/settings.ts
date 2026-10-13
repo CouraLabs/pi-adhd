@@ -13,7 +13,7 @@
  * edit) never loses data.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { DEFAULT_EXTENSION_NAMES } from "./extension-catalog.ts";
@@ -198,14 +198,25 @@ function merge(base: Record<string, unknown>, override: Record<string, unknown>)
 	return out;
 }
 
-function readRaw(): Record<string, unknown> {
+/** Result of reading the settings file from disk. */
+interface RawSettingsFile {
+	/** Whether the file existed (false means first run). */
+	existed: boolean;
+	/** Parsed top-level object; `{}` when missing or unusable. */
+	raw: Record<string, unknown>;
+	/** Whether the bytes on disk were parsed into a usable object. */
+	usable: boolean;
+}
+
+function readSettingsFile(): RawSettingsFile {
 	const path = getSettingsPath();
-	if (!existsSync(path)) return {};
+	if (!existsSync(path)) return { existed: false, raw: {}, usable: true };
 	try {
 		const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
-		return isPlainObject(parsed) ? parsed : {};
+		if (!isPlainObject(parsed)) return { existed: true, raw: {}, usable: false };
+		return { existed: true, raw: parsed, usable: true };
 	} catch {
-		return {};
+		return { existed: true, raw: {}, usable: false };
 	}
 }
 
@@ -219,23 +230,26 @@ function coerce(raw: Record<string, unknown>): CouralabsSettings {
 }
 
 /** Read the settings file, filling in defaults for anything missing. Creates
- *  the file with the defaults when it does not exist yet, and writes the
- *  `extensions` array once when upgrading a file that predates it, so the
- *  enabled set is visible on disk rather than only applied in memory. */
+ *  the file with the defaults on first load. A file that exists but cannot be
+ *  parsed is never overwritten — the user's bytes stay on disk for hand
+ *  recovery while this session runs on defaults — so one transient corruption
+ *  event cannot silently reset every setting. */
 export function loadSettings(): CouralabsSettings {
-	const path = getSettingsPath();
-	const existed = existsSync(path);
-	const raw = readRaw();
+	const { existed, raw } = readSettingsFile();
 	const settings = coerce(raw);
-	if (!existed || !("extensions" in raw)) saveSettings(settings);
+	if (!existed) saveSettings(settings);
 	return settings;
 }
 
-/** Write the full settings object to disk, creating the directory if needed. */
+/** Write the full settings object to disk, creating the directory if needed.
+ *  The write goes to a sibling temp file that is then renamed over the target,
+ *  so a crash mid-write cannot leave a truncated settings.json behind. */
 export function saveSettings(settings: CouralabsSettings): void {
 	const path = getSettingsPath();
 	mkdirSync(dirname(path), { recursive: true });
-	writeFileSync(path, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+	const tmp = `${path}.tmp`;
+	writeFileSync(tmp, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+	renameSync(tmp, path);
 }
 
 /** Merge a patch into the stored settings and persist the result. */

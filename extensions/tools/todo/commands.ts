@@ -27,6 +27,7 @@ import {
 	markdownToPhases,
 	phasesToMarkdown,
 	resolveTodoMarkdownPath,
+	titleCaseSentence,
 } from "./state.ts";
 import { commitPhases, type TodoToolDeps } from "./tool.ts";
 
@@ -82,19 +83,14 @@ function tokenize(input: string): string[] {
 // Name normalization + fuzzy matching — omp #append / findPhaseFuzzy / findTaskFuzzy
 // =============================================================================
 
+/** Capitalize first letter only — kept here for phase names; task content is
+ *  normalized by the shared `titleCaseSentence` in state.ts. */
 function titleCase(s: string): string {
 	return s
 		.split(/\s+/)
 		.filter(Boolean)
 		.map(word => word[0].toUpperCase() + word.slice(1))
 		.join(" ");
-}
-
-/** Capitalize first letter only — keeps acronyms / casing in the rest intact. */
-function titleCaseSentence(s: string): string {
-	const trimmed = s.trim();
-	if (!trimmed) return trimmed;
-	return trimmed[0].toUpperCase() + trimmed.slice(1);
 }
 
 interface TodoTaskMatch {

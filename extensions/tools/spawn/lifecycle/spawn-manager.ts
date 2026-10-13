@@ -270,8 +270,15 @@ export class SpawnManager {
     const record = this.agents.get(id)!;
     // The caller holds the result, so this call is the carrier: claim the outcome
     // before awaiting it, so nothing announces what is already being delivered.
-    record.claim();
-    await record.promise;
+    // The claim handle is held for the await and released in `finally`: if the
+    // parent turn is interrupted while waiting, an abandoned claim must not pin
+    // the outcome as claimed forever.
+    const claim = record.claim();
+    try {
+      await record.promise;
+    } finally {
+      claim.release();
+    }
     return record;
   }
 
@@ -433,6 +440,27 @@ export class SpawnManager {
         count++;
       }
     }
+    return count;
+  }
+
+  /**
+   * Abort every running agent and give the in-flight turns a short grace
+   * period to observe the abort, so a following dispose() does not pull
+   * sessions out from under a still-live model call. Bounded: a child that
+   * ignores the abort does not stall the parent's shutdown.
+   */
+  async abortAllAndSettle(graceMs = 2000): Promise<number> {
+    // Snapshot the in-flight promises BEFORE aborting: abort() marks every
+    // record stopped, so filtering after it would find nothing to wait for.
+    const pending = this.pendingPromises();
+    const count = this.abortAll();
+    if (pending.length === 0) return count;
+    let settle: () => void = () => {};
+    const graceElapsed = new Promise<void>((resolve) => { settle = resolve; });
+    const timer = setTimeout(settle, graceMs);
+    // A settled grace period must not hold the process open.
+    timer.unref?.();
+    await Promise.race([Promise.allSettled(pending), graceElapsed]);
     return count;
   }
 

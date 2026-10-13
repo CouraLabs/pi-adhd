@@ -493,10 +493,11 @@ export class GoalRuntime {
 	}
 
 	/**
-	 * Record one agent-reported impossibility (CC 2.1.261's `impossible`
-	 * channel): flush usage, bump the dispute counter, persist. The caller
-	 * (goal tool) then runs the independent evaluator — confirmation pauses
-	 * the goal, refutation leaves it active and the count feeds the cap.
+	 * Register an agent-reported impossibility (CC 2.1.261's `impossible`
+	 * channel): flush usage and persist. The dispute counter is deliberately
+	 * NOT bumped here — an unadjudicated report (evaluator unavailable) must
+	 * not count toward the cap; {@link recordImpossibleRefutation} does that
+	 * when the evaluator actually refutes.
 	 */
 	async recordImpossibleReport(): Promise<Goal> {
 		return await this.#withAccounting(async () => {
@@ -505,6 +506,21 @@ export class GoalRuntime {
 			if (!state?.enabled || !isAccountingStatus(state.goal)) {
 				throw new Error("cannot report impossibility because no active goal exists");
 			}
+			state.goal.updatedAt = this.#now();
+			await this.#commitState(state, { persist: "goal" });
+			return state.goal;
+		});
+	}
+
+	/**
+	 * Count one refuted impossibility claim toward the dispute cap. Total: a
+	 * goal dropped mid-evaluation records nothing and returns undefined.
+	 */
+	async recordImpossibleRefutation(): Promise<Goal | undefined> {
+		return await this.#withAccounting(async () => {
+			await this.#flushUsageLocked("suppressed");
+			const state = this.#getStateClone();
+			if (!state?.goal) return undefined;
 			state.goal.impossibleReports = (state.goal.impossibleReports ?? 0) + 1;
 			state.goal.updatedAt = this.#now();
 			await this.#commitState(state, { persist: "goal" });
@@ -542,6 +558,9 @@ export class GoalRuntime {
 			}
 			if (state.goal.status === "dropped") {
 				throw new Error("cannot complete a dropped goal");
+			}
+			if (state.goal.status === "paused") {
+				throw new Error("cannot complete a paused goal — resume it first");
 			}
 			state.enabled = false;
 			state.goal.status = "complete";

@@ -13,10 +13,17 @@ export class RunListeners {
 
 	/**
 	 * Wire a parent AbortSignal so it triggers onAbort when fired.
-	 * No-op when signal is undefined.
+	 * No-op when signal is undefined. An already-aborted signal invokes onAbort
+	 * synchronously: per the DOM/Node spec a listener added after `abort()` never
+	 * fires, so without this check an abort that lands before wiring is lost and
+	 * the child runs a full turn loop the operator cancelled.
 	 */
 	wireSignal(signal: AbortSignal | undefined, onAbort: () => void): void {
 		if (!signal) return;
+		if (signal.aborted) {
+			onAbort();
+			return;
+		}
 		const listener = () => onAbort();
 		signal.addEventListener("abort", listener, { once: true });
 		this.detach = () => signal.removeEventListener("abort", listener);

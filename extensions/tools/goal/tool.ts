@@ -254,7 +254,10 @@ function requireClaim(value: string | undefined, op: "complete" | "impossible"):
 }
 
 /** Preserve omp's complete-error semantics BEFORE spending an evaluator run:
- *  no goal / already complete / dropped → same errors the runtime throws. */
+ *  no goal / already complete / dropped / paused → same errors the runtime
+ *  throws. A paused goal is excluded deliberately: pause is the post-
+ *  `impossible-confirmed` state where the user decides what happens next, so
+ *  the agent must not complete it out from under that decision. */
 function requireCompletableGoal(deps: GoalToolDeps): GoalModeState {
 	const state = deps.getState();
 	if (!state?.goal) {
@@ -265,6 +268,11 @@ function requireCompletableGoal(deps: GoalToolDeps): GoalModeState {
 	}
 	if (state.goal.status === "dropped") {
 		throw new Error("cannot complete a dropped goal");
+	}
+	if (state.goal.status === "paused") {
+		throw new Error(
+			"goal is paused — the user decides when to resume it; ask them to run /goal resume first",
+		);
 	}
 	return state;
 }
@@ -327,16 +335,20 @@ async function runGatedImpossible(
 		};
 	}
 	if (outcome.status === "refuted") {
-		const reports = reported.impossibleReports ?? 0;
+		// Only a refutation counts toward the dispute cap: an unadjudicated
+		// report (unavailable below) must not spend one of the operator's
+		// refutations. Record it first so the response shows the updated count.
+		const refuted = (await deps.getRuntime().recordImpossibleRefutation()) ?? reported;
+		const reports = refuted.impossibleReports ?? 0;
 		if (reports >= IMPOSSIBLE_REPORT_CAP) {
 			await deps.getRuntime().pauseGoal({ reason: "impossible-disputed" });
 			return {
-				response: buildGoalToolResponse(deps.getState()?.goal ?? { ...reported, status: "paused" }),
+				response: buildGoalToolResponse(deps.getState()?.goal ?? { ...refuted, status: "paused" }),
 				evaluator: { verdict: "impossible-disputed", reason: outcome.reason },
 			};
 		}
 		return {
-			response: buildGoalToolResponse(reported),
+			response: buildGoalToolResponse(refuted),
 			evaluator: { verdict: "impossible-refuted", reason: outcome.reason },
 		};
 	}

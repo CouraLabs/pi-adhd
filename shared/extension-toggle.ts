@@ -50,6 +50,13 @@ interface Entry {
 	enabled: boolean;
 }
 
+/** Stable identity of an entry, used for change detection. The two id spaces
+ *  (extension names and feature-toggle ids) are independent, so the kind is
+ *  part of the key and a shared display label can never alias another row. */
+function entryKey(entry: Entry): string {
+	return entry.kind === "extension" ? `extension:${entry.name}` : `feature:${entry.featureId}`;
+}
+
 const DIALOG_TITLE = "pi-adhd extensions & toggles";
 const HINTS = "↑↓ move · Enter toggle · Esc close";
 /** Width of the name column, shared by every row so the descriptions align. */
@@ -106,16 +113,27 @@ export async function toggleViaSelect(ui: ExtensionUIContext, deps: ExtensionTog
 	];
 
 	let changed = false;
+	/** Indices toggled during this dialog, for disambiguating duplicate rows. */
+	const toggled = new Set<number>();
 	for (;;) {
 		const options = entries.map((entry) => `${entry.enabled ? "[x]" : "[ ]"} ${entry.label} — ${entry.description}`);
 		options.push("Done");
 		const choice = await ui.select(DIALOG_TITLE, options);
 		if (!choice || choice === "Done") break;
-		const index = options.indexOf(choice);
+		// ui.select hands back the option string. When two rows render identically
+		// (same label, state, and description) prefer the first not yet toggled so
+		// both stay reachable instead of always flipping the first.
+		let index = options.indexOf(choice);
+		while (index !== -1 && toggled.has(index)) {
+			const next = options.indexOf(choice, index + 1);
+			if (next === -1) break;
+			index = next;
+		}
 		const entry = entries[index];
 		if (!entry) continue;
 		entry.enabled = !entry.enabled;
 		applyEntry(deps, entry);
+		toggled.add(index);
 		changed = true;
 	}
 	return changed;
@@ -177,7 +195,7 @@ export class ExtensionTogglePane implements Component {
 				}),
 			),
 		];
-		this.#initial = new Map(this.#entries.map((entry) => [entry.label, entry.enabled]));
+		this.#initial = new Map(this.#entries.map((entry) => [entryKey(entry), entry.enabled]));
 	}
 
 	invalidate(): void {
@@ -305,7 +323,7 @@ export class ExtensionTogglePane implements Component {
 	#finish(): void {
 		if (this.#closed) return;
 		this.#closed = true;
-		const changed = this.#entries.some((entry) => this.#initial.get(entry.label) !== entry.enabled);
+		const changed = this.#entries.some((entry) => this.#initial.get(entryKey(entry)) !== entry.enabled);
 		this.#done(changed);
 	}
 

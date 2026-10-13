@@ -23,11 +23,10 @@ export interface SpawnServiceConsumer {
 /** Publish the service on globalThis for cross-extension access. */
 export function publishSpawnService(service: unknown): void {
 	const store = globalThis as Record<symbol, unknown>;
-	// A child session loads its own copy of the spawn extension and publishes
-	// its own (empty) service at load time, before it can know it is a child.
-	// Never let that clobber the parent's service, which is the one other
-	// extensions consume. The parent always loads first, and unpublication on
-	// reload clears the slot before the next parent factory publishes.
+	// The spawn extension publishes from session_start, where it knows the
+	// session is a parent and never publishes for a child. The empty-slot guard
+	// remains as defense in depth: a second parent publish (reload, session
+	// switch) must not race an existing service out of the slot.
 	if (store[SERVICE_KEY] === undefined) store[SERVICE_KEY] = service;
 }
 

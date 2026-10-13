@@ -27,9 +27,13 @@ export class BorderedTool implements Component {
 	}
 
 	render(width: number): string[] {
-		if (width <= 0) return [];
-		const innerWidth = Math.max(1, width - 1 - this.pad);
-		const lines = this.inner?.render(innerWidth) ?? [];
+		// The prefix is the leading margin, the rule, and the pad: 2 + pad columns.
+		// The inner component must get exactly what is left — pi's built-in
+		// renderers pad every line to the width they are given, so one column too
+		// many overflows the terminal and pi-tui treats an overlong line as fatal.
+		const prefixWidth = 2 + this.pad;
+		if (width <= prefixWidth) return [];
+		const lines = this.inner?.render(width - prefixWidth) ?? [];
 		const prefix = " " + this.paint(RULE) + " ".repeat(this.pad);
 		return lines
 			.filter((line) => line.trim())

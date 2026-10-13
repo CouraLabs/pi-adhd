@@ -69,15 +69,16 @@ export interface UsageTheme {
  * `↑ 120k ↓ 8.4k ⭍ 87%` — fresh input, output, and the cache-hit rate, joined
  * by spaces. Returns "" when there is nothing to show.
  *
- * `↑` counts fresh input only: pi-ai folds cache reads and writes into
- * `usage.input` for providers that report a single prompt count, so both are
- * subtracted back out. The cache-hit denominator is the whole prompt — fresh
- * input plus cache reads plus cache writes.
+ * `↑` counts fresh input only: pi-ai already reports `usage.input` as fresh
+ * input — it subtracts cache reads and writes for providers that fold them
+ * into a single prompt count — so nothing is subtracted again here. The
+ * cache-hit denominator is the whole prompt — fresh input plus cache reads
+ * plus cache writes.
  */
 export function usageGroup(totals: UsageTotals, theme: UsageTheme): string {
 	const parts: string[] = [];
 	if (totals.input > 0) {
-		parts.push(theme.fg("success", `${INPUT} `) + theme.fg("thinkingText", `${formatTokens(totals.input - totals.output)}`));
+		parts.push(theme.fg("success", `${INPUT} `) + theme.fg("thinkingText", `${formatTokens(totals.input)}`));
 	}
 	if (totals.output > 0) {
 		parts.push(theme.fg("accent", `${OUTPUT} `) + theme.fg("thinkingText", `${formatTokens(totals.output)}`));

@@ -12,8 +12,9 @@
  *     mapping a design tree, before any plan or code exists.
  *   - `"straight"`: the guided implementer. Asks clarifying questions,
  *     explores the codebase, proposes designs, then implements the approved
- *     one. It is the only submode that may change code, so it keeps the full
- *     toolset.
+ *     one. It is the only submode that may change code, so it keeps the code
+ *     tools instead of the read-only whitelist; web and job tools stay out of
+ *     every submode.
  *
  * The state lives on `globalThis`, keyed by a registered symbol, so every
  * pi-adhd extension instance reads and mutates the same value. Extensions
@@ -29,6 +30,11 @@ export type Submode = "none" | "plan" | "grill" | "straight";
 
 /** The submode a fresh install starts in. */
 export const DEFAULT_SUBMODE: Submode = "none";
+
+/** Whether `value` is a submode name; guards persisted values and user input. */
+export function isSubmode(value: unknown): value is Submode {
+	return value === "none" || value === "plan" || value === "grill" || value === "straight";
+}
 
 /** Plain submode name, for prompt text and mid-sentence prose. */
 export const SUBMODE_NAME: Record<Submode, string> = {
@@ -71,7 +77,9 @@ const READ_ONLY_TOOLS = [
  * Grill are read-only plus the spawn tools: they can delegate exploration
  * and plan review, but cannot edit or write files. Straight is the only
  * submode that may change code — it implements the approved feature itself —
- * so it keeps the full toolset.
+ * so it keeps the code tools rather than the read-only whitelist Plan and
+ * Grill share. Web and job tools are absent from every submode; anything not
+ * listed is dropped, so a new tool must be added here deliberately.
  *
  * Only names pi actually registers survive `setActiveTools`; anything else is
  * dropped silently, so keep every entry to a real tool name. Plan may submit a
@@ -80,7 +88,7 @@ const READ_ONLY_TOOLS = [
 export const SUBMODE_TOOLS: Record<ActiveSubmode, readonly string[]> = {
 	plan: [...READ_ONLY_TOOLS, "plan-write"],
 	grill: [...READ_ONLY_TOOLS],
-	// Straight implements the feature, so it keeps the full toolset rather than
+	// Straight implements the feature, so it keeps the code tools rather than
 	// the read-only whitelist Plan and Grill share. Every other submode forbids
 	// `edit` and `write`; Straight is the one that must not.
 	straight: [
@@ -145,5 +153,5 @@ export const SUBMODE_NOTICE: Record<Submode, string> = {
 	none: "Submode off. The full toolset is restored and the normal coder agent is in charge.",
 	plan: `${SUBMODE_LABEL.plan} submode. Read-only architect: studies the codebase and submits an implementation plan for line-by-line review. The toolset narrows to read-only plus the spawn tools.`,
 	grill: `${SUBMODE_LABEL.grill} submode. Read-only designer: interviews you to a shared understanding across a design tree before any plan or code exists.`,
-	straight: `${SUBMODE_LABEL.straight} submode. Guided feature development: asks clarifying questions, explores the codebase, proposes designs, then implements with the full toolset.`,
+	straight: `${SUBMODE_LABEL.straight} submode. Guided feature development: asks clarifying questions, explores the codebase, proposes designs, then implements with the code tools — web and job tools stay unavailable in every submode.`,
 };

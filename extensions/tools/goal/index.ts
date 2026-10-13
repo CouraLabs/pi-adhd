@@ -208,7 +208,9 @@ export default function piGoalExtension(pi: ExtensionAPI): void {
 		};
 		for (const entry of ctx.sessionManager.getEntries()) {
 			const typed = entry as { type?: string; message?: EntryMessageLike } & EntryUsageLike;
-			if (typed.type === "branch_summary" || typed.type === "compaction") {
+			if (typed.type === "branch_summary" || typed.type === "compaction" || typed.type === "usage") {
+				// `usage` entries are appended by the host (e.g. cache warming) and
+				// counted by getSessionStats; skipping them under-counts the budget.
 				add(typed.usage);
 				continue;
 			}
@@ -394,8 +396,11 @@ export default function piGoalExtension(pi: ExtensionAPI): void {
 	async function startGoal(objective: string): Promise<void> {
 		if (blockedBySubmode()) return;
 		if (goalState?.enabled) return;
-		ensureGoalToolActive();
+		// Create first, arm on success: arming before creation leaves the goal
+		// tool active with no goal behind it when createGoal throws (e.g. a
+		// paused goal already exists), and nothing later restores the set.
 		const state = await runtime.createGoal({ objective });
+		ensureGoalToolActive();
 		commitGoalState(state);
 		suppressNextContinuation = false;
 		updateStatus();

@@ -149,6 +149,12 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 	/** A submode switch or approved plan waiting for the current run to settle. */
 	let pendingHandoff: PendingHandoff | undefined;
 
+	/** Snapshot the active tool set for later restore, minus tools this host
+	 *  cannot serve: `ask-user` withdraws `ask` on a no-UI host, and a snapshot
+	 *  taken before that strip would hand the model a tool whose execute
+	 *  backstop throws. */
+	const captureSavedTools = (): string[] => pi.getActiveTools().filter((name) => hasUI || name !== "ask");
+
 	const applyTools = (submode: Submode) => {
 		if (submode === "none") {
 			if (savedTools !== undefined) {
@@ -157,7 +163,7 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 			}
 			return;
 		}
-		if (savedTools === undefined) savedTools = pi.getActiveTools();
+		if (savedTools === undefined) savedTools = captureSavedTools();
 		pi.setActiveTools(allowedTools(submode));
 	};
 
@@ -316,7 +322,7 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 			setSubmode("none");
 			applyTools("none");
 		} else {
-			if (savedTools === undefined) savedTools = pi.getActiveTools();
+			if (savedTools === undefined) savedTools = captureSavedTools();
 			setSubmode(submode);
 			pi.setActiveTools(allowedTools(submode));
 		}

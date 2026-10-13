@@ -15,7 +15,7 @@
 import { isExtensionLoaded } from "./extension-registry.ts";
 import { loadSettings } from "./settings.ts";
 import { createGlobalStore } from "./store.ts";
-import { SUBMODE_NAME, getSubmode, type Submode } from "./submodes.ts";
+import { SUBMODE_NAME, getSubmode, isSubmode, type Submode } from "./submodes.ts";
 
 const store = createGlobalStore<boolean>(Symbol.for("@couralabs/pi-adhd/goal-active"), false);
 
@@ -40,7 +40,12 @@ export function setGoalActive(active: boolean): void {
 function activeSubmode(): Submode {
 	if (!isExtensionLoaded("submodes")) return "none";
 	const live = getSubmode();
-	return live === "none" ? loadSettings().submodes.current : live;
+	// The persisted value is user-editable JSON; an invalid entry (a hand edit,
+	// a renamed submode) must not read as an active submode and permanently
+	// block goal mode, so it falls back to `none`.
+	const stored = loadSettings().submodes.current;
+	const persisted = isSubmode(stored) ? stored : "none";
+	return live === "none" ? persisted : live;
 }
 
 /** Whether a submode is active or persisted. */

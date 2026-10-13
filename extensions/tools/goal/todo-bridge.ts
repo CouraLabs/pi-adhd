@@ -20,6 +20,7 @@
 import { readFileSync } from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isFinishedTodoList } from "../todo/state.ts";
 import { escapeXmlText, renderTemplate } from "./template.ts";
 
 const goalTodoContextPrompt = readFileSync(
@@ -72,7 +73,10 @@ function isTodoPhase(value: unknown): value is TodoPhase {
 
 /**
  * Restore todo phases from session entries (pi-todo's `todo-phases` snapshots).
- * Latest valid snapshot wins; malformed entries are skipped.
+ * Latest valid snapshot wins; malformed entries are skipped. A finished
+ * snapshot normalizes to empty, matching pi-todo's own restore: a list whose
+ * every task is closed was auto-cleared by the tool, so a legacy leftover must
+ * not resurrect as a fully-checked footer count beside an empty widget.
  */
 export function restoreTodoPhases(entries: readonly unknown[]): TodoPhase[] {
 	for (let i = entries.length - 1; i >= 0; i--) {
@@ -80,10 +84,11 @@ export function restoreTodoPhases(entries: readonly unknown[]): TodoPhase[] {
 		if (!entry || entry.type !== "custom" || entry.customType !== TODO_PHASES_ENTRY_TYPE) continue;
 		const data = entry.data as { phases?: unknown } | undefined;
 		if (data && Array.isArray(data.phases) && data.phases.every(isTodoPhase)) {
-			return data.phases.map((phase) => ({
+			const phases = data.phases.map((phase) => ({
 				name: phase.name,
 				tasks: phase.tasks.map((task) => ({ content: task.content, status: task.status })),
 			}));
+			return isFinishedTodoList(phases) ? [] : phases;
 		}
 	}
 	return [];

@@ -41,6 +41,24 @@ export interface TimerHandle {
 
 const store = createGlobalStore<readonly ActiveTimer[]>(Symbol.for("@couralabs/pi-adhd/timers"), []);
 
+const LIVE_HANDLES_KEY = Symbol.for("@couralabs/pi-adhd/timer-timeouts");
+
+/**
+ * Live `setTimeout` handles by timer id, on `globalThis` so every module
+ * instance resolves the same map. A jiti reload replaces the owning extension's
+ * local handle map, but the scheduled timeout survives it — storing the raw
+ * handle here is what lets a reloaded instance still cancel a countdown.
+ */
+function liveTimeoutHandles(): Map<string, NodeJS.Timeout> {
+	const root = globalThis as Record<symbol, Map<string, NodeJS.Timeout>>;
+	let map = root[LIVE_HANDLES_KEY];
+	if (!map) {
+		map = new Map();
+		root[LIVE_HANDLES_KEY] = map;
+	}
+	return map;
+}
+
 let sequence = 0;
 
 /** A collision-resistant id; the counter resets on reload, the timestamp does not. */
@@ -102,9 +120,11 @@ export function scheduleTimer(
 	addTimer(entry);
 
 	const handle = setTimeout(() => {
+		liveTimeoutHandles().delete(entry.id);
 		removeTimer(entry.id);
 		onFire(entry);
 	}, spec.durationMs);
+	liveTimeoutHandles().set(entry.id, handle);
 
 	let cancelled = false;
 	return {
@@ -113,9 +133,29 @@ export function scheduleTimer(
 			if (cancelled) return;
 			cancelled = true;
 			clearTimeout(handle);
+			liveTimeoutHandles().delete(entry.id);
 			removeTimer(entry.id);
 		},
 	};
+}
+
+/**
+ * Cancel a countdown by id through the shared handle registry. Unlike a
+ * module-local handle map, this keeps working after a reload replaced the
+ * instance that scheduled the timer. Returns false when no live timeout
+ * exists; the registry entry is removed either way so the footer stops
+ * showing a countdown nobody can cancel.
+ */
+export function cancelTimerById(id: string): boolean {
+	const handle = liveTimeoutHandles().get(id);
+	if (handle) {
+		clearTimeout(handle);
+		liveTimeoutHandles().delete(id);
+		removeTimer(id);
+		return true;
+	}
+	removeTimer(id);
+	return false;
 }
 
 /** Human-readable duration such as `1h30m`, `5m`, or `45s` (rounds to the nearest second). */

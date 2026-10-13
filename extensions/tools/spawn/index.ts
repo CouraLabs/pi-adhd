@@ -47,11 +47,6 @@ import { SpawnSettingsHandler } from "./ui/spawn-settings.ts";
 export default function (pi: ExtensionAPI) {
   markExtensionLoaded("spawn");
 
-  const registry = new AgentTypeRegistry(
-    () => loadCustomAgents(process.cwd()),
-    () => settings.agentModels,
-  );
-
   // ---- Runtime: all mutable extension state in one place ----
   const runtime = createSpawnRuntime();
 
@@ -60,6 +55,14 @@ export default function (pi: ExtensionAPI) {
     emit: (event, payload) => pi.events.emit(event, payload),
   });
   settings.load();
+
+  // Agent registry: constructed after settings so its loaders can read the
+  // persisted per-agent model and thinking overrides.
+  const registry = new AgentTypeRegistry(
+    () => loadCustomAgents(process.cwd()),
+    () => settings.agentModels,
+    () => settings.agentThinking,
+  );
 
   // Observer: receives agent lifecycle notifications and dispatches events/session entries.
   const eventsObserver = new SpawnEventsObserver({
@@ -155,8 +158,11 @@ export default function (pi: ExtensionAPI) {
 
   // Typed service published via Symbol.for() for cross-extension access.
   // Consumers: const { getSpawnService } = await import("@couralabs/pi-adhd/shared/spawn-service.ts");
+  // Publication is deferred to session_start, where the session is known to be
+  // a parent: a child's own copy of this extension loads before it can know it
+  // is a child, and its (empty) service must never clobber the parent's in the
+  // shared slot.
   const service = new SpawnServiceAdapter(manager);
-  publishSpawnService(service);
 
   const lifecycle = new SessionLifecycleHandler(
     runtime,
@@ -206,6 +212,9 @@ export default function (pi: ExtensionAPI) {
     const isChild = isChildSession(ctx.sessionManager.getSessionId());
     spawnEnabled = !isChild;
     applySpawnEnabled(isChild);
+    // Parents publish (or re-publish after a reload/switch) here; children
+    // never publish, so the shared slot always holds the parent's service.
+    if (!isChild) publishSpawnService(service);
   });
   pi.on("session_before_switch", () => lifecycle.handleSessionBeforeSwitch());
   pi.on("session_shutdown", () => lifecycle.handleSessionShutdown());

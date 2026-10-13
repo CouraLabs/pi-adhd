@@ -147,6 +147,9 @@ export class JobManager {
 				child.once("error", (error: Error) => reject(error));
 			});
 		} catch (error) {
+			// Disarm the timeout before forgetting the entry: an orphaned handle
+			// would later fire `killProcess` on a job object nothing tracks.
+			if (job.timeoutHandle) clearTimeout(job.timeoutHandle);
 			this.jobs.delete(id);
 			throw error;
 		}
@@ -161,6 +164,12 @@ export class JobManager {
 		if (job.status === "running") {
 			job.status = "killed";
 			this.killProcess(job);
+		}
+		// Disarm the timeout: the entry leaves the registry, so the pending
+		// callback would fire on a dead object and signal a possibly recycled pid.
+		if (job.timeoutHandle) {
+			clearTimeout(job.timeoutHandle);
+			job.timeoutHandle = undefined;
 		}
 		const view = this.view(job);
 		this.jobs.delete(jobId);

@@ -31,6 +31,16 @@ import type { GitInfo } from "./git.ts";
 
 type StatusIndicatorLike = Parameters<CustomEditor["setWorkingStatusIndicator"]>[0];
 
+/** Hidden-line count a built-in editor border reports (` ↑ 3 more `); 0 when none. */
+function scrollCount(border: string | undefined): number {
+	if (!border) return 0;
+	const plain = border.replace(/\x1b\[[0-9;]*m/g, "");
+	const up = /↑\s*(\d+)/.exec(plain);
+	if (up) return Number(up[1]);
+	const down = /↓\s*(\d+)/.exec(plain);
+	return down ? Number(down[1]) : 0;
+}
+
 /** Blank columns kept between the box and the terminal edges. */
 const BOX_MARGIN = 1;
 
@@ -96,13 +106,27 @@ export class FieldEditor extends CustomEditor {
 		const info = this.getLocation();
 		const pad = " ".repeat(margin);
 		const status = this.indicator?.renderInBorder(Math.max(0, boxWidth - 8)) ?? "";
-		const out: string[] = [pad + this.borderLine(boxWidth, BOX_TOP_LEFT, BOX_TOP_RIGHT, status, "left") + pad];
+		// The built-in editor embeds its scroll state in the borders this wrapper
+		// replaces; recover the counts so long multi-line input still says that
+		// lines are hidden above or below the box.
+		const hiddenAbove = scrollCount(lines[0]);
+		const hiddenBelow = scrollCount(lines[1 + visibleCount]);
+		const theme = info?.theme;
+		const dim = (text: string): string => theme ? theme.fg("dim", text) : text;
+		const topLabel = [status, hiddenAbove > 0 ? dim(`↑${hiddenAbove}`) : ""].filter(Boolean).join(" ");
+		const bottomLabel = [
+			this.locationSegment(),
+			hiddenBelow > 0 ? dim(`↓${hiddenBelow}`) : "",
+		]
+			.filter(Boolean)
+			.join(theme ? theme.fg("dim", SEPARATOR) : SEPARATOR);
+		const out: string[] = [pad + this.borderLine(boxWidth, BOX_TOP_LEFT, BOX_TOP_RIGHT, topLabel, "left") + pad];
 		content.forEach((line, index) => {
 			const prefix = index === 0 ? `${info?.theme.fg('text', PROMPT)} ` : "  ";
 			const padded = line + " ".repeat(Math.max(0, contentWidth - visibleWidth(line)));
 			out.push(pad + this.paint(`${BOX_VERTICAL} ${prefix}`) + padded + this.paint(` ${BOX_VERTICAL}`) + pad);
 		});
-		out.push(pad + this.borderLine(boxWidth, BOX_BOTTOM_LEFT, BOX_BOTTOM_RIGHT, this.locationSegment()) + pad);
+		out.push(pad + this.borderLine(boxWidth, BOX_BOTTOM_LEFT, BOX_BOTTOM_RIGHT, bottomLabel) + pad);
 
 		// Autocomplete suggestions are rendered after the editor; keep them full width.
 		for (const line of trailing) {

@@ -31,18 +31,17 @@ export const GOAL_COMPLETED_ENTRY_TYPE = "goal-completed";
 interface EntryLike {
 	type?: string;
 	customType?: string;
-	id?: string;
 	data?: unknown;
 }
 
 export interface RestoredGoal {
 	state: GoalModeState;
-	/** Entry id the snapshot came from (ordering anchor vs goal-cleared). */
-	entryId: string | undefined;
+	/** Branch position the snapshot came from (ordering anchor vs goal-cleared). */
+	entryIndex: number;
 }
 
 export interface RestoredCleared {
-	entryId: string | undefined;
+	entryIndex: number;
 }
 
 /**
@@ -56,7 +55,7 @@ export function latestGoalStateEntry(entries: readonly unknown[]): RestoredGoal 
 		if (isGoalStateSnapshot(entry.data)) {
 			return {
 				state: { enabled: entry.data.enabled, mode: "active", goal: cloneGoal(entry.data.goal) },
-				entryId: entry.id,
+				entryIndex: i,
 			};
 		}
 	}
@@ -68,25 +67,22 @@ export function latestGoalClearedEntry(entries: readonly unknown[]): RestoredCle
 	for (let i = entries.length - 1; i >= 0; i--) {
 		const entry = entries[i] as EntryLike | undefined;
 		if (!entry || entry.type !== "custom" || entry.customType !== GOAL_CLEARED_ENTRY_TYPE) continue;
-		return { entryId: entry.id };
+		return { entryIndex: i };
 	}
 	return undefined;
 }
 
 /**
  * Restore goal state from session entries: a cleared marker newer than the
- * latest snapshot means no goal; otherwise the snapshot applies. Compares by
- * position in the branch (entries arrive in append order).
+ * latest snapshot means no goal; otherwise the snapshot applies. Both scans
+ * already run backward over the branch, so the comparison is by the position
+ * each scan stopped at — no dependency on entry ids, which a hand-built or
+ * legacy branch may omit.
  */
 export function restoreGoalFromEntries(entries: readonly unknown[]): GoalModeState | undefined {
 	const cleared = latestGoalClearedEntry(entries);
 	const state = latestGoalStateEntry(entries);
 	if (!state) return undefined;
-	if (cleared && state.entryId !== undefined && cleared.entryId !== undefined) {
-		// Both have ids: pick whichever appears later on the branch.
-		const clearedIdx = entries.findIndex((e) => (e as EntryLike)?.id === cleared.entryId);
-		const stateIdx = entries.findIndex((e) => (e as EntryLike)?.id === state.entryId);
-		if (clearedIdx > stateIdx) return undefined;
-	}
+	if (cleared && cleared.entryIndex > state.entryIndex) return undefined;
 	return state.state;
 }

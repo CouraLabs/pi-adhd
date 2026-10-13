@@ -43,11 +43,13 @@ const store = createGlobalStore<readonly FooterSection[]>(
 	[],
 );
 
-/** Register (or replace) a section; returns a function that unregisters it. */
+/** Register (or replace) a section; returns a function that unregisters it.
+ *  The unsubscriber removes only the exact section object it was returned for,
+ *  so a reloaded instance that replaced the same id is left in place. */
 export function registerFooterSection(section: FooterSection): () => void {
 	store.set([...store.get().filter((s) => s.id !== section.id), section]);
 	return () => {
-		store.set(store.get().filter((s) => s.id !== section.id));
+		store.set(store.get().filter((s) => s !== section));
 	};
 }
 

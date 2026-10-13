@@ -122,13 +122,18 @@ export function renderFooter(state: FooterState, width: number, theme: Theme): s
 	// A segment renders only when the extension that owns its state is loaded:
 	// `getAgentMode()`/`getSubmode()` always return a stored value, so an absent
 	// owner must be signaled with undefined rather than read as a real mode.
+	// The submode segment is independent of the mode segment: `submodes` loads
+	// and enforces its toolset without `modes`, so it renders on its own when
+	// the mode extension is absent.
+	const submodeLabel =
+		state.submode && state.submode !== "none"
+			? theme.fg(submodeColor(state.submode), SUBMODE_LABEL[state.submode])
+			: undefined;
 	if (state.mode) {
 		const modeLabel = theme.fg(agentModeColor(state.mode), AGENT_MODE_LABEL[state.mode]);
-		parts.push(
-			!state.submode || state.submode === "none"
-				? modeLabel
-				: `${modeLabel}${theme.fg("dim", `${SEPARATOR}`)}${theme.fg(submodeColor(state.submode), SUBMODE_LABEL[state.submode])}`,
-		);
+		parts.push(submodeLabel ? `${modeLabel}${theme.fg("dim", `${SEPARATOR}`)}${submodeLabel}` : modeLabel);
+	} else if (submodeLabel) {
+		parts.push(submodeLabel);
 	}
 	if (state.model) {
 		parts.push(theme.fg("text", `${state.model.provider}/${state.model.id}`));

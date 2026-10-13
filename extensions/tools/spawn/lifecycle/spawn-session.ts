@@ -28,6 +28,7 @@ import {
 import { getSessionContextPercent, type SessionStatsLike } from "./usage.ts";
 import { extractText } from "../session/context.ts";
 import { getAgentConversation } from "../session/conversation.ts";
+import { debugLog } from "../debug.ts";
 import type { SessionMessage, ThinkingLevel } from "../types.ts";
 
 /** Outcome of one turn loop. */
@@ -185,7 +186,9 @@ export class SpawnSession {
 
   private actOnTurnBudget(tracker: TurnBudgetTracker, action: TurnBudgetAction): void {
     if (action === "warn") this.sendBudgetWarning(tracker);
-    else if (action === "stop") void this._session.abort();
+    // Fire-and-forget: a rejection (abort racing a disposed session) must not
+    // surface as an unhandled rejection.
+    else if (action === "stop") this._session.abort().catch((err) => debugLog("turn-budget abort", err));
   }
 
   /**
@@ -197,14 +200,18 @@ export class SpawnSession {
    * final answer with a reply to the warning.
    */
   private sendBudgetWarning(tracker: TurnBudgetTracker): void {
-    void this._session.sendCustomMessage(
-      {
-        customType: TURN_BUDGET_WARNING_TYPE,
-        content: budgetWarningText(tracker.remaining ?? 0),
-        display: true,
-      },
-      { triggerTurn: false },
-    );
+    // Fire-and-forget: a rejection (session torn down mid-send) must not
+    // surface as an unhandled rejection.
+    this._session
+      .sendCustomMessage(
+        {
+          customType: TURN_BUDGET_WARNING_TYPE,
+          content: budgetWarningText(tracker.remaining ?? 0),
+          display: true,
+        },
+        { triggerTurn: false },
+      )
+      .catch((err) => debugLog("turn-budget warning", err));
   }
 
   /**
@@ -424,8 +431,15 @@ function forwardAbortSignal(
 ): () => void {
   if (!signal) return () => {};
   const onAbort = (): void => {
-    void session.abort();
+    void session.abort().catch(() => {});
   };
+  // An already-aborted signal never fires listeners added after `abort()`;
+  // abort synchronously instead so a cancel that lands before wiring is not
+  // lost and the session cannot run on past an operator stop.
+  if (signal.aborted) {
+    onAbort();
+    return () => {};
+  }
   signal.addEventListener("abort", onAbort, { once: true });
   return () => signal.removeEventListener("abort", onAbort);
 }

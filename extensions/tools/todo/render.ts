@@ -13,7 +13,7 @@
  */
 
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import { Text, type Component } from "@earendil-works/pi-tui";
+import { Text, truncateToWidth, type Component } from "@earendil-works/pi-tui";
 import { WIDGET_LEFT_PADDING } from "../../../shared/format.ts";
 import {
 	isClosedTodo,
@@ -157,13 +157,24 @@ interface WidgetViewport {
 }
 
 /**
- * Slide a `budget`-line viewport over the body so the focus row stays visible.
+ * Slide a viewport over the body so the focus row stays visible.
+ *
  * The phase header leads when it fits with the focus; otherwise the focus
  * leads. Rows scrolled off either edge are replaced by one muted `… +N` line
- * each, so the window shrinks once an indicator appears — the fixed-point loop
- * settles that in a couple of passes.
+ * each, and the window shrinks by exactly the number of indicators shown, so
+ * the total stays within `budget`. The layout is computed in closed form —
+ * window size from the indicator count, start from the anchor — rather than by
+ * iterating to a fixed point, which cannot converge when the anchor itself
+ * depends on the window size.
+ *
+ * Exported for tests: the invariants (focus visible, exact indicator counts,
+ * hard line cap) are what the widget contract rests on.
  */
-function computeViewport(bodyLength: number, budget: number, focus: number, headerRow: number): WidgetViewport {
+export function computeViewport(bodyLength: number, budget: number, focus: number, headerRow: number): WidgetViewport {
+	if (bodyLength <= budget) {
+		return { start: 0, size: bodyLength, hiddenAbove: 0, hiddenBelow: 0 };
+	}
+
 	const startFor = (size: number): number => {
 		const maxStart = Math.max(0, bodyLength - size);
 		// Anchor on the phase header only while the focus row still fits below it.
@@ -171,24 +182,23 @@ function computeViewport(bodyLength: number, budget: number, focus: number, head
 		return Math.max(0, Math.min(anchor, maxStart));
 	};
 
-	let size = Math.min(budget, bodyLength);
-	let start = 0;
-	let hiddenAbove = 0;
-	let hiddenBelow = 0;
-	for (let pass = 0; pass < 4; pass++) {
-		const indicators = (hiddenAbove > 0 ? 1 : 0) + (hiddenBelow > 0 ? 1 : 0);
-		const nextSize = Math.max(1, budget - indicators);
-		const nextStart = startFor(nextSize);
-		const nextAbove = nextStart;
-		const nextBelow = bodyLength - nextStart - nextSize;
-		const stable = nextSize === size && nextAbove === hiddenAbove && nextBelow === hiddenBelow;
-		size = nextSize;
-		start = nextStart;
-		hiddenAbove = nextAbove;
-		hiddenBelow = nextBelow;
-		if (stable) break;
+	// One or both edges may hide rows; each hidden edge costs one indicator
+	// line, so try the smallest indicator count that fits the window first.
+	for (const indicators of [1, 2]) {
+		const size = budget - indicators;
+		if (size < 1) continue;
+		const start = startFor(size);
+		const shown = start > 0 ? 1 : 0;
+		const shownBelow = start + size < bodyLength ? 1 : 0;
+		if (shown + shownBelow <= indicators) {
+			return { start, size, hiddenAbove: start, hiddenBelow: bodyLength - start - size };
+		}
 	}
-	return { start, size, hiddenAbove, hiddenBelow };
+
+	// Degenerate budget (1–2 body lines): show the focus row; the renderer drops
+	// indicator lines it has no room for. Counts stay accurate either way.
+	const start = Math.max(0, Math.min(focus, bodyLength - 1));
+	return { start, size: 1, hiddenAbove: start, hiddenBelow: bodyLength - start - 1 };
 }
 
 /**
@@ -238,11 +248,21 @@ export function renderTodoWidget(phases: readonly TodoPhase[], theme: Theme, max
 
 	const focus = findFocusRow(body);
 	const viewport = computeViewport(body.length, budget, focus, findPhaseHeaderRow(body, focus));
+	// Indicator lines each cost a body line; keep them only while the frame
+	// still fits. Priority: the focus rows first, then one indicator.
+	let showAbove = viewport.hiddenAbove > 0;
+	let showBelow = viewport.hiddenBelow > 0;
+	while (1 + viewport.size + (showAbove ? 1 : 0) + (showBelow ? 1 : 0) > maxLines) {
+		if (showAbove) showAbove = false;
+		else if (showBelow) showBelow = false;
+		else break;
+	}
 	const lines = [header];
-	if (viewport.hiddenAbove > 0) lines.push(theme.fg("muted", `… +${viewport.hiddenAbove} above`));
+	if (showAbove) lines.push(theme.fg("muted", `… +${viewport.hiddenAbove} above`));
 	for (let i = viewport.start; i < viewport.start + viewport.size; i++) lines.push(body[i].text);
-	if (viewport.hiddenBelow > 0) lines.push(theme.fg("muted", `… +${viewport.hiddenBelow} more`));
-	return lines;
+	if (showBelow) lines.push(theme.fg("muted", `… +${viewport.hiddenBelow} more`));
+	// Safety net: the widget contract is a hard cap.
+	return lines.slice(0, maxLines);
 }
 
 /**
@@ -263,8 +283,14 @@ export class TodoWidget implements Component {
 	render(width: number): string[] {
 		const lines = renderTodoWidget(this.getPhases(), this.getTheme());
 		const out: string[] = [];
+		// Clip to the columns actually available after the shared margin: the host
+		// does not truncate component widgets, and a MAX_LINE-clipped line still
+		// wraps into two physical lines on a narrow terminal, pushing rows past
+		// the 10-line widget budget. `truncateToWidth` is ANSI-aware, so styled
+		// lines keep their escape sequences intact.
+		const available = Math.max(1, width - WIDGET_LEFT_PADDING.length);
 		for (const line of lines) {
-			out.push(...new Text(line, WIDGET_LEFT_PADDING.length, 0).render(width));
+			out.push(...new Text(truncateToWidth(line, available), WIDGET_LEFT_PADDING.length, 0).render(width));
 		}
 		return out;
 	}

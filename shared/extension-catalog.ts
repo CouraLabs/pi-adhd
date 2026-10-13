@@ -47,6 +47,16 @@ export const EXTENSION_CATALOG: readonly ExtensionCatalogEntry[] = [
 /** Canonical names of every extension, used as the settings default. */
 export const DEFAULT_EXTENSION_NAMES: readonly ExtensionName[] = EXTENSION_CATALOG.map((entry) => entry.name);
 
+// Compile-time drift guard: the catalog must cover every `ExtensionName`. An
+// extension added to the registry and barrel but not here would be silently
+// untoggleable and excluded from the defaults; this turns that into a type
+// error on the line below.
+type UncatalogedName = Exclude<ExtensionName, (typeof EXTENSION_CATALOG)[number]["name"]>;
+type Assert<T extends true> = T;
+type CatalogCoversRegistry = [UncatalogedName] extends [never] ? true : false;
+/** Compile-time proof that the catalog covers the registry; keep exported so the check is always evaluated. */
+export const CATALOG_COVERS_REGISTRY: Assert<CatalogCoversRegistry> = true;
+
 const BY_INPUT = new Map<string, ExtensionName>();
 for (const entry of EXTENSION_CATALOG) {
 	BY_INPUT.set(entry.name.toLowerCase(), entry.name);

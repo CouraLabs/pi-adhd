@@ -77,6 +77,9 @@ export function isTodoPhase(value: unknown): value is TodoPhase {
 		task =>
 			isRecord(task) &&
 			typeof task.content === "string" &&
+			// `blocker` reaches `formatTodoLine`'s string methods; a non-string
+			// from a corrupt snapshot would throw out of every widget render.
+			(task.blocker === undefined || typeof task.blocker === "string") &&
 			(task.status === "pending" ||
 				task.status === "in_progress" ||
 				task.status === "completed" ||
@@ -486,6 +489,17 @@ function initPhases(entry: TodoOpEntry, errors: string[]): TodoPhase[] {
 	}));
 }
 
+/**
+ * Normalize appended task content, shared by the `todo` tool and the `/todo`
+ * command so both paths store identical text for identical input: trimmed,
+ * first letter capitalized, the rest intact.
+ */
+export function titleCaseSentence(s: string): string {
+	const trimmed = s.trim();
+	if (!trimmed) return trimmed;
+	return trimmed[0].toUpperCase() + trimmed.slice(1);
+}
+
 function appendItems(phases: TodoPhase[], entry: TodoOpEntry, errors: string[]): TodoPhase[] {
 	if (!entry.phase) {
 		errors.push("Missing phase name for append operation");
@@ -496,11 +510,15 @@ function appendItems(phases: TodoPhase[], entry: TodoOpEntry, errors: string[]):
 		return phases;
 	}
 
+	// Normalize before the duplicate check so a re-append of already-stored
+	// text is caught regardless of the caller's casing.
+	const items = entry.items.map(titleCaseSentence);
+
 	// Validate the whole batch before mutating so a failing op reports every
 	// duplicate and leaves nothing half-applied.
 	const seen = new Set<string>();
 	let hasDuplicate = false;
-	for (const content of entry.items) {
+	for (const content of items) {
 		if (seen.has(content) || findTaskByContent(phases, content)) {
 			errors.push(`Task "${content}" already exists`);
 			hasDuplicate = true;
@@ -514,8 +532,7 @@ function appendItems(phases: TodoPhase[], entry: TodoOpEntry, errors: string[]):
 		phase = { name: entry.phase, tasks: [] };
 		phases.push(phase);
 	}
-
-	for (const content of entry.items) {
+	for (const content of items) {
 		phase.tasks.push({ content, status: "pending" });
 	}
 	return phases;
