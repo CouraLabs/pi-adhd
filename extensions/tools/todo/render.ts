@@ -21,6 +21,7 @@ import {
 	selectCollapsedTodos,
 	type TodoItem,
 	type TodoPhase,
+	type TodoStatus,
 } from "./state.ts";
 
 /** Display cap: keeps widget lines width-safe without knowing the terminal width. */
@@ -84,6 +85,12 @@ function formatTodoLine(item: TodoItem, theme: Theme): string {
 const TREE_BRANCH = "├─";
 const TREE_LAST = "└─";
 
+interface TreeRow {
+	text: string;
+	/** Task status when this row is a task; undefined for the trailing summary. */
+	status?: TodoStatus;
+}
+
 interface TreeLineOptions {
 	items: TodoItem[];
 	/** Trailing muted summary row; empty string renders none (omp contract). */
@@ -92,24 +99,97 @@ interface TreeLineOptions {
 	theme: Theme;
 }
 
-function renderTreeLines({ items, trailingSummary: summary, renderItem, theme }: TreeLineOptions): string[] {
-	const lines: string[] = [];
+function renderTreeLines({ items, trailingSummary: summary, renderItem, theme }: TreeLineOptions): TreeRow[] {
+	const rows: TreeRow[] = [];
 	for (let i = 0; i < items.length; i++) {
 		const rendered = renderItem(items[i]);
 		if (!rendered) continue;
 		const isLast = summary === "" && i === items.length - 1;
 		const prefix = `${theme.fg("dim", isLast ? TREE_LAST : TREE_BRANCH)} `;
-		lines.push(`${prefix}${rendered}`);
+		rows.push({ text: `${prefix}${rendered}`, status: items[i].status });
 	}
 	if (summary !== undefined && summary !== "") {
-		lines.push(`${theme.fg("dim", TREE_LAST)} ${theme.fg("muted", summary)}`);
+		rows.push({ text: `${theme.fg("dim", TREE_LAST)} ${theme.fg("muted", summary)}` });
 	}
-	return lines;
+	return rows;
 }
 
 // =============================================================================
 // Persistent widget
 // =============================================================================
+
+/** One row of the widget body (everything below the pinned header). */
+interface WidgetRow {
+	text: string;
+	/** Index into the visible phase list this row belongs to. */
+	phaseIndex: number;
+	/** Phase header row (as opposed to a task or summary row). */
+	header: boolean;
+	/** Task status for task rows; undefined for headers and summaries. */
+	status?: TodoStatus;
+}
+
+/** The first row the viewport keeps in view: the active task, else the first
+ *  open one, else the tail of the list. */
+function findFocusRow(rows: readonly WidgetRow[]): number {
+	if (rows.length === 0) return 0;
+	const active = rows.findIndex((row) => row.status === "in_progress");
+	if (active !== -1) return active;
+	const open = rows.findIndex((row) => row.status === "pending" || row.status === "blocked");
+	if (open !== -1) return open;
+	return rows.length - 1;
+}
+
+/** Index of the phase header owning the row at `focus`. */
+function findPhaseHeaderRow(rows: readonly WidgetRow[], focus: number): number {
+	const { phaseIndex } = rows[focus];
+	for (let i = focus; i >= 0; i--) {
+		if (rows[i].header && rows[i].phaseIndex === phaseIndex) return i;
+	}
+	return focus;
+}
+
+interface WidgetViewport {
+	start: number;
+	size: number;
+	hiddenAbove: number;
+	hiddenBelow: number;
+}
+
+/**
+ * Slide a `budget`-line viewport over the body so the focus row stays visible.
+ * The phase header leads when it fits with the focus; otherwise the focus
+ * leads. Rows scrolled off either edge are replaced by one muted `… +N` line
+ * each, so the window shrinks once an indicator appears — the fixed-point loop
+ * settles that in a couple of passes.
+ */
+function computeViewport(bodyLength: number, budget: number, focus: number, headerRow: number): WidgetViewport {
+	const startFor = (size: number): number => {
+		const maxStart = Math.max(0, bodyLength - size);
+		// Anchor on the phase header only while the focus row still fits below it.
+		const anchor = focus - headerRow < size ? headerRow : focus;
+		return Math.max(0, Math.min(anchor, maxStart));
+	};
+
+	let size = Math.min(budget, bodyLength);
+	let start = 0;
+	let hiddenAbove = 0;
+	let hiddenBelow = 0;
+	for (let pass = 0; pass < 4; pass++) {
+		const indicators = (hiddenAbove > 0 ? 1 : 0) + (hiddenBelow > 0 ? 1 : 0);
+		const nextSize = Math.max(1, budget - indicators);
+		const nextStart = startFor(nextSize);
+		const nextAbove = nextStart;
+		const nextBelow = bodyLength - nextStart - nextSize;
+		const stable = nextSize === size && nextAbove === hiddenAbove && nextBelow === hiddenBelow;
+		size = nextSize;
+		start = nextStart;
+		hiddenAbove = nextAbove;
+		hiddenBelow = nextBelow;
+		if (stable) break;
+	}
+	return { start, size, hiddenAbove, hiddenBelow };
+}
 
 /**
  * Render the persistent widget lines, or `[]` when there is nothing to show.
@@ -117,7 +197,10 @@ function renderTreeLines({ items, trailingSummary: summary, renderItem, theme }:
  * Each phase gets a header plus its collapsed walking viewport (last closed
  * task, then active work, then following pending tasks) so a long list stays
  * bounded. The whole widget is capped at `maxLines` — the host truncates at 10
- * anyway, so we add our own `… +N more` footer instead.
+ * anyway. The `[x] Todo · closed/total done` header is pinned to the top; the
+ * body below it is a viewport that follows the current work, so completed
+ * phases scroll off under a muted `… +N above` marker instead of burying the
+ * open tasks behind a `… +N more` footer.
  */
 export function renderTodoWidget(phases: readonly TodoPhase[], theme: Theme, maxLines = WIDGET_MAX_LINES): string[] {
 	const visible = phases.filter((phase) => phase.tasks.length > 0);
@@ -125,15 +208,14 @@ export function renderTodoWidget(phases: readonly TodoPhase[], theme: Theme, max
 
 	const total = visible.reduce((sum, phase) => sum + phase.tasks.length, 0);
 	const closed = visible.reduce((sum, phase) => sum + phase.tasks.filter(isClosedTodo).length, 0);
-	const lines: string[] = [
-		`${theme.fg("accent", CHECKBOX.checked)} ${theme.fg("accent", theme.bold("Todo"))} ${theme.fg("dim", `· ${closed}/${total} done`)}`,
-	];
+	const header = `${theme.fg("accent", CHECKBOX.checked)} ${theme.fg("accent", theme.bold("Todo"))} ${theme.fg("dim", `· ${closed}/${total} done`)}`;
 
 	const multiPhase = visible.length > 1;
+	const body: WidgetRow[] = [];
 	for (let index = 0; index < visible.length; index++) {
 		const phase = visible[index];
 		const name = theme.fg("accent", theme.bold(formatPhaseDisplayName(phase.name, index + 1)));
-		lines.push(`${name}${formatPhaseProgress(phase, theme)}`);
+		body.push({ text: `${name}${formatPhaseProgress(phase, theme)}`, phaseIndex: index, header: true });
 		const selection = selectCollapsedTodos(phase.tasks, WIDGET_PHASE_CAP);
 		const tree = renderTreeLines({
 			items: selection.items,
@@ -141,13 +223,26 @@ export function renderTodoWidget(phases: readonly TodoPhase[], theme: Theme, max
 			renderItem: (todo) => formatTodoLine(todo, theme),
 			theme,
 		});
-		for (const line of tree) lines.push(`${multiPhase ? "  " : ""}${line}`);
+		for (const row of tree) {
+			body.push({
+				text: `${multiPhase ? "  " : ""}${row.text}`,
+				phaseIndex: index,
+				header: false,
+				status: row.status,
+			});
+		}
 	}
 
-	if (lines.length <= maxLines) return lines;
-	const kept = lines.slice(0, maxLines - 1);
-	kept.push(theme.fg("muted", `… +${lines.length - kept.length} more`));
-	return kept;
+	const budget = Math.max(1, maxLines - 1);
+	if (body.length <= budget) return [header, ...body.map((row) => row.text)];
+
+	const focus = findFocusRow(body);
+	const viewport = computeViewport(body.length, budget, focus, findPhaseHeaderRow(body, focus));
+	const lines = [header];
+	if (viewport.hiddenAbove > 0) lines.push(theme.fg("muted", `… +${viewport.hiddenAbove} above`));
+	for (let i = viewport.start; i < viewport.start + viewport.size; i++) lines.push(body[i].text);
+	if (viewport.hiddenBelow > 0) lines.push(theme.fg("muted", `… +${viewport.hiddenBelow} more`));
+	return lines;
 }
 
 /**

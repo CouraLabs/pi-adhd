@@ -18,6 +18,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { isGoalActive, switchBlockedByGoalMessage } from "../../../shared/interlock.ts";
 import { loadSettings, updateSettings } from "../../../shared/settings.ts";
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
+import { offloadPrompt, readUserPrompt } from "../../../shared/user-prompts.ts";
 import {
 	DEFAULT_AGENT_MODE,
 	MODE_NOTICE,
@@ -29,7 +30,10 @@ import {
 // Prompt lives in a static .md asset next to this module (published with the
 // package). Loaded at runtime: pi loads extensions through jiti, which does
 // not support bundler-style text imports (pi-dynamic-workflows precedent).
-const workPrompt = readFileSync(
+// The asset is the packaged fallback: at load time the extension copies it to
+// ~/.pi/couralabs/prompts/modes/work.md (once) and reads the prompt from
+// there on every run, so user edits apply without touching the package.
+const packagedWorkPrompt = readFileSync(
 	path.join(path.dirname(fileURLToPath(import.meta.url)), "prompts", "work.md"),
 	"utf8",
 );
@@ -40,6 +44,10 @@ function isAgentMode(value: unknown): value is AgentMode {
 
 export default function (pi: ExtensionAPI) {
 	markExtensionLoaded("modes");
+
+	// Offload the packaged prompt to the editable user folder (no-op when it is
+	// already there) so the user can edit it; every run then reads that file.
+	offloadPrompt("modes", "work.md", packagedWorkPrompt);
 	/** Set the mode and persist it. Returns false when goal mode blocks the switch. */
 	const applyMode = (mode: AgentMode): boolean => {
 		if (isGoalActive()) return false;
@@ -55,10 +63,11 @@ export default function (pi: ExtensionAPI) {
 
 	// Work mode swaps in the pi-adhd Work rules; Pi mode leaves the default
 	// prompt (or a user SYSTEM.md) in place. `customPrompt` replaces pi's
-	// default system prompt, matching how SYSTEM.md is applied.
+	// default system prompt, matching how SYSTEM.md is applied. Read fresh each
+	// run so edits to the user prompt file apply without a reload.
 	pi.on("before_agent_start", (event) => {
 		if (getAgentMode() === "work") {
-			event.systemPromptOptions.customPrompt = workPrompt;
+			event.systemPromptOptions.customPrompt = readUserPrompt("modes", "work.md", packagedWorkPrompt);
 		}
 	});
 

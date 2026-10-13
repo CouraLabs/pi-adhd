@@ -17,6 +17,7 @@
 import type { ExtensionUIContext, KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, type OverlayOptions, type TUI, matchesKey, truncateToWidth } from "@earendil-works/pi-tui";
 import { EXTENSION_CATALOG } from "./extension-catalog.ts";
+import { FEATURE_TOGGLES } from "./feature-toggles.ts";
 import type { ExtensionName } from "./extension-registry.ts";
 import { PROMPT } from "./glyphs.ts";
 import { labeledRule } from "./labeled-rule.ts";
@@ -29,18 +30,34 @@ export interface ExtensionToggleDeps {
 	initialEnabled: ReadonlySet<ExtensionName>;
 	/** Persist one extension's new state. Called on every toggle. */
 	setEnabled: (name: ExtensionName, enabled: boolean) => void;
+	/** Feature toggles (settings-backed, not extensions) listed after the extensions. */
+	features: readonly { id: string; label: string; description: string; enabled: boolean }[];
+	/** Persist one feature toggle's new state. Called on every toggle. */
+	setFeature: (id: string, enabled: boolean) => void;
 }
 
+/** One togglable row: an extension or a feature toggle. */
 interface Entry {
-	name: ExtensionName;
+	/** How the row is persisted: `extension` goes through `setEnabled`, `feature` through `setFeature`. */
+	kind: "extension" | "feature";
+	/** Canonical extension name, for `kind: "extension"`. */
+	name?: ExtensionName;
+	/** Feature-toggle id, for `kind: "feature"`. */
+	featureId?: string;
+	/** Display name in the list. */
+	label: string;
 	description: string;
 	enabled: boolean;
 }
 
-const DIALOG_TITLE = "pi-adhd extensions";
+const DIALOG_TITLE = "pi-adhd extensions & toggles";
 const HINTS = "↑↓ move · Enter toggle · Esc close";
 /** Width of the name column, shared by every row so the descriptions align. */
-const NAME_COLUMN = Math.max(...EXTENSION_CATALOG.map((entry) => entry.name.length)) + 2;
+const NAME_COLUMN =
+	Math.max(
+		...EXTENSION_CATALOG.map((entry) => entry.name.length),
+		...FEATURE_TOGGLES.map((entry) => entry.label.length),
+	) + 2;
 
 interface PaneOptions {
 	tui: TUI;
@@ -67,26 +84,47 @@ export async function showExtensionToggle(ui: ExtensionUIContext, deps: Extensio
  * repeated single-choice prompts until the operator picks "Done" or cancels.
  */
 export async function toggleViaSelect(ui: ExtensionUIContext, deps: ExtensionToggleDeps): Promise<boolean> {
-	const enabled = new Map<ExtensionName, boolean>();
-	for (const entry of EXTENSION_CATALOG) enabled.set(entry.name, deps.initialEnabled.has(entry.name));
+	const entries: Entry[] = [
+		...EXTENSION_CATALOG.map(
+			(entry): Entry => ({
+				kind: "extension",
+				name: entry.name,
+				label: entry.name,
+				description: entry.description,
+				enabled: deps.initialEnabled.has(entry.name),
+			}),
+		),
+		...deps.features.map(
+			(feature): Entry => ({
+				kind: "feature",
+				featureId: feature.id,
+				label: feature.label,
+				description: feature.description,
+				enabled: feature.enabled,
+			}),
+		),
+	];
 
 	let changed = false;
 	for (;;) {
-		const options = EXTENSION_CATALOG.map(
-			(entry) => `${enabled.get(entry.name) ? "[x]" : "[ ]"} ${entry.name} — ${entry.description}`,
-		);
+		const options = entries.map((entry) => `${entry.enabled ? "[x]" : "[ ]"} ${entry.label} — ${entry.description}`);
 		options.push("Done");
 		const choice = await ui.select(DIALOG_TITLE, options);
 		if (!choice || choice === "Done") break;
 		const index = options.indexOf(choice);
-		const entry = EXTENSION_CATALOG[index];
+		const entry = entries[index];
 		if (!entry) continue;
-		const next = !enabled.get(entry.name);
-		enabled.set(entry.name, next);
-		deps.setEnabled(entry.name, next);
+		entry.enabled = !entry.enabled;
+		applyEntry(deps, entry);
 		changed = true;
 	}
 	return changed;
+}
+
+/** Persist one entry's new state through the right surface. */
+function applyEntry(deps: ExtensionToggleDeps, entry: Entry): void {
+	if (entry.kind === "extension" && entry.name) deps.setEnabled(entry.name, entry.enabled);
+	else if (entry.kind === "feature" && entry.featureId) deps.setFeature(entry.featureId, entry.enabled);
 }
 
 /** The docked/overlay list component. */
@@ -106,7 +144,7 @@ export class ExtensionTogglePane implements Component {
 	readonly #done: (changed: boolean) => void;
 	readonly #deps: ExtensionToggleDeps;
 	readonly #entries: Entry[];
-	readonly #initial: Map<ExtensionName, boolean>;
+	readonly #initial: Map<string, boolean>;
 
 	#cursor = 0;
 	#scrollOffset = 0;
@@ -119,12 +157,27 @@ export class ExtensionTogglePane implements Component {
 		this.#fullscreen = fullscreen;
 		this.#done = done;
 		this.#deps = deps;
-		this.#entries = EXTENSION_CATALOG.map((entry) => ({
-			name: entry.name,
-			description: entry.description,
-			enabled: deps.initialEnabled.has(entry.name),
-		}));
-		this.#initial = new Map(this.#entries.map((entry) => [entry.name, entry.enabled]));
+		this.#entries = [
+			...EXTENSION_CATALOG.map(
+				(entry): Entry => ({
+					kind: "extension",
+					name: entry.name,
+					label: entry.name,
+					description: entry.description,
+					enabled: deps.initialEnabled.has(entry.name),
+				}),
+			),
+			...deps.features.map(
+				(feature): Entry => ({
+					kind: "feature",
+					featureId: feature.id,
+					label: feature.label,
+					description: feature.description,
+					enabled: feature.enabled,
+				}),
+			),
+		];
+		this.#initial = new Map(this.#entries.map((entry) => [entry.label, entry.enabled]));
 	}
 
 	invalidate(): void {
@@ -215,7 +268,7 @@ export class ExtensionTogglePane implements Component {
 		const selected = index === this.#cursor;
 		const cursor = selected ? theme.fg("accent", `${PROMPT} `) : "  ";
 		const box = entry.enabled ? theme.fg("success", "[x]") : theme.fg("dim", "[ ]");
-		const name = entry.name.padEnd(NAME_COLUMN);
+		const name = entry.label.padEnd(NAME_COLUMN);
 		const nameStyled = entry.enabled
 			? theme.fg(selected ? "accent" : "text", name)
 			: theme.fg("dim", name);
@@ -245,14 +298,14 @@ export class ExtensionTogglePane implements Component {
 		const entry = this.#entries[this.#cursor];
 		if (!entry) return;
 		entry.enabled = !entry.enabled;
-		this.#deps.setEnabled(entry.name, entry.enabled);
+		applyEntry(this.#deps, entry);
 		this.#requestRender();
 	}
 
 	#finish(): void {
 		if (this.#closed) return;
 		this.#closed = true;
-		const changed = this.#entries.some((entry) => this.#initial.get(entry.name) !== entry.enabled);
+		const changed = this.#entries.some((entry) => this.#initial.get(entry.label) !== entry.enabled);
 		this.#done(changed);
 	}
 

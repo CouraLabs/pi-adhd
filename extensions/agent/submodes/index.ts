@@ -28,6 +28,7 @@ import { isGoalActive, switchBlockedByGoalMessage } from "../../../shared/interl
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import { TODO_UPKEEP_SECTION } from "../../../shared/prompt-sections.ts";
 import { loadSettings, updateSettings } from "../../../shared/settings.ts";
+import { offloadPrompt, readUserPrompt } from "../../../shared/user-prompts.ts";
 import {
 	GRILL_SECTION,
 	PLAN_SECTION,
@@ -48,11 +49,14 @@ import { createSubmodeExitTool, type SubmodeExitMode } from "./submode-exit.ts";
 
 // Prompts live as static .md assets next to this module (published with the
 // package). Loaded at runtime: pi loads extensions through jiti, which does
-// not support bundler-style text imports.
+// not support bundler-style text imports. These are the packaged fallbacks:
+// at load time the extension copies each to
+// ~/.pi/couralabs/prompts/submodes/<name>.md (once) and reads the prompt from
+// there on every run, so user edits apply without touching the package.
 const promptsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "prompts");
-const planPrompt = readFileSync(path.join(promptsDir, "plan.md"), "utf8");
-const grillPrompt = readFileSync(path.join(promptsDir, "grill.md"), "utf8");
-const straightPrompt = readFileSync(path.join(promptsDir, "straight.md"), "utf8");
+const packagedPlanPrompt = readFileSync(path.join(promptsDir, "plan.md"), "utf8");
+const packagedGrillPrompt = readFileSync(path.join(promptsDir, "grill.md"), "utf8");
+const packagedStraightPrompt = readFileSync(path.join(promptsDir, "straight.md"), "utf8");
 
 /**
  * Per-submode role sentence for the ACTIVE SUBMODE directive. A record rather
@@ -98,11 +102,11 @@ const TOGGLE_DESCRIPTION: Record<ActiveSubmode, string> = {
 	straight: "Toggle the Straight submode",
 };
 
-/** The prompt section tag and loaded asset for each submode. */
-const SUBMODE_PROMPTS: Record<ActiveSubmode, { section: string; prompt: string }> = {
-	plan: { section: PLAN_SECTION, prompt: planPrompt },
-	grill: { section: GRILL_SECTION, prompt: grillPrompt },
-	straight: { section: STRAIGHT_SECTION, prompt: straightPrompt },
+/** The prompt section tag and packaged fallback asset for each submode. */
+const SUBMODE_PROMPTS: Record<ActiveSubmode, { section: string; file: string; packaged: string }> = {
+	plan: { section: PLAN_SECTION, file: "plan.md", packaged: packagedPlanPrompt },
+	grill: { section: GRILL_SECTION, file: "grill.md", packaged: packagedGrillPrompt },
+	straight: { section: STRAIGHT_SECTION, file: "straight.md", packaged: packagedStraightPrompt },
 };
 
 interface PendingPlan {
@@ -127,6 +131,13 @@ function isSubmode(value: unknown): value is Submode {
 
 export default function piSubmodesExtension(pi: ExtensionAPI): void {
 	markExtensionLoaded("submodes");
+
+	// Offload the packaged prompts to the editable user folder (no-op when they
+	// are already there) so the user can edit them; every run then reads those
+	// files.
+	for (const entry of Object.values(SUBMODE_PROMPTS)) {
+		offloadPrompt("submodes", entry.file, entry.packaged);
+	}
 	/** Active tools before the first submode was entered; restored on exit. */
 	let savedTools: string[] | undefined;
 	/** Whether this host can open a dialog; `ask-user` withdraws `ask` when it cannot. */
@@ -293,7 +304,7 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 		if (!allowed.includes("todo")) delete sections[TODO_UPKEEP_SECTION];
 
 		const entry = SUBMODE_PROMPTS[submode];
-		sections[entry.section] = `${submodeDirective(submode)}\n\n${entry.prompt}`;
+		sections[entry.section] = `${submodeDirective(submode)}\n\n${readUserPrompt("submodes", entry.file, entry.packaged)}`;
 		sections[POLICY_SECTION] = toolPolicy(submode);
 	});
 

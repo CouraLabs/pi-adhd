@@ -31,7 +31,7 @@ About 2 minutes.
 
 ## What you get
 
-Fourteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`, which opens a list where Enter flips the highlighted extension.
+Fourteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`, which opens a list where Enter flips the highlighted extension; the same list carries the feature toggles (settings-backed options such as Loading Phrases).
 
 | Job | Extension | What it adds |
 |---|---|---|
@@ -57,7 +57,7 @@ Fourteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`
 | `/mode [pi\|work]` | Switch the system prompt and agent voice |
 | `/submode [plan\|grill\|straight\|none]` | Enter or leave a submode |
 | `/plan` `/grill` `/straight` | Toggle one submode |
-| `/couralabs:toggle [extension]` | Open a list to toggle extensions, or flip one by name |
+| `/couralabs:toggle [name]` | Open a list to toggle extensions and feature toggles, or flip one by name |
 | `/full-cwd [on\|off]` | Show the full working directory or only its last folder |
 | `/todo` | View or edit the todo list |
 | `/goal` `/guided-goal` | Toggle goal mode; have the agent interview you first |
@@ -142,7 +142,7 @@ The built-in `plan-reviewer` agent is a practical, read-only blocker-finder (`re
 
 ## Prompt field: `editor`
 
-Wraps the prompt editor in a closed field drawn with terminal box characters (`╭ ╮ ╰ ╯ │ ─`), inset by a one-column margin on each side, with a `❯` marker on the first input line. pi's streaming working indicator is embedded in the top border and uses a spinner animation (`🞗` → `🞘` → `🞙` → `🞚` → `🞛` → `🞜` → `🞛` → `🞚` → `🞙` → `🞘`) at 100ms. The working directory and git state are embedded in the bottom border. "Working" is replaced with a random short phrase (max 5 words, from a list of 100) chosen fresh on every turn.
+Wraps the prompt editor in a closed field drawn with terminal box characters (`╭ ╮ ╰ ╯ │ ─`), inset by a one-column margin on each side, with a `❯` marker on the first input line. pi's streaming working indicator is embedded in the top border and uses a spinner animation (`🞗` → `🞘` → `🞙` → `🞚` → `🞛` → `🞜` → `🞛` → `🞚` → `🞙` → `🞘`) at 100ms. The working directory and git state are embedded in the bottom border. "Working" is replaced with a random short phrase (max 5 words, from a list of 100) chosen fresh on every turn; disable the phrases with `/couralabs:toggle loading-phrases` (or `editor.loadingPhrases` in the settings file) to show only the spinner and `Working...`.
 
 ```
  ╭─ 🞘 Consulting the rubber duck ───────────────────────╮
@@ -206,7 +206,7 @@ Phased todo lists. The `todo` tool exposes nine operations (`init`/`start`/`done
 
 On every run where `todo` is callable, a `todo_upkeep` section is appended to the system prompt: mark an item `in_progress` before starting it, mark it `done` the moment it is finished. It appears in Pi mode, in Work mode, and in Straight (the one submode whose whitelist includes `todo`); Plan and Grill narrow `todo` out of the active tools, so they get no section. The tool's model-facing description ([prompts/todo.md](extensions/tools/todo/prompts/todo.md)) carries the same upkeep cadence, so the guidance is present with the tool schema in every mode.
 
-The list renders as a persistent widget above the prompt editor — a header with overall progress, then each phase with its tasks — updated on every change and restored on session start. Each `todo` call also renders as a single compact row in the transcript, `<icon> todo <action> · <content> <from> → <to>` (e.g. `✓ todo done · "Wire index" in_progress → completed`); a failed call renders in full in the error color instead of vanishing. When every task is closed (completed or abandoned), the list auto-clears and the widget hides, so a finished plan leaves no residue. An unfinished list is live progress state: it persists across runs and is restored with the session until it is finished or replaced (`/todo rm` clears it by hand). Spawn sessions exclude `todo`, so a child can never carry a private, invisible second list.
+The list renders as a persistent widget above the prompt editor — a header with overall progress, then each phase with its tasks — updated on every change and restored on session start. The header stays pinned; when the list outgrows the 10-line widget the body below it becomes a viewport that follows the current work (the `in_progress` task, else the first open one), so finished phases scroll off under a muted `… +N above` marker instead of burying the open tasks behind `… +N more`. Each `todo` call also renders as a single compact row in the transcript, `<icon> todo <action> · <content> <from> → <to>` (e.g. `✓ todo done · "Wire index" in_progress → completed`); a failed call renders in full in the error color instead of vanishing. When every task is closed (completed or abandoned), the list auto-clears and the widget hides, so a finished plan leaves no residue. An unfinished list is live progress state: it persists across runs and is restored with the session until it is finished or replaced (`/todo rm` clears it by hand). Spawn sessions exclude `todo`, so a child can never carry a private, invisible second list.
 
 ```
 [x] Todo · 4/10 done
@@ -350,7 +350,7 @@ It is organized as `{ feature: { option: value } }`, plus a top-level `extension
     "todo",
     "web"
   ],
-  "editor": { "fullCwd": false },
+  "editor": { "fullCwd": false, "loadingPhrases": true },
   "thinking": {
     "useSummaryTitlesAsThinkingTitle": true,
     "previewLines": 5,
@@ -380,6 +380,7 @@ It is organized as `{ feature: { option: value } }`, plus a top-level `extension
 |---|---|---|---|
 | `extensions` | — | every extension | Extensions the barrel loads; anything absent is not loaded (edit with `/couralabs:toggle`) |
 | `editor` | `fullCwd` | `false` | Show the full working directory instead of only its last folder (toggle with `/full-cwd`) |
+| `editor` | `loadingPhrases` | `true` | Show a random witty loading phrase instead of plain `Working...` (toggle with `/couralabs:toggle loading-phrases`) |
 | `thinking` | `useSummaryTitlesAsThinkingTitle` | `true` | Use the latest OpenAI reasoning-summary heading as the live title |
 | `thinking` | `previewLines` | `5` | Reasoning-preview lines retained; `0` hides the preview |
 | `thinking` | `animationIntervalMs` | `90` | Milliseconds between animation frames while reasoning |
@@ -403,7 +404,7 @@ It is organized as `{ feature: { option: value } }`, plus a top-level `extension
 | `web` | `search.provider` | `"auto"` | Default web search provider; `auto` tries every configured one in order |
 | `web` | `search.nineRouterModel` | `"exa"` | Model the 9Router aggregator searches with |
 
-The `/couralabs:toggle` command opens an interactive list of every extension with its current state. Move with `↑↓` (or `j`/`k`) and press Enter to flip the highlighted extension; `Esc` closes. Changes are persisted as you toggle and the extension set reloads once the list closes, so the choice survives reloads and new sessions. Passing a name — `/couralabs:toggle editor` — skips the list and flips that extension directly, which is also the only form available when the session has no dialog UI. Missing keys fall back to the defaults and unknown keys are preserved, so the file can be edited by hand. `/spawn:settings` edits the operational `spawn` options (numeric values open an input prompt).
+The `/couralabs:toggle` command opens an interactive list of every extension with its current state, followed by the feature toggles (settings-backed options such as `loading-phrases` that change a loaded extension's behavior without loading or unloading anything). Move with `↑↓` (or `j`/`k`) and press Enter to flip the highlighted row; `Esc` closes. Changes are persisted as you toggle and the extension set reloads once the list closes, so the choice survives reloads and new sessions. Passing a name — `/couralabs:toggle editor` or `/couralabs:toggle loading-phrases` — skips the list and flips that item directly, which is also the only form available when the session has no dialog UI. Missing keys fall back to the defaults and unknown keys are preserved, so the file can be edited by hand. `/spawn:settings` edits the operational `spawn` options (numeric values open an input prompt).
 
 ```
 ── pi-adhd extensions ───────────────────── 11 on · 3 off ──
@@ -450,8 +451,9 @@ pi --use-theme synthwave84
 
 | You want to change… | Edit… |
 |---|---|
-| The ADHD output rules | `extensions/agent/modes/prompts/work.md` |
-| A submode's prompt | `extensions/agent/submodes/prompts/<name>.md` |
+| The ADHD output rules | `~/.pi/couralabs/prompts/modes/work.md` (offloaded from `extensions/agent/modes/prompts/work.md` on load) |
+| A submode's prompt | `~/.pi/couralabs/prompts/submodes/<name>.md` (offloaded from `extensions/agent/submodes/prompts/<name>.md` on load) |
+| A built-in sub-agent's prompt | `~/.pi/couralabs/prompts/subagents/<name>.md` (offloaded from `extensions/tools/spawn/config/default-agents.ts` on load) |
 | Submode tool whitelists | `extensions/agent/submodes/index.ts` |
 | Footer layout | `extensions/ui/footer/render.ts` |
 | Prompt box drawing | `extensions/ui/editor/field-editor.ts` |

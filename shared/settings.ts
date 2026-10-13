@@ -27,6 +27,8 @@ export type PromptInheritance = "full" | "portable";
 export interface EditorConfig {
 	/** When true the footer shows the full working directory; otherwise only its last folder. */
 	fullCwd: boolean;
+	/** When true the working indicator shows a random loading phrase; otherwise plain "Working...". */
+	loadingPhrases: boolean;
 }
 
 /**
@@ -124,7 +126,7 @@ export interface CouralabsSettings {
 /** A partial update; each provided leaf overrides the stored value. */
 export interface SettingsPatch {
 	extensions?: string[];
-	editor?: { fullCwd?: boolean };
+	editor?: { fullCwd?: boolean; loadingPhrases?: boolean };
 	thinking?: Partial<ThinkingConfig>;
 	spawn?: Partial<SpawnConfig>;
 	modes?: Partial<ModesConfig>;
@@ -139,7 +141,7 @@ export interface SettingsPatch {
 
 export const DEFAULT_SETTINGS: CouralabsSettings = {
 	extensions: [...DEFAULT_EXTENSION_NAMES],
-	editor: { fullCwd: false },
+	editor: { fullCwd: false, loadingPhrases: true },
 	thinking: {
 		useSummaryTitlesAsThinkingTitle: true,
 		previewLines: 5,

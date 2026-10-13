@@ -12,7 +12,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import type { TUI } from "@earendil-works/pi-tui";
 import { getSpawnService, type SpawnServiceConsumer } from "../../../shared/spawn-service.ts";
 import { getFooterSections, subscribeFooterSections } from "../../../shared/footer-sections.ts";
-import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
+import { isExtensionLoaded, markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import { getAgentMode, subscribeAgentMode } from "../../../shared/modes.ts";
 import { getSubmode, subscribeSubmode } from "../../../shared/submodes.ts";
 import { getTimers, subscribeTimers } from "../../../shared/timers.ts";
@@ -91,8 +91,12 @@ export default function (pi: ExtensionAPI) {
 					return renderFooter(
 						{
 							model: ctx?.model,
-							mode: getAgentMode(),
-							submode: getSubmode(),
+							// The mode/submode segments render only when the extension that
+							// owns their state is loaded — otherwise the shared stores would
+							// still report a persisted value and the footer would show a mode
+							// nothing is enforcing.
+							mode: isExtensionLoaded("modes") ? getAgentMode() : undefined,
+							submode: isExtensionLoaded("submodes") ? getSubmode() : undefined,
 							thinkingLevel: pi.getThinkingLevel(),
 							contextUsage: ctx?.getContextUsage(),
 							usage: usageTotals(),

@@ -15,6 +15,7 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import { DEFAULT_EXTENSION_NAMES, EXTENSION_CATALOG, extensionNameList, resolveExtensionName } from "./extension-catalog.ts";
+import { FEATURE_TOGGLES, featureToggleIdList, resolveFeatureToggle } from "./feature-toggles.ts";
 import type { ExtensionName } from "./extension-registry.ts";
 import { showExtensionToggle, toggleViaSelect } from "./extension-toggle.ts";
 import { loadSettings, updateSettings } from "./settings.ts";
@@ -55,16 +56,22 @@ export function setExtensionEnabled(name: ExtensionName, enabled: boolean): void
 function completions(prefix: string): AutocompleteItem[] {
 	const needle = prefix.trim().toLowerCase();
 	const enabled = loadEnabledExtensions();
-	return EXTENSION_CATALOG.filter((entry) => entry.name.startsWith(needle)).map((entry) => ({
+	const extensionItems = EXTENSION_CATALOG.filter((entry) => entry.name.startsWith(needle)).map((entry) => ({
 		value: entry.name,
 		label: entry.name,
 		description: `${enabled.has(entry.name) ? "enabled" : "disabled"} · ${entry.description}`,
 	}));
+	const featureItems = FEATURE_TOGGLES.filter((entry) => entry.id.startsWith(needle)).map((entry) => ({
+		value: entry.id,
+		label: entry.label,
+		description: `${entry.isEnabled() ? "enabled" : "disabled"} · ${entry.description}`,
+	}));
+	return [...extensionItems, ...featureItems];
 }
 
 function registerToggleCommand(pi: ExtensionAPI): void {
 	pi.registerCommand("couralabs:toggle", {
-		description: "Toggle pi-adhd extensions (opens a list; usage: /couralabs:toggle [extension])",
+		description: "Toggle pi-adhd extensions and features (opens a list; usage: /couralabs:toggle [name])",
 		getArgumentCompletions: (prefix) => completions(prefix),
 		handler: async (args: string, ctx: ExtensionCommandContext): Promise<void> => {
 			const input = args.trim();
@@ -73,15 +80,41 @@ function registerToggleCommand(pi: ExtensionAPI): void {
 			// works when there is no dialog to open.
 			if (input) {
 				const name = resolveExtensionName(input);
-				if (!name) {
-					emit(ctx, `Unknown extension "${input}". Available: ${extensionNameList()}`, "warning");
+				if (name) {
+					await applyAndReload(ctx, name, !isExtensionEnabled(name));
 					return;
 				}
-				await applyAndReload(ctx, name, !isExtensionEnabled(name));
+				const feature = resolveFeatureToggle(input);
+				if (feature) {
+					const enabled = !feature.isEnabled();
+					feature.setEnabled(enabled);
+					emit(ctx, `pi-adhd ${feature.label} ${enabled ? "enabled" : "disabled"} — reloading extensions…`);
+					// Reload so the owning extension re-reads settings this session.
+					await ctx.reload();
+					return;
+				}
+				emit(
+					ctx,
+					`Unknown extension or toggle "${input}". Available: ${extensionNameList()}, ${featureToggleIdList()}`,
+					"warning",
+				);
 				return;
 			}
 
-			const deps = { initialEnabled: loadEnabledExtensions(), setEnabled: setExtensionEnabled };
+			const deps = {
+				initialEnabled: loadEnabledExtensions(),
+				setEnabled: setExtensionEnabled,
+				features: FEATURE_TOGGLES.map((entry) => ({
+					id: entry.id,
+					label: entry.label,
+					description: entry.description,
+					enabled: entry.isEnabled(),
+				})),
+				setFeature: (id: string, enabled: boolean): void => {
+					const feature = resolveFeatureToggle(id);
+					feature?.setEnabled(enabled);
+				},
+			};
 
 			// The interactive list: TUI mounts the component, RPC drives the same
 			// state through repeated selects. Changes are persisted as they happen
@@ -98,7 +131,7 @@ function registerToggleCommand(pi: ExtensionAPI): void {
 				return;
 			}
 
-			emit(ctx, `Usage: /couralabs:toggle <extension>. Available: ${extensionNameList()}`, "info");
+			emit(ctx, `Usage: /couralabs:toggle <extension|toggle>. Available: ${extensionNameList()}, ${featureToggleIdList()}`, "info");
 		},
 	});
 }

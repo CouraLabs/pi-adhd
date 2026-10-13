@@ -7,7 +7,28 @@
 
 import { DEFAULT_AGENTS } from "./default-agents.ts";
 import { parseThinkingLevel } from "./thinking-level.ts";
+import { offloadPrompt, readUserPrompt } from "../../../../shared/user-prompts.ts";
 import type { AgentConfig } from "../types.ts";
+
+// ── Editable default-agent prompts ──────────────────────────────────────
+
+/**
+ * Offload a default agent's system prompt to the editable user folder and
+ * read it back from there.
+ *
+ * The packaged prompt strings live inside the installed package, where a user
+ * cannot reasonably edit them. On every registry build (spawn loading, or a
+ * reload after custom agents change) each default prompt is copied once to
+ * `~/.pi/couralabs/prompts/subagents/<name>.md` — an existing file is never
+ * overwritten — and the config then reads that file, so edits on disk apply
+ * after the next reload. Deleting the file restores the packaged version.
+ * Agents with no system prompt (e.g. `general-purpose`) are left untouched.
+ */
+function withEditablePrompt(config: AgentConfig): AgentConfig {
+	if (config.isDefault !== true || config.systemPrompt.length === 0) return config;
+	offloadPrompt("subagents", `${config.name}.md`, config.systemPrompt);
+	return { ...config, systemPrompt: readUserPrompt("subagents", `${config.name}.md`, config.systemPrompt) };
+}
 
 // ── AgentConfigLookup interface ──────────────────────────────────────────────
 
@@ -47,7 +68,7 @@ export class AgentTypeRegistry implements AgentConfigLookup {
   reload(): void {
     this.agents.clear();
     for (const [name, config] of DEFAULT_AGENTS) {
-      this.agents.set(name, config);
+      this.agents.set(name, withEditablePrompt(config));
     }
     for (const [name, config] of this.loadUserAgents()) {
       this.agents.set(name, config);

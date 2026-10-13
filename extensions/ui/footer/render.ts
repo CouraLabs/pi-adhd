@@ -32,10 +32,13 @@ type ThinkingLevel = ReturnType<ExtensionAPI["getThinkingLevel"]>;
 
 /** Everything the footer needs to draw one frame. */
 export interface FooterState {
-	/** Active agent mode, shown before the provider/model. */
-	mode: AgentMode;
-	/** Active submode, shown right after the mode; `"none"` renders nothing. */
-	submode: Submode;
+	/** Active agent mode, shown before the provider/model; undefined when the `modes` extension is not loaded. */
+	mode?: AgentMode;
+	/**
+	 * Active submode, shown right after the mode; "none" renders nothing and
+	 * undefined (the `submodes` extension not loaded) renders nothing either.
+	 */
+	submode?: Submode;
 	model: ModelInfo | undefined;
 	thinkingLevel: ThinkingLevel;
 	contextUsage: ContextUsage | undefined;
@@ -116,12 +119,17 @@ export function renderFooter(state: FooterState, width: number, theme: Theme): s
 
 	// ── One line: timers, agent mode, model, thinking, context, and cumulative usage ──
 	const parts: string[] = timerSegments(theme, state.timers);
-	const modeLabel = theme.fg(agentModeColor(state.mode), AGENT_MODE_LABEL[state.mode]);
-	parts.push(
-		state.submode === "none"
-			? modeLabel
-			: `${modeLabel}${theme.fg("dim", `${SEPARATOR}`)}${theme.fg(submodeColor(state.submode), SUBMODE_LABEL[state.submode])}`,
-	);
+	// A segment renders only when the extension that owns its state is loaded:
+	// `getAgentMode()`/`getSubmode()` always return a stored value, so an absent
+	// owner must be signaled with undefined rather than read as a real mode.
+	if (state.mode) {
+		const modeLabel = theme.fg(agentModeColor(state.mode), AGENT_MODE_LABEL[state.mode]);
+		parts.push(
+			!state.submode || state.submode === "none"
+				? modeLabel
+				: `${modeLabel}${theme.fg("dim", `${SEPARATOR}`)}${theme.fg(submodeColor(state.submode), SUBMODE_LABEL[state.submode])}`,
+		);
+	}
 	if (state.model) {
 		parts.push(theme.fg("text", `${state.model.provider}/${state.model.id}`));
 		if (state.model.reasoning) {

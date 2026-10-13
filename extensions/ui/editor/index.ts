@@ -29,6 +29,7 @@ export default function (pi: ExtensionAPI) {
 	let ctx: ExtensionContext | undefined;
 	let tui: TUI | undefined;
 	let fullCwd = false;
+	let loadingPhrases = true;
 	let lastJoke = -1;
 	let git: GitInfo = emptyGit();
 	let unsubscribeMode: (() => void) | undefined;
@@ -97,6 +98,8 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	const pickJoke = (): string => {
+		// Phrases disabled: the plain built-in working message only.
+		if (!loadingPhrases) return "Working...";
 		if (LOADING_PHRASES.length === 0) return "Working";
 		let index = Math.floor(Math.random() * LOADING_PHRASES.length);
 		if (LOADING_PHRASES.length > 1 && index === lastJoke) index = (index + 1) % LOADING_PHRASES.length;
@@ -134,6 +137,7 @@ export default function (pi: ExtensionAPI) {
 		ctx = context;
 		const settings = loadSettings();
 		fullCwd = settings.editor.fullCwd;
+		loadingPhrases = settings.editor.loadingPhrases;
 		git = emptyGit();
 		stopGitTimers();
 
