@@ -71,7 +71,7 @@ Eleven extensions, grouped by job. Each one can be toggled on its own.
 
 Two agent modes, switched with `/mode [pi|work]`:
 
-- **⛑ Work** (default) replaces pi's default system prompt with the pi-tdah [Work rules](extensions/modes/prompts/work.md). The rules are the ADHD contract: lead with the next action, number multi-step tasks, restate state every turn, cap lists, no preamble or closers. Work mode also makes the agent an orchestrator — delegate to `spawn` to keep the parent context small, use `ask` before inferring anything unknown, and drive multi-step work with `todo`.
+- **⛑ Work** (default) replaces pi's default system prompt with the pi-tdah [Work rules](extensions/agent/modes/prompts/work.md). The rules are the ADHD contract: lead with the next action, number multi-step tasks, restate state every turn, cap lists, no preamble or closers. Work mode also makes the agent an orchestrator — delegate to `spawn` to keep the parent context small, use `ask` before inferring anything unknown, and drive multi-step work with `todo`.
 - **π Pi** leaves pi's default system prompt (or a user `SYSTEM.md`) untouched.
 
 The replacement uses pi's `customPrompt` slot, the same mechanism as `SYSTEM.md`, so tool declarations still reach the model while the default preamble is swapped. The active mode shows first in the footer (`π Pi` in the accent color, `⛑ Work` in the default foreground), the prompt field recolors its border (accent for Pi, default border for Work), and the choice persists in the pi-tdah settings file and restores on the next session.
@@ -90,7 +90,7 @@ The mode prompt and the submode prompt never bleed into each other. The mode rep
 
 Two sections are appended, in this order:
 
-1. `<plan_mode>` / `<grill_mode>` / `<straight_mode>` — opens with an `ACTIVE SUBMODE: <name>` directive naming the submode and its role, then the prompt from `extensions/tools/submodes/prompts/`.
+1. `<plan_mode>` / `<grill_mode>` / `<straight_mode>` — opens with an `ACTIVE SUBMODE: <name>` directive naming the submode and its role, then the prompt from `extensions/agent/submodes/prompts/`.
 2. `<submode_policy>` — generated on every run. It lists the exact tools the model may call and names every registered tool that does not exist in this submode. The policy is appended last, so it is the final text of the system prompt.
 
 The whitelist is per submode, and `ask` is dropped in hosts without a UI, where `ask-user` withdraws it:
@@ -101,9 +101,9 @@ The whitelist is per submode, and `ask` is dropped in hosts without a UI, where 
 | 𐂐 Grill | `read`, `grep`, `find`, `ls`, `ask`, `submode-exit`, `spawn` |
 | ⛬ Straight | `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`, `ask`, `todo`, `spawn`, `submode-exit` |
 
-- **⧉Plan** ([plan.md](extensions/tools/submodes/prompts/plan.md)) — the architect. Studies the codebase and submits a concrete, ordered implementation plan for review. It never edits files.
-- **𐂐 Grill** ([grill.md](extensions/tools/submodes/prompts/grill.md)) — the designer. Interviews you in rounds across a design tree until you share an understanding, then hands off to Plan (or straight to the coder).
-- **⛬ Straight** ([straight.md](extensions/tools/submodes/prompts/straight.md)) — the guided feature-development submode. It asks clarifying questions, explores the codebase, proposes designs, then implements the approved one with the full toolset. It is the only submode that can change code.
+- **⧉Plan** ([plan.md](extensions/agent/submodes/prompts/plan.md)) — the architect. Studies the codebase and submits a concrete, ordered implementation plan for review. It never edits files.
+- **𐂐 Grill** ([grill.md](extensions/agent/submodes/prompts/grill.md)) — the designer. Interviews you in rounds across a design tree until you share an understanding, then hands off to Plan (or straight to the coder).
+- **⛬ Straight** ([straight.md](extensions/agent/submodes/prompts/straight.md)) — the guided feature-development submode. It asks clarifying questions, explores the codebase, proposes designs, then implements the approved one with the full toolset. It is the only submode that can change code.
 
 ### Plan review
 
@@ -133,7 +133,7 @@ A rejection's line comments come back as `line N: <comment>` so the model can re
 
 ### Plan reviewer agent
 
-The built-in `plan-reviewer` agent is a practical, read-only blocker-finder (`read`, `grep`, `find`, `ls`) that verifies referenced files exist and returns `[OKAY]` or a max-3 `[REJECT]`. It ships as an embedded default, so it is available wherever pi-tdah is installed. The Plan agent spawns it with the `spawn` tool before calling `plan-write` (see [plan.md](extensions/tools/submodes/prompts/plan.md)).
+The built-in `plan-reviewer` agent is a practical, read-only blocker-finder (`read`, `grep`, `find`, `ls`) that verifies referenced files exist and returns `[OKAY]` or a max-3 `[REJECT]`. It ships as an embedded default, so it is available wherever pi-tdah is installed. The Plan agent spawns it with the `spawn` tool before calling `plan-write` (see [plan.md](extensions/agent/submodes/prompts/plan.md)).
 
 ## Prompt field: `editor`
 
@@ -343,12 +343,12 @@ pi --use-theme synthwave84
 
 | You want to change… | Edit… |
 |---|---|
-| The ADHD output rules | `extensions/modes/prompts/work.md` |
-| A submode's prompt | `extensions/tools/submodes/prompts/<name>.md` |
-| Submode tool whitelists | `extensions/tools/submodes/index.ts` |
-| Footer layout | `extensions/footer/render.ts` |
-| Prompt box drawing | `extensions/editor/field-editor.ts` |
-| Working-message phrases | `extensions/editor/phrases.ts` |
+| The ADHD output rules | `extensions/agent/modes/prompts/work.md` |
+| A submode's prompt | `extensions/agent/submodes/prompts/<name>.md` |
+| Submode tool whitelists | `extensions/agent/submodes/index.ts` |
+| Footer layout | `extensions/ui/footer/render.ts` |
+| Prompt box drawing | `extensions/ui/editor/field-editor.ts` |
+| Working-message phrases | `extensions/ui/editor/phrases.ts` |
 | Todo widget rendering | `extensions/tools/todo/render.ts` |
 | Web providers | `extensions/tools/web/providers.ts`, `search-providers.ts` |
 | Settings schema and defaults | `shared/settings.ts` |
@@ -359,30 +359,39 @@ pi --use-theme synthwave84
 ```text
 pi-tdah/
 ├── extensions/
-│   ├── editor/
-│   │   ├── index.ts         # extension factory: git timers + event wiring
-│   │   ├── field-editor.ts  # the boxed prompt editor component
-│   │   ├── git.ts           # branch + `git diff --numstat` parser
-│   │   ├── phrases.ts       # working-message phrases
-│   │   └── spinner.ts       # working-indicator animation frames
-│   ├── footer/
-│   │   ├── index.ts         # extension factory: usage cache + event wiring
-│   │   └── render.ts        # pure footer rendering
-│   ├── messages/
-│   │   ├── index.ts         # extension factory: renderer wiring
-│   │   ├── renderers.ts     # tool-renderer wrapper
-│   │   └── bordered-tool.ts # the left-rule tool component
-│   ├── modes/
-│   │   ├── index.ts         # extension factory: `/mode` + prompt swap
-│   │   └── prompts/         # static .md prompt assets
-│   ├── thinking/
-│   │   ├── index.ts         # extension factory: component patch + event wiring
-│   │   ├── config.ts        # thinking config backed by couralabs/settings.json
-│   │   ├── durations.ts     # per-run duration persistence + restore
-│   │   ├── preview.ts       # reasoning-preview component + duration formatting
-│   │   ├── summaries.ts     # OpenAI reasoning-summary extraction
-│   │   └── types.ts
-│   └── tools/
+│   ├── index.ts             # barrel: loads every extension below (ui → agent → tools)
+│   ├── ui/                  # individually loadable UI extensions
+│   │   ├── editor/
+│   │   │   ├── index.ts         # extension factory: git timers + event wiring
+│   │   │   ├── field-editor.ts  # the boxed prompt editor component
+│   │   │   ├── git.ts           # branch + `git diff --numstat` parser
+│   │   │   ├── phrases.ts       # working-message phrases
+│   │   │   └── spinner.ts       # working-indicator animation frames
+│   │   ├── footer/
+│   │   │   ├── index.ts         # extension factory: usage cache + event wiring
+│   │   │   └── render.ts        # pure footer rendering
+│   │   ├── messages/
+│   │   │   ├── index.ts         # extension factory: renderer wiring
+│   │   │   ├── renderers.ts     # tool-renderer wrapper
+│   │   │   └── bordered-tool.ts # the left-rule tool component
+│   │   └── thinking/
+│   │       ├── index.ts         # extension factory: component patch + event wiring
+│   │       ├── config.ts        # thinking config backed by couralabs/settings.json
+│   │       ├── durations.ts     # per-run duration persistence + restore
+│   │       ├── preview.ts       # reasoning-preview component + duration formatting
+│   │       ├── summaries.ts     # OpenAI reasoning-summary extraction
+│   │       └── types.ts
+│   ├── agent/               # individually loadable mode extensions
+│   │   ├── modes/
+│   │   │   ├── index.ts         # extension factory: `/mode` + prompt swap
+│   │   │   └── prompts/         # static .md prompt assets
+│   │   └── submodes/
+│   │       ├── index.ts         # extension factory: prompt sections + tool policy
+│   │       ├── plan-review.ts   # fullscreen plan-review pane
+│   │       ├── plan-write.ts    # the `plan-write` tool
+│   │       ├── submode-exit.ts  # the `submode-exit` tool
+│   │       └── prompts/         # static .md prompt assets
+│   └── tools/               # individually loadable tool extensions
 │       ├── ask-user/
 │       │   ├── index.ts         # `ask` tool + renderers
 │       │   ├── ask-dialog.ts    # tabbed multi-question dialog
@@ -418,12 +427,6 @@ pi-tdah/
 │       │   ├── session/         # child session assembly
 │       │   ├── tools/           # the spawn tool
 │       │   └── ui/              # settings, session navigator
-│       ├── submodes/
-│       │   ├── index.ts         # extension factory: prompt sections + tool policy
-│       │   ├── plan-review.ts   # fullscreen plan-review pane
-│       │   ├── plan-write.ts    # the `plan-write` tool
-│       │   ├── submode-exit.ts  # the `submode-exit` tool
-│       │   └── prompts/         # static .md prompt assets
 │       ├── web/
 │       │   ├── index.ts         # extension factory: providers + tools + /web
 │       │   ├── webfetch-tool.ts # the `webfetch` tool (inline result preview)
@@ -450,12 +453,14 @@ pi-tdah/
 │           └── prompts/         # static .md prompt assets
 ├── shared/
 │   ├── child-sessions.ts    # spawned child-session registry
+│   ├── extension-registry.ts # which optional pi-tdah extensions are loaded
 │   ├── format.ts            # compact token counts + cwd formatting
 │   ├── footer-sections.ts   # extra footer blocks registered by extensions
 │   ├── glyphs.ts            # shared UI symbols (`❯`, `│`, …)
 │   ├── interlock.ts         # goal ↔ submode mutual exclusion
 │   ├── labeled-rule.ts      # full-width rule with embedded labels
 │   ├── modes.ts             # Pi/Work agent-mode state
+│   ├── prompt-sections.ts   # system-prompt section tags shared across extensions
 │   ├── settings.ts          # `~/.pi/couralabs/settings.json` load/save
 │   ├── spawn-service.ts     # cross-extension spawn service slot
 │   ├── store.ts             # process-global value with change notifications
@@ -467,13 +472,24 @@ pi-tdah/
 └── package.json
 ```
 
-Each extension is a directory whose `index.ts` exports the default factory. Helper modules sit beside it and are imported with explicit `.ts` extensions. Cross-extension helpers live in `shared/`. Extensions that register tools live under `extensions/tools/`. The `pi.extensions` manifest in `package.json` matches only `extensions/*.ts`, `extensions/*/index.ts`, and `extensions/tools/*/index.ts`, so helper modules are never loaded as extensions on their own.
+Each extension is a directory whose `index.ts` exports the default factory. Helper modules sit beside it and are imported with explicit `.ts` extensions. Cross-extension helpers live in `shared/`. Extensions are grouped by kind — `extensions/ui/` (editor, footer, messages, thinking), `extensions/agent/` (modes, submodes), and `extensions/tools/` (ask-user, goal, spawn, todo, web) — and every `index.ts` is loadable on its own. The `pi.extensions` manifest in `package.json` points at `extensions/index.ts`, a barrel that calls every extension factory in one place (ui → agent → tools), so the package loads from a single entry and helper modules are never loaded as extensions on their own.
+
+### Loading extensions individually
+
+Every extension can be loaded alone (`pi -e extensions/tools/todo/index.ts`), and it degrades gracefully when an extension it cooperates with is absent:
+
+- The `footer` shows spawn cost only when the spawn service is published, and a submode label only when the submodes store is non-empty.
+- `goal` reads `todo_updated` events and `todo-phases` entries when `todo` is loaded, and runs without task progress otherwise.
+- The `goal` ↔ submode interlock ignores the persisted `submodes.current` unless the submodes extension is loaded (see `shared/extension-registry.ts`), so a value left by an earlier install cannot block goal mode.
+- `submodes` filters its tool whitelist against the tools actually registered, so `spawn`, `ask`, and `todo` simply drop out when their extensions are absent.
+- The `todo_upkeep` prompt section is added when `todo` is callable and removed by `submodes` whenever the active submode excludes it, regardless of which extension loads first.
 
 ## Add your own extension
 
 1. Create `extensions/my-thing/index.ts` (or a single `extensions/my-thing.ts`).
 2. Export a default factory receiving `ExtensionAPI`.
 3. Run `pi -e ./extensions/my-thing/index.ts` to test it.
+4. To ship it with the package, import it in `extensions/index.ts` and call it from the barrel.
 
 ```typescript
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -486,7 +502,7 @@ export default function (pi: ExtensionAPI) {
 }
 ```
 
-The `pi` manifest in `package.json` picks it up automatically.
+The `pi` manifest in `package.json` loads `extensions/index.ts`, so add the factory to that barrel to include it in the package.
 
 ## Notes
 

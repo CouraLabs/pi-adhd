@@ -1,6 +1,6 @@
 /**
- * Short, developer-flavored phrases shown in place of "Working" while the agent
- * is running. Kept to five words or fewer so the top rule never overflows.
+ * Phrases shown in place of "Working" while the agent is running. Mostly short
+ * and developer-flavored, with a set of ADHD-flavored ones at the end.
  */
 export const LOADING_PHRASES: readonly string[] = [
 	"I'm Feeling Lucky",
@@ -130,4 +130,36 @@ export const LOADING_PHRASES: readonly string[] = [
 	"It's not a bug, it's a feature... of this loading screen.",
 	'Have you tried turning it off and on again? (The loading screen, not me.)',
 	'Constructing additional pylons...',
+	// ADHD-flavored phrases.
+	'Browsing 47 open tabs to answer one simple question...',
+	'Deep-diving into the history of medieval shoes instead of finishing this task...',
+	'Hyperfocusing on the background details...',
+	'Accidentally mastering a completely unrelated hobby while loading...',
+	'Switching tasks 12 times in the last 3 seconds...',
+	'Following 14 sequential tangents to reach a single logical conclusion...',
+	'Down a rabbit hole... send snack supplies...',
+	'Scanning the environment for emergency dopamine...',
+	'Waiting for the last-minute panic to spark sudden productivity...',
+	'Generating excitement out of thin air...',
+	'Hunting for the dopamine button...',
+	'Waiting for the brain chemistry to align...',
+	'Looking for where I just put down my train of thought...',
+	'Wait... what was I doing again?',
+	'Walking into a room and completely forgetting why...',
+	'Re-reading the exact same sentence 4 times...',
+	'Searching for my glasses while wearing them...',
+	'Retracing my mental steps from 5 seconds ago...',
+	'Re-indexing misplaced thoughts...',
+	'Estimating this will take 2 minutes (it will take 3 hours)...',
+	'Estimating this will take 3 hours (it will take 2 minutes)...',
+	'Staring at a task for 40 minutes before starting...',
+	'Entering time-blindness mode...',
+	'Underestimating time requirements since time is a myth...',
+	'Working on 5 tasks simultaneously and finishing none of them yet...',
+	'Waiting for the executive dysfunction fog to clear...',
+	'Leg bouncing at 120 RPM...',
+	'Playing the same 5-second song loop in my head indefinitely...',
+	'Fidgeting with the loading bar...',
+	'Clicking the pen rhythmically while waiting...',
+	'Doodling in the margins of the algorithm...',
 ];

@@ -14,8 +14,8 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { EditorTheme, TUI } from "@earendil-works/pi-tui";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { formatCwd } from "../../shared/format.ts";
-import { agentModeBorderColor, getAgentMode } from "../../shared/modes.ts";
+import { formatCwd } from "../../../shared/format.ts";
+import { agentModeBorderColor, getAgentMode } from "../../../shared/modes.ts";
 import {
 	BOX_BOTTOM_LEFT,
 	BOX_BOTTOM_RIGHT,
@@ -26,7 +26,7 @@ import {
 	ELLIPSIS,
 	PROMPT,
 	SEPARATOR,
-} from "../../shared/glyphs.ts";
+} from "../../../shared/glyphs.ts";
 import type { GitInfo } from "./git.ts";
 
 type StatusIndicatorLike = Parameters<CustomEditor["setWorkingStatusIndicator"]>[0];

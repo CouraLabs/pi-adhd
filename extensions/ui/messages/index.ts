@@ -8,10 +8,12 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { loadSettings, updateSettings } from "../../shared/settings.ts";
+import { loadSettings, updateSettings } from "../../../shared/settings.ts";
+import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import { wrapRenderers } from "./renderers.ts";
 
 export default function (pi: ExtensionAPI) {
+	markExtensionLoaded("messages");
 	let enabled = true;
 
 	// Swap the built-in shell for a left rule, without touching tool behavior.

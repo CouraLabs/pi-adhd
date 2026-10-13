@@ -3,6 +3,7 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import { registerBuiltinProviders } from "./builtin.ts";
 import { registerWebCommand } from "./command.ts";
 import { registerBuiltinSearchProviders } from "./search-builtin.ts";
@@ -15,6 +16,7 @@ export * from "./search-providers.ts";
 export * from "./search-runner.ts";
 
 export default function registerWeb(pi: ExtensionAPI): void {
+	markExtensionLoaded("web");
 	registerBuiltinProviders();
 	registerBuiltinSearchProviders();
 	registerWebCommand(pi);

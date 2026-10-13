@@ -12,6 +12,7 @@
  * changes.
  */
 
+import { isExtensionLoaded } from "./extension-registry.ts";
 import { loadSettings } from "./settings.ts";
 import { createGlobalStore } from "./store.ts";
 import { SUBMODE_NAME, getSubmode, type Submode } from "./submodes.ts";
@@ -32,9 +33,12 @@ export function setGoalActive(active: boolean): void {
  * The submode that is active or persisted. Reads the live store first, then the
  * stored setting: another extension's `session_start` handler may run before the
  * submodes extension restores the stored submode, so a guard cannot rely on the
- * store alone.
+ * store alone. Only the submodes extension owns the persisted value, so a
+ * setting written by an earlier install is ignored when that extension is not
+ * loaded.
  */
 function activeSubmode(): Submode {
+	if (!isExtensionLoaded("submodes")) return "none";
 	const live = getSubmode();
 	return live === "none" ? loadSettings().submodes.current : live;
 }

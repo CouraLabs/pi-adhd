@@ -60,6 +60,7 @@ import {
 	untilAborted,
 } from "./ask-legacy.ts";
 import { replaceTabs } from "./compat.ts";
+import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import type {
 	AskToolDetails,
 	ExtensionAskDialogQuestion,
@@ -197,6 +198,7 @@ function flattenToOneLine(text: string): string {
 // ---------------------------------------------------------------------------
 
 export default function ompAskExtension(pi: ExtensionAPI): void {
+	markExtensionLoaded("ask-user");
 	pi.registerTool({
 		name: "ask",
 		label: "Ask",

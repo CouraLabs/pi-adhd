@@ -51,6 +51,8 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { TUI } from "@earendil-works/pi-tui";
 import { createTodoCommand } from "./commands.ts";
+import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
+import { TODO_UPKEEP_SECTION } from "../../../shared/prompt-sections.ts";
 import { renderTodoWidget, TodoWidget } from "./render.ts";
 import { clonePhases, isFinishedTodoList, type TodoPhase } from "./state.ts";
 import { createTodoTool } from "./tool.ts";
@@ -58,9 +60,6 @@ import { TODO_PHASES_ENTRY_TYPE, restorePhasesFromEntries } from "./restore.ts";
 
 /** Widget slot key (one per extension; also used to clear it). */
 const TODO_WIDGET_KEY = "todo";
-
-/** Prompt section tag for the todo-upkeep guidance appended to every run. */
-const TODO_SECTION = "todo_upkeep";
 
 /**
  * The todo list is live progress state, not a plan written once. This reinstates
@@ -79,6 +78,7 @@ const TODO_UPKEEP = [
 ].join("\n");
 
 export default function piTodoExtension(pi: ExtensionAPI): void {
+	markExtensionLoaded("todo");
 	let phases: TodoPhase[] = [];
 	let ctx: ExtensionContext | undefined;
 	let widgetTui: TUI | undefined;
@@ -155,9 +155,9 @@ export default function piTodoExtension(pi: ExtensionAPI): void {
 	// todo in the manifest globs.
 	pi.on("before_agent_start", (event) => {
 		const { sections } = event.systemPromptOptions;
-		delete sections[TODO_SECTION];
+		delete sections[TODO_UPKEEP_SECTION];
 		if (!pi.getActiveTools().includes("todo")) return;
-		sections[TODO_SECTION] = TODO_UPKEEP;
+		sections[TODO_UPKEEP_SECTION] = TODO_UPKEEP;
 	});
 
 	pi.on("session_start", (_event, context) => {

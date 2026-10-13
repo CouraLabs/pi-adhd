@@ -15,15 +15,16 @@ import { readFileSync } from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { isGoalActive, switchBlockedByGoalMessage } from "../../shared/interlock.ts";
-import { loadSettings, updateSettings } from "../../shared/settings.ts";
+import { isGoalActive, switchBlockedByGoalMessage } from "../../../shared/interlock.ts";
+import { loadSettings, updateSettings } from "../../../shared/settings.ts";
+import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import {
 	DEFAULT_AGENT_MODE,
 	MODE_NOTICE,
 	getAgentMode,
 	setAgentMode,
 	type AgentMode,
-} from "../../shared/modes.ts";
+} from "../../../shared/modes.ts";
 
 // Prompt lives in a static .md asset next to this module (published with the
 // package). Loaded at runtime: pi loads extensions through jiti, which does
@@ -38,6 +39,7 @@ function isAgentMode(value: unknown): value is AgentMode {
 }
 
 export default function (pi: ExtensionAPI) {
+	markExtensionLoaded("modes");
 	/** Set the mode and persist it. Returns false when goal mode blocks the switch. */
 	const applyMode = (mode: AgentMode): boolean => {
 		if (isGoalActive()) return false;

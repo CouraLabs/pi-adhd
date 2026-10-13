@@ -11,7 +11,7 @@
  * than allowed to break rendering or spin the animation timer.
  */
 
-import { DEFAULT_SETTINGS, loadSettings, type ThinkingConfig } from "../../shared/settings.ts";
+import { DEFAULT_SETTINGS, loadSettings, type ThinkingConfig } from "../../../shared/settings.ts";
 
 function normalize(raw: ThinkingConfig): ThinkingConfig {
 	return {

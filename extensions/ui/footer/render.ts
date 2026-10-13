@@ -7,11 +7,11 @@
 
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { mixColors, truncateToWidth } from "@earendil-works/pi-tui";
-import { formatTokens } from "../../shared/format.ts";
-import { CONTEXT_CLOSE, CONTEXT_EMPTY, CONTEXT_FILLED, CONTEXT_HALF, CONTEXT_OPEN, ELLIPSIS, SEPARATOR, THINKING_LEVELS } from "../../shared/glyphs.ts";
-import { AGENT_MODE_LABEL, agentModeColor, type AgentMode } from "../../shared/modes.ts";
-import { SUBMODE_LABEL, submodeColor, type Submode } from "../../shared/submodes.ts";
-import { usageCost, usageGroup, type UsageTotals } from "../../shared/usage.ts";
+import { formatTokens } from "../../../shared/format.ts";
+import { CONTEXT_CLOSE, CONTEXT_EMPTY, CONTEXT_FILLED, CONTEXT_HALF, CONTEXT_OPEN, ELLIPSIS, SEPARATOR, THINKING_LEVELS } from "../../../shared/glyphs.ts";
+import { AGENT_MODE_LABEL, agentModeColor, type AgentMode } from "../../../shared/modes.ts";
+import { SUBMODE_LABEL, submodeColor, type Submode } from "../../../shared/submodes.ts";
+import { usageCost, usageGroup, type UsageTotals } from "../../../shared/usage.ts";
 
 type ModelInfo = NonNullable<ExtensionContext["model"]>;
 type ContextUsage = ReturnType<ExtensionContext["getContextUsage"]>;

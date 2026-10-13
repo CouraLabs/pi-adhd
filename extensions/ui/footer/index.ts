@@ -10,15 +10,17 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { TUI } from "@earendil-works/pi-tui";
-import { getSpawnService, type SpawnServiceConsumer } from "../../shared/spawn-service.ts";
-import { getFooterSections, subscribeFooterSections } from "../../shared/footer-sections.ts";
-import { loadSettings, updateSettings } from "../../shared/settings.ts";
-import { getAgentMode, subscribeAgentMode } from "../../shared/modes.ts";
-import { getSubmode, subscribeSubmode } from "../../shared/submodes.ts";
-import { computeUsage, emptyUsage, type UsageTotals } from "../../shared/usage.ts";
+import { getSpawnService, type SpawnServiceConsumer } from "../../../shared/spawn-service.ts";
+import { getFooterSections, subscribeFooterSections } from "../../../shared/footer-sections.ts";
+import { loadSettings, updateSettings } from "../../../shared/settings.ts";
+import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
+import { getAgentMode, subscribeAgentMode } from "../../../shared/modes.ts";
+import { getSubmode, subscribeSubmode } from "../../../shared/submodes.ts";
+import { computeUsage, emptyUsage, type UsageTotals } from "../../../shared/usage.ts";
 import { renderFooter } from "./render.ts";
 
 export default function (pi: ExtensionAPI) {
+	markExtensionLoaded("footer");
 	let ctx: ExtensionContext | undefined;
 	let tui: TUI | undefined;
 

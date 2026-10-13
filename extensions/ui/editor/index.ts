@@ -13,8 +13,9 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { TUI } from "@earendil-works/pi-tui";
-import { loadSettings, updateSettings } from "../../shared/settings.ts";
-import { agentModeBorderColor, getAgentMode, subscribeAgentMode } from "../../shared/modes.ts";
+import { loadSettings, updateSettings } from "../../../shared/settings.ts";
+import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
+import { agentModeBorderColor, getAgentMode, subscribeAgentMode } from "../../../shared/modes.ts";
 import { FieldEditor, type LocationProvider } from "./field-editor.ts";
 import { emptyGit, parseNumstat, type GitInfo } from "./git.ts";
 import { LOADING_PHRASES } from "./phrases.ts";
@@ -24,6 +25,7 @@ const GIT_REFRESH_INTERVAL_MS = 10_000;
 const GIT_DEBOUNCE_MS = 350;
 
 export default function (pi: ExtensionAPI) {
+	markExtensionLoaded("editor");
 	let ctx: ExtensionContext | undefined;
 	let tui: TUI | undefined;
 	let enabled = true;

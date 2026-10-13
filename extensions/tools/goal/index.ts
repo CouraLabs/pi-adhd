@@ -73,6 +73,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { isChildSession } from "../../../shared/child-sessions.ts";
+import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import { goalBlockedBySubmodeMessage, setGoalActive, submodeIsActive } from "../../../shared/interlock.ts";
 import {
 	createGoalCommand,
@@ -147,6 +148,7 @@ export function contextSlimDrafts(branch: unknown[]): ContextEditEntryDraft[] {
 }
 
 export default function piGoalExtension(pi: ExtensionAPI): void {
+	markExtensionLoaded("goal");
 	// ------------------------------------------------------------------
 	// Closure state (omp session fields)
 	// ------------------------------------------------------------------

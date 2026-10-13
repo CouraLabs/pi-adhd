@@ -25,6 +25,8 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { isGoalActive, switchBlockedByGoalMessage } from "../../../shared/interlock.ts";
+import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
+import { TODO_UPKEEP_SECTION } from "../../../shared/prompt-sections.ts";
 import { loadSettings, updateSettings } from "../../../shared/settings.ts";
 import {
 	GRILL_SECTION,
@@ -124,6 +126,7 @@ function isSubmode(value: unknown): value is Submode {
 }
 
 export default function piSubmodesExtension(pi: ExtensionAPI): void {
+	markExtensionLoaded("submodes");
 	/** Active tools before the first submode was entered; restored on exit. */
 	let savedTools: string[] | undefined;
 	/** Whether this host can open a dialog; `ask-user` withdraws `ask` when it cannot. */
@@ -283,6 +286,11 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 		const allowed = allowedTools(submode);
 		pi.setActiveTools(allowed);
 		event.systemPromptOptions.selectedTools = allowed;
+
+		// The todo extension writes its upkeep section whenever `todo` is
+		// callable. Either handler may run first, so drop the section here too
+		// when this submode excludes `todo`: the prompt must match the policy.
+		if (!allowed.includes("todo")) delete sections[TODO_UPKEEP_SECTION];
 
 		const entry = SUBMODE_PROMPTS[submode];
 		sections[entry.section] = `${submodeDirective(submode)}\n\n${entry.prompt}`;

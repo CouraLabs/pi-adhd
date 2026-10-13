@@ -32,6 +32,7 @@ import { publishSpawnService, unpublishSpawnService } from "./service/service.ts
 import { SpawnServiceAdapter } from "./service/service-adapter.ts";
 import { detectEnv } from "./session/env.ts";
 import { isChildSession } from "../../../shared/child-sessions.ts";
+import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import { createExcludedPackagesStorage } from "./session/package-exclusions.ts";
 import { createProjectContextLoader } from "./session/project-context.ts";
 import { buildAgentPrompt } from "./session/prompts.ts";
@@ -45,6 +46,7 @@ import { SpawnSettingsHandler } from "./ui/spawn-settings.ts";
 import { loadSettings, updateSettings } from "../../../shared/settings.ts";
 
 export default function (pi: ExtensionAPI) {
+  markExtensionLoaded("spawn");
 
   const registry = new AgentTypeRegistry(
     () => loadCustomAgents(process.cwd()),

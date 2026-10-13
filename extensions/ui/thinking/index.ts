@@ -22,7 +22,8 @@ import {
 	type Theme,
 } from "@earendil-works/pi-coding-agent";
 import { Markdown, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
-import { updateSettings } from "../../shared/settings.ts";
+import { updateSettings } from "../../../shared/settings.ts";
+import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import { refreshThinkingConfig, thinkingConfig } from "./config.ts";
 import { DURATION_ENTRY_TYPE, restoreDurationEntries } from "./durations.ts";
 import { formatThoughtDuration, StrictThinkingPreview } from "./preview.ts";
@@ -88,6 +89,7 @@ function isVisibleContent(content: AssistantMessage["content"][number]): boolean
 }
 
 export default function thinkingExtension(pi: ExtensionAPI): void {
+	markExtensionLoaded("thinking");
 	const prototype = AssistantMessageComponent.prototype as PatchedPrototype;
 	const originalUpdateContent = prototype.updateContent;
 

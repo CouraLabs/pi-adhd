@@ -1,5 +1,5 @@
 import type { Component } from "@earendil-works/pi-tui";
-import { RULE } from "../../shared/glyphs.ts";
+import { RULE } from "../../../shared/glyphs.ts";
 
 /**
  * A component that draws a status-colored rule to the left of another component.
