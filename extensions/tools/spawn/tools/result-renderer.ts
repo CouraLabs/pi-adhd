@@ -7,7 +7,7 @@
  */
 
 import type { SpawnStatus } from "../lifecycle/spawn-state.ts";
-import { type TurnBudget, wrappedUpAtTurnLimit } from "../lifecycle/turn-limits.ts";
+import { wrappedUpAtTurnLimit } from "../lifecycle/turn-limits.ts";
 import type { AgentDetails, Theme } from "../ui/display.ts";
 import { formatMs } from "../ui/display.ts";
 import { GLYPHS, SPINNER } from "../ui/glyphs.ts";
@@ -103,18 +103,6 @@ export function renderFailed(details: AgentDetails, theme: Theme): string {
 }
 
 // ---- Shared helpers ----
-
-/**
- * The themed glyph for an outcome: its status glyph, drawn in the warning color
- * for a run that wrapped up at its turn limit.
- */
-export function renderOutcomeIcon(
-	outcome: { status: SpawnStatus; turnBudget?: TurnBudget },
-	theme: Theme,
-): string {
-	if (wrappedUpAtTurnLimit(outcome)) return renderWrappedUpIcon(theme);
-	return renderStatusIcon(outcome.status, theme);
-}
 
 /** A success glyph in the warning color: finished, with a turn-limit caveat. */
 function renderWrappedUpIcon(theme: Theme): string {

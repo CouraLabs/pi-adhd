@@ -20,8 +20,6 @@
  * (both exported by @earendil-works/pi-coding-agent), which match omp 1:1.
  */
 
-import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-
 export { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
 /** Small pure helpers shared with the rest of pi-adhd (`shared/util.ts`). */

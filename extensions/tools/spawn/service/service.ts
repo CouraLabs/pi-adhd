@@ -148,16 +148,6 @@ export interface SpawnService {
   registerWorkspaceProvider(provider: WorkspaceProvider): () => void;
 }
 
-/** Event channel constants for pi.events subscriptions. */
-export const SPAWN_EVENTS = {
-  STARTED: "spawn:started",
-  COMPLETED: "spawn:completed",
-  FAILED: "spawn:failed",
-  RESUMING: "spawn:resuming",
-  RESUMED: "spawn:resumed",
-  COMPACTED: "spawn:compacted",
-} as const;
-
 // ---- Accessor functions ----
 
 /** Publish the SpawnService on globalThis for cross-extension access. */

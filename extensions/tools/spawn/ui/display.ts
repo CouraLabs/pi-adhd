@@ -10,7 +10,6 @@ import type { AgentConfigLookup } from "../config/agent-types.ts";
 import type { TurnBudget } from "../lifecycle/turn-limits.ts";
 import type { AgentInvocation, SpawnType } from "../types.ts";
 import type { UsageTotals } from "../../../../shared/usage.ts";
-import { GLYPHS } from "./glyphs.ts";
 
 // ---- Types ----
 
@@ -52,9 +51,6 @@ export interface AgentDetails {
 
 // ---- Constants ----
 
-/** Statuses that indicate an error/non-success outcome (used for linger behavior and icon rendering). */
-export const ERROR_STATUSES = new Set(["error", "aborted", "stopped"]);
-
 /** Tool name → human-readable action for activity descriptions. */
 const TOOL_DISPLAY: Record<string, string> = {
   read: "reading",
@@ -73,43 +69,6 @@ export function formatTokens(count: number): string {
   if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M token`;
   if (count >= 1_000) return `${(count / 1_000).toFixed(1)}k token`;
   return `${count} token`;
-}
-
-/**
- * Token count with optional context-fill % and compaction-count annotations.
- * Thresholds for percent: <70% dim, 70–85% warning, ≥85% error.
- * Compaction count rendered as `⇊N` in dim (see `glyphs.ts`).
- *
- *   "12.3k token"               — no annotations
- *   "12.3k token (45%)"         — percent only
- *   "12.3k token (⇊2)"          — compactions only (e.g. right after compact)
- *   "12.3k token (45% · ⇊2)"    — both
- */
-export function formatSessionTokens(
-  tokens: number,
-  percent: number | null,
-  theme: Theme,
-  compactions = 0,
-): string {
-  const tokenStr = formatTokens(tokens);
-  const annot: string[] = [];
-  if (percent !== null) {
-    const color = percent >= 85 ? "error" : percent >= 70 ? "warning" : "dim";
-    annot.push(theme.fg(color, `${Math.round(percent)}%`));
-  }
-  if (compactions > 0) {
-    annot.push(theme.fg("dim", `${GLYPHS.compactions}${compactions}`));
-  }
-  if (annot.length === 0) return tokenStr;
-  const sep = theme.fg("dim", " · ");
-  return `${tokenStr} ${theme.fg("dim", "(")}${annot.join(sep)}${theme.fg("dim", ")")}`;
-}
-
-/** Format a turn budget as turns used against the ceiling: "↻5≤30", or "↻5" when unlimited. */
-export function formatTurnBudget(budget: TurnBudget): string {
-  return budget.maxTurns != null
-    ? `${GLYPHS.turns}${budget.used}≤${budget.maxTurns}`
-    : `${GLYPHS.turns}${budget.used}`;
 }
 
 /** Format milliseconds as human-readable duration. */

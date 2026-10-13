@@ -85,18 +85,6 @@ const RESUME_REFUSAL_CLAUSES: Record<Exclude<ResumeRefusal, "still-running">, st
 };
 
 /**
- * Standalone label form, e.g. "Wrapped up (after turn-budget warning)".
- *
- * An error reports its message instead: the status alone does not say what
- * went wrong.
- */
-export function renderStatusLabel(outcome: StatusOutcome): string {
-	if (outcome.status === "error") return `Error: ${outcome.error ?? "unknown"}`;
-	const meaning = statusMeaning(outcome);
-	return meaning ? `${meaning.label} (${meaning.detail})` : "Done";
-}
-
-/**
  * Parenthetical suffix form, e.g. " (wrapped up — after turn-budget warning)", for a
  * carrier appending to its own sentence. Empty when the status is unremarkable
  * or when the body already carries the explanation, as an error's does.

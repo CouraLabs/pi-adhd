@@ -1,4 +1,4 @@
-import type { Message, Usage } from "@earendil-works/pi-ai";
+import type { Usage } from "@earendil-works/pi-ai";
 import type { ExtensionContext, ThemeColor } from "@earendil-works/pi-coding-agent";
 import { formatTokens } from "./format.ts";
 import { CACHE_GLYPH, INPUT, OUTPUT } from "./glyphs.ts";
@@ -33,8 +33,6 @@ export function addUsage(totals: UsageTotals, usage: Usage | undefined): void {
 	totals.cacheWrite += usage.cacheWrite;
 	totals.cost += usage.cost?.total ?? 0;
 }
-
-let cachedUsage = emptyUsage();
 
 /** Walk a session branch and sum every usage record it contains. */
 export function computeUsage(entries: SessionEntries): UsageTotals {

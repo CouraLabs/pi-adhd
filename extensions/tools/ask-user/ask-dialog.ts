@@ -247,7 +247,7 @@ function renderAnswerSummary(theme: Theme, question: ExtensionAskDialogQuestion,
 	return selected[0] ?? theme.fg("warning", "unanswered");
 }
 
-function optionMarker(theme: Theme, question: ExtensionAskDialogQuestion, checked: boolean): string {
+function optionMarker(question: ExtensionAskDialogQuestion, checked: boolean): string {
 	if (question.multi) return checked ? SYMBOLS.checkbox.checked : SYMBOLS.checkbox.unchecked;
 	return checked ? SYMBOLS.radio.selected : SYMBOLS.radio.unselected;
 }
@@ -268,7 +268,7 @@ function renderRowLabel(
 		? state.selectedOptions.has(stripRecommendedSuffix(rowItem.label))
 		: isOther && state.customInput !== undefined;
 	const color = selected ? "accent" : checked ? "toolOutput" : "text";
-	const marker = `${theme.fg(checked ? "success" : "dim", optionMarker(theme, question, checked))} `;
+	const marker = `${theme.fg(checked ? "success" : "dim", optionMarker(question, checked))} `;
 	const cursor = selected ? theme.fg("accent", `${SYMBOLS.nav.cursor} `) : "  ";
 	const label = renderInlineMarkdown(rowItem.label, t => theme.fg(color, t));
 	const labelWidth = Math.max(1, width - visibleWidth(cursor) - visibleWidth(marker));
@@ -472,7 +472,7 @@ export class AskDialogComponent {
 		const bodyLines = this.#promptActive
 			? this.#renderEmbeddedPromptBody(innerWidth, bodyRows)
 			: this.#isSubmitTab()
-				? this.#renderSubmitBody(innerWidth, bodyRows)
+				? this.#renderSubmitBody(bodyRows)
 				: this.#renderQuestionBody(innerWidth, bodyRows);
 		const footer = this.#footerHintText(bodyLines.indicator);
 		return [
@@ -622,7 +622,6 @@ export class AskDialogComponent {
 	}
 
 	#footerHintText(indicator: string): string {
-		const theme = this.#theme;
 		const cancelKey = keyLabel(this.#keybindings.getKeys("tui.select.cancel"), "esc");
 		const cancel = `${cancelKey} cancel`;
 		if (this.#promptActive) {
@@ -972,7 +971,7 @@ export class AskDialogComponent {
 		return [];
 	}
 
-	#renderSubmitBody(width: number, rows: number): RenderedList {
+	#renderSubmitBody(rows: number): RenderedList {
 		const theme = this.#theme;
 		const allLines: string[] = [];
 		const unanswered = this.#unansweredCount();

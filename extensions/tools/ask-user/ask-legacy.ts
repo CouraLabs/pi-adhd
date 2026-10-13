@@ -30,7 +30,7 @@
 
 import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { ELLIPSIS, replaceTabs, SYMBOLS } from "./compat.ts";
+import { ELLIPSIS, SYMBOLS } from "./compat.ts";
 import type { AskOption, ExtensionUISelectItem } from "./types.ts";
 
 export type { AskOption };

@@ -188,11 +188,6 @@ export class SpawnManager {
   private readonly registry: SpawnTypeResolver;
   private _workspaceProvider?: WorkspaceProvider;
 
-  /** The registered workspace provider, or undefined when none is registered. */
-  get workspaceProvider(): WorkspaceProvider | undefined {
-    return this._workspaceProvider;
-  }
-
   constructor(options: SpawnManagerOptions) {
     this.createSpawnSession = options.createSpawnSession;
     this.baseCwd = options.baseCwd;

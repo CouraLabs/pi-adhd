@@ -32,15 +32,6 @@ export interface AgentConfigLookup {
 export class AgentTypeRegistry implements AgentConfigLookup {
   private agents = new Map<string, AgentConfig>();
 
-  /** The embedded default agent names. */
-  static readonly DEFAULT_AGENT_NAMES = [
-    "general-purpose",
-    "plan-reviewer",
-    "Arquitect",
-    "Code-Review",
-    "Explore",
-  ] as const;
-
   constructor(
     private readonly loadUserAgents: () => Map<string, AgentConfig>,
     private readonly loadAgentModels: () => Record<string, string> = () => ({}),
@@ -73,11 +64,6 @@ export class AgentTypeRegistry implements AgentConfigLookup {
     return [...this.agents.entries()]
       .filter(([_, config]) => config.enabled !== false)
       .map(([name]) => name);
-  }
-
-  /** Get all type names including disabled (for UI listing). */
-  getAllTypes(): string[] {
-    return [...this.agents.keys()];
   }
 
   /** Every config the registry knows, in insertion order (defaults first, then user agents). */
