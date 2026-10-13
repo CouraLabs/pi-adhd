@@ -10,8 +10,8 @@
  * The upstream extension patches `AssistantMessageComponent.prototype.updateContent`
  * — pi exposes no hook for the hidden-thinking body — and that internal API is
  * why the port keeps its touch surface in `types.ts`. The patch is installed on
- * `session_start` and removed on `session_shutdown`. Enable or disable it with
- * `/couralabs:enable thinking` and `/couralabs:disable thinking`.
+ * `session_start` and removed on `session_shutdown`. Toggle it with
+ * `/couralabs:toggle thinking`.
  */
 
 import type { AssistantMessage } from "@earendil-works/pi-ai";

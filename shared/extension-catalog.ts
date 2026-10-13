@@ -5,7 +5,7 @@
  * barrel (`extensions/index.ts`) reads it and calls only the listed factories,
  * so an extension missing from the array is never loaded. This module is the
  * single list of what may appear there: the settings schema uses it for its
- * default, and the `/couralabs:enable` and `/couralabs:disable` commands use it
+ * default, and the `/couralabs:toggle` command uses it
  * to resolve what the operator typed.
  *
  * Names are the registry names (`shared/extension-registry.ts`), which match
@@ -36,7 +36,10 @@ export const EXTENSION_CATALOG: readonly ExtensionCatalogEntry[] = [
 	{ name: "submodes", description: "Plan/Grill/Straight submodes" },
 	{ name: "ask-user", aliases: ["askUser", "ask"], description: "ask_user tool" },
 	{ name: "goal", description: "persistent goal loop" },
+	{ name: "job", description: "background terminal jobs" },
+	{ name: "pomodoro", description: "pomodoro work/break sessions" },
 	{ name: "spawn", description: "spawn tool and sub-agents" },
+	{ name: "timer", description: "/timer bell countdown" },
 	{ name: "todo", description: "phased todo tool" },
 	{ name: "web", description: "web fetch and search tools" },
 ];

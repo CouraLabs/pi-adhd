@@ -73,6 +73,15 @@ export const REVIEW_COMMENT = "💬";
 /** Marker on a plan line that carries a comment. */
 export const REVIEW_COMMENT_MARK = "●";
 
+// ── Timers ──────────────────────────────────────────────────────────────────
+
+/** Countdown glyph for an active `/timer` in the footer. */
+export const TIMER_GLYPH = "⏱";
+/** Pomodoro work-phase glyph. */
+export const POMODORO_WORK = "🍅";
+/** Pomodoro break-phase glyph. */
+export const POMODORO_BREAK = "☕";
+
 /** Thinking-level markers for the footer, keyed by pi's model thinking level. */
 export const THINKING_LEVELS = {
 	off: "",

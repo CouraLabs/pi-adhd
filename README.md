@@ -31,17 +31,20 @@ About 2 minutes.
 
 ## What you get
 
-Eleven extensions, grouped by job. Enable or disable any of them with `/couralabs:enable <extension>` and `/couralabs:disable <extension>`.
+Fourteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`, which opens a list where Enter flips the highlighted extension.
 
 | Job | Extension | What it adds |
 |---|---|---|
 | Shape the reply | `modes` | `/mode [pi\|work]`: swaps the system prompt, footer label, and editor border |
 | Shape the reply | `submodes` | `/plan` `/grill` `/straight`: read-only or guided working modes layered on top of the main mode |
-| See progress | `footer` | One-line themed status bar: mode, model, thinking, context, cost |
+| See progress | `footer` | One-line themed status bar: countdowns, mode, model, thinking, context, cost |
 | See progress | `todo` | Phased todo list persisted with the session |
 | See progress | `thinking` | Compact animated reasoning preview |
 | Drive the loop | `goal` | Persistent autonomous objective with budgets and continuation turns |
 | Drive the loop | `spawn` | In-process subagents that run foreground and return inline |
+| Run in background | `job` | `job` / `job-kill` / `job-read` / `job-list`: background shell commands kept in memory |
+| Pace yourself | `timer` | `/timer 25m`: multiple named countdowns, shown live in the footer |
+| Pace yourself | `pomodoro` | `/pomodoro`: work/break sessions on the same timer registry |
 | Ask, don't guess | `ask-user` | `ask` tool: tabbed multi-question dialog |
 | Input & output | `editor` | Closed prompt box with `❯` marker and cwd + git location |
 | Input & output | `messages` | Left status rule on tool calls |
@@ -54,13 +57,18 @@ Eleven extensions, grouped by job. Enable or disable any of them with `/couralab
 | `/mode [pi\|work]` | Switch the system prompt and agent voice |
 | `/submode [plan\|grill\|straight\|none]` | Enter or leave a submode |
 | `/plan` `/grill` `/straight` | Toggle one submode |
-| `/couralabs:enable <extension>` | Enable an extension and reload |
-| `/couralabs:disable <extension>` | Disable an extension and reload |
+| `/couralabs:toggle [extension]` | Open a list to toggle extensions, or flip one by name |
 | `/full-cwd [on\|off]` | Show the full working directory or only its last folder |
 | `/todo` | View or edit the todo list |
 | `/goal` `/guided-goal` | Toggle goal mode; have the agent interview you first |
 | `/spawn:settings` `/spawn:sessions` `/spawn:model` | Tune limits, open a transcript, set agent defaults |
 | `/web` | Pick web fetch and search providers |
+| `/job <name> <command...>` | Start a background job |
+| `/job-kill <jobId>` | Stop a job and forget it |
+| `/job-read <jobId> [lines]` | Read a job's latest output |
+| `/job-list` | List jobs held in memory |
+| `/timer <duration> [name]` | Start a countdown; `/timer list`, `stop`, `clear` manage them |
+| `/pomodoro [stop]` | Configure and start a pomodoro session, or stop it |
 
 ---
 
@@ -142,22 +150,22 @@ Wraps the prompt editor in a closed field drawn with terminal box characters (`�
  ╰──────────────────────────── pi-adhd ∙ ⌥ main +12 -3 ─╯
 ```
 
-The box border color follows the active agent mode (see [`modes`](#the-output-contract-modes)): the theme's `border` token in Work, the `accent` token in Pi, instead of tracking the thinking level. The bottom-border location segment shows the working directory followed by the git branch and the added/removed line counts from `git diff --numstat` (`+n` in success green, `-n` in error red). By default only the last folder of the working directory is shown; `/full-cwd` toggles the full path on and off (`/full-cwd on` / `/full-cwd off`), keeping the home directory itself rendered as `~` either way. Enable or disable the whole prompt field with `/couralabs:enable editor` and `/couralabs:disable editor`.
+The box border color follows the active agent mode (see [`modes`](#the-output-contract-modes)): the theme's `border` token in Work, the `accent` token in Pi, instead of tracking the thinking level. The bottom-border location segment shows the working directory followed by the git branch and the added/removed line counts from `git diff --numstat` (`+n` in success green, `-n` in error red). By default only the last folder of the working directory is shown; `/full-cwd` toggles the full path on and off (`/full-cwd on` / `/full-cwd off`), keeping the home directory itself rendered as `~` either way. Toggle the whole prompt field with `/couralabs:toggle editor`.
 
 ## Status bar: `footer`
 
-Replaces the built-in footer with a compact, theme-aware status bar. Enable or disable it with `/couralabs:enable footer` and `/couralabs:disable footer`.
+Replaces the built-in footer with a compact, theme-aware status bar. Toggle it with `/couralabs:toggle footer`.
 
 ```
-  ⛑ Work ∙ ⧉Plan ∙ anthropic/claude-sonnet-4 ∙ ▶▶ high ∙ [■■■■■■□□□□] 124k/200k (62%) ∙ ↑ 120k ∙ ↓ 8.4k ∙ ⭍ 87% ∙ $0.842
+  ⏱ 1h20m30s ∙ 🍅 Work 1/4 12m30s ∙ ⛑ Work ∙ ⧉Plan ∙ anthropic/claude-sonnet-4 ∙ ▶▶ high ∙ [■■■■■■□□□□] 124k/200k (62%) ∙ ↑ 120k ∙ ↓ 8.4k ∙ ⭍ 87% ∙ $0.842
   🎯 Goal 1.2M/2M · 4/10 tasks
 ```
 
-The stats line shows the active agent mode (see [`modes`](#the-output-contract-modes)) and, when one is active, the submode (see [`submodes`](#working-modes-submodes)) before the current provider/model, thinking level (colored along pi's thinking-level gradient), the context-window gauge, and cumulative input/output/cache/price usage. Statuses published by other extensions via `ctx.ui.setStatus()` (such as the `goal` loop) render on a separate line below. Extensions can also register a section that the footer draws last, below the statuses. Everything adapts to the active theme and degrades gracefully on narrow terminals.
+The stats line leads with any running countdowns: the plain timer that expires first (`⏱ 1h20m30s`) and the current pomodoro phase (`🍅 Work 1/4 12m30s`, or `☕ Break 4m`), each ticking down live. They are drawn before the active agent mode (see [`modes`](#the-output-contract-modes)) and, when one is active, the submode (see [`submodes`](#working-modes-submodes)), which precede the current provider/model, thinking level (colored along pi's thinking-level gradient), the context-window gauge, and cumulative input/output/cache/price usage. Statuses published by other extensions via `ctx.ui.setStatus()` (such as the `goal` loop) render on a separate line below. Extensions can also register a section that the footer draws last, below the statuses. Everything adapts to the active theme and degrades gracefully on narrow terminals.
 
 ## Tool calls: `messages`
 
-Restyles tool calls to share the pi-adhd look. Built-in tool calls drop their full background and instead show a heavy left rule (`│`) colored with the tool's status background token, so it shifts from pending to success/error exactly like the old shell. Enable or disable it with `/couralabs:enable messages` and `/couralabs:disable messages`.
+Restyles tool calls to share the pi-adhd look. Built-in tool calls drop their full background and instead show a heavy left rule (`│`) colored with the tool's status background token, so it shifts from pending to success/error exactly like the old shell. Toggle it with `/couralabs:toggle messages`.
 
 ```
 │ read src/index.ts
@@ -190,7 +198,7 @@ Reviewing the failing test · 4s (12 more lines, shift+tab to expand)
 
 When the run finishes the heading settles on `Thought for 4s`. Visible thinking is left exactly as pi renders it, so the thinking-visibility toggle still expands the full reasoning block. Durations render as `ms`, `s`, `m`, or `m Ns`.
 
-Compact mode activates when pi hides thinking (`hideThinkingBlock: true` in pi's settings, and `Shift+Tab` toggles it). The extension patches pi's internal assistant-message renderer — pi exposes no hook for the hidden-thinking body — so it may need updating after a pi upgrade. Enable or disable the extension with `/couralabs:enable thinking` and `/couralabs:disable thinking`.
+Compact mode activates when pi hides thinking (`hideThinkingBlock: true` in pi's settings, and `Shift+Tab` toggles it). The extension patches pi's internal assistant-message renderer — pi exposes no hook for the hidden-thinking body — so it may need updating after a pi upgrade. Toggle the extension with `/couralabs:toggle thinking`.
 
 ## Progress list: `todo`
 
@@ -220,7 +228,7 @@ The model spawns agents with the `spawn` tool (`spawn_type`, `prompt`, `descript
 
 Agent types are defined in `.agents/agents/<name>.md` (project) and `~/.agents/agents/<name>.md` (global) with YAML frontmatter for the prompt, model, thinking level, tools, and `max_turns`. The built-in `general-purpose`, `plan-reviewer`, `Arquitect`, `Code-Review`, and `Explore` types cover the common cases. Lifecycle events (`spawn:started`, `completed`, `failed`, `resuming`, `resumed`, `compacted`, `settings_loaded`, `settings_changed`) are emitted on `pi.events`, and a typed `SpawnService` is published for other extensions.
 
-Disable the whole extension with `/couralabs:disable spawn`; an already-running agent keeps running until it settles, and `/spawn:settings` and `/spawn:sessions` are unavailable in a spawned child session.
+Disable the whole extension with `/couralabs:toggle spawn`; an already-running agent keeps running until it settles, and `/spawn:settings` and `/spawn:sessions` are unavailable in a spawned child session.
 
 ## Web access: `web`
 
@@ -239,6 +247,81 @@ With the default `auto` provider, each call tries every configured provider in r
 Each provider names its env vars: `EXA_API_KEY`, `TAVILY_API_KEY`, `FIRECRAWL_API_KEY`, `JINA_API_KEY`, `OLLAMA_API_KEY` / `OLLAMA_URL`, `YDC_API_KEY`, `NINEROUTER_KEY` / `NINEROUTER_URL`, `SEARXNG_URL`, `PERPLEXITY_API_KEY`, `SERPER_API_KEY`, `BRAVE_API_KEY`, `GOOGLE_PSE_API_KEY` / `GOOGLE_PSE_CX`, `SEARCHAPI_API_KEY`, `LINKUP_API_KEY`, `XQUIK_API_KEY`, `ZAI_API_KEY`. With no keys set, `webfetch` still works through `curl`.
 
 `/web` walks both services: pick the provider from a list that marks unconfigured ones with the env vars they need.
+
+## Background jobs: `job`
+
+Four tools that run shell commands in the background and keep their output in memory, so the agent can start a dev server, a watch, or a long test and keep working while it runs:
+
+- `job({ name, command, timeout? })` — start a command and return its `jobId` immediately. `timeout` is in seconds; the job is killed when it elapses.
+- `job-read({ jobId, lines? })` — the last `lines` captured lines (default 50, max 500) and the job's current status.
+- `job-kill({ jobId })` — stop the job, close its process tree, and forget it.
+- `job-list({})` — every job held in memory, running and finished, with its status and latest line.
+
+```
+job({ name: "dev", command: "npm run dev" })
+  → job-1 "dev"
+job-read({ jobId: "job-1", lines: 20 })
+  → job-1 "dev" · running
+    VITE ready in 312 ms
+    ➜  Local: http://localhost:5173/
+```
+
+The registry is process memory only — nothing is persisted and nothing survives a reload. On `session_shutdown` every running job is killed, so a reload or session replacement never leaks a process. Captured output is bounded (2000 lines per job, 100 jobs) and `job-read` returns only the tail. Spawned child sessions exclude the job tools, so a child cannot own a second, invisible registry or leave a process behind.
+
+The same actions are available as commands, with the name first and the command after it:
+
+```
+/job dev npm run dev
+/job --timeout 300 build npm run build
+/job-list
+/job-read job-1 50
+/job-kill job-1
+```
+
+## Timers: `timer`
+
+`/timer <duration> [name]` starts a countdown. Several can run at once, and the footer shows the one that expires first, ticking down live. Durations combine `h`, `m`, and `s`, and the optional name is a quoted or bare label:
+
+```
+/timer 90s
+/timer 5m
+/timer 1h
+/timer 25m30s
+/timer 10s "Take a break"
+/timer 10s Take a break
+```
+
+The pattern must consume the whole argument, so `1h30` is rejected rather than guessed. When a timer elapses it rings the terminal bell, shows an in-app notification, and pushes a native OS notification (titled `Pi ADHD`, reading `Timer <name> finished.`, where an unnamed timer uses its duration). Three more forms manage the set:
+
+```
+/timer list            ⏱ 4m10s — alpha (timer-…-1)
+                       ⏱ 18m00s — Take a break (timer-…-2)
+/timer stop alpha      cancel one by name or id
+/timer clear           cancel every timer
+```
+
+Timers are session-scoped: they are created by the command and cancelled on `session_shutdown`. The bell is written to the terminal only when stdout is a TTY, so print and RPC modes are never corrupted by a stray control byte. The OS notification uses the platform's own notifier — `osascript` on macOS, `notify-send` on Linux, a PowerShell balloon tip on Windows — spawned detached so it never blocks or keeps pi alive, and skipped silently when the notifier is not installed. Set `timer.osNotification` to `false` to turn it off.
+
+## Pomodoro: `pomodoro`
+
+`/pomodoro` opens a config dialog — work, short break, long break, and rounds — then starts the first work phase:
+
+```
+── Pomodoro ────────────────────── 25m work · 5m break · 4 rounds ──
+→ Work        25m
+  Break       5m
+  Long break  15m
+  Rounds      4
+  Start       ▶
+
+  Length of one focus session.
+
+  Enter/Space to change · Esc to cancel
+```
+
+Each row cycles through presets with Enter/Space; the last row starts the session, and Esc cancels without saving. The chosen values are persisted under the `pomodoro` settings key, so the next dialog opens on the last-used configuration. On hosts without the TUI (RPC, print) the command starts straight away with the saved configuration.
+
+Every phase is a normal countdown in the same registry as `/timer`, so the footer shows it exactly the same way (`🍅 Work 1/4 12m30s`, `☕ Break 4m`). When a work phase ends the next break is scheduled automatically — a short break between rounds and a long break after the last one — and the session ends when the long break completes. Each boundary rings the bell and pushes an OS notification (`Work 1/4 finished — break time.`). `/pomodoro stop` cancels early; the pending phase is also cancelled on `session_shutdown`. The pomodoro shares the `timer.osNotification` switch.
 
 ## Configuration
 
@@ -261,7 +344,9 @@ It is organized as `{ feature: { option: value } }`, plus a top-level `extension
     "submodes",
     "ask-user",
     "goal",
+    "job",
     "spawn",
+    "timer",
     "todo",
     "web"
   ],
@@ -282,6 +367,8 @@ It is organized as `{ feature: { option: value } }`, plus a top-level `extension
   },
   "modes": { "current": "work" },
   "submodes": { "current": "none" },
+  "timer": { "osNotification": true },
+  "pomodoro": { "workMinutes": 25, "breakMinutes": 5, "longBreakMinutes": 15, "rounds": 4 },
   "web": {
     "fetch": { "provider": "auto", "nineRouterModel": "exa" },
     "search": { "provider": "auto", "nineRouterModel": "exa" }
@@ -291,7 +378,7 @@ It is organized as `{ feature: { option: value } }`, plus a top-level `extension
 
 | Feature | Option | Default | Description |
 |---|---|---|---|
-| `extensions` | — | every extension | Extensions the barrel loads; anything absent is not loaded (edit with `/couralabs:enable` / `/couralabs:disable`) |
+| `extensions` | — | every extension | Extensions the barrel loads; anything absent is not loaded (edit with `/couralabs:toggle`) |
 | `editor` | `fullCwd` | `false` | Show the full working directory instead of only its last folder (toggle with `/full-cwd`) |
 | `thinking` | `useSummaryTitlesAsThinkingTitle` | `true` | Use the latest OpenAI reasoning-summary heading as the live title |
 | `thinking` | `previewLines` | `5` | Reasoning-preview lines retained; `0` hides the preview |
@@ -306,12 +393,30 @@ It is organized as `{ feature: { option: value } }`, plus a top-level `extension
 | `spawn` | `agentThinking` | `{}` | Per-built-in-agent thinking override, set by `/spawn:model` |
 | `modes` | `current` | `"work"` | Active agent mode, restored on session start (toggle with `/mode`) |
 | `submodes` | `current` | `"none"` | Active submode, restored on session start (toggle with `/submode`) |
+| `timer` | `osNotification` | `true` | Push a native OS notification when a timer or pomodoro phase fires, in addition to the bell |
+| `pomodoro` | `workMinutes` | `25` | Length of a work session |
+| `pomodoro` | `breakMinutes` | `5` | Length of a short break |
+| `pomodoro` | `longBreakMinutes` | `15` | Length of the long break after the last round |
+| `pomodoro` | `rounds` | `4` | Work sessions before the long break |
 | `web` | `fetch.provider` | `"auto"` | Default web fetch provider; `auto` tries every configured one in order |
 | `web` | `fetch.nineRouterModel` | `"exa"` | Model the 9Router aggregator fetches with |
 | `web` | `search.provider` | `"auto"` | Default web search provider; `auto` tries every configured one in order |
 | `web` | `search.nineRouterModel` | `"exa"` | Model the 9Router aggregator searches with |
 
-The `/couralabs:enable` and `/couralabs:disable` commands rewrite the `extensions` array and reload, so the choice survives reloads and new sessions. Missing keys fall back to the defaults and unknown keys are preserved, so the file can be edited by hand. `/spawn:settings` edits the operational `spawn` options (numeric values open an input prompt).
+The `/couralabs:toggle` command opens an interactive list of every extension with its current state. Move with `↑↓` (or `j`/`k`) and press Enter to flip the highlighted extension; `Esc` closes. Changes are persisted as you toggle and the extension set reloads once the list closes, so the choice survives reloads and new sessions. Passing a name — `/couralabs:toggle editor` — skips the list and flips that extension directly, which is also the only form available when the session has no dialog UI. Missing keys fall back to the defaults and unknown keys are preserved, so the file can be edited by hand. `/spawn:settings` edits the operational `spawn` options (numeric values open an input prompt).
+
+```
+── pi-adhd extensions ───────────────────── 11 on · 3 off ──
+❯ [x] editor    pi-adhd prompt field
+  [x] footer    pi-adhd footer / stats line
+  [x] messages  pi-adhd tool-call message UI
+  [ ] job       background terminal jobs
+  [ ] pomodoro  pomodoro work/break sessions
+  [ ] timer     /timer bell countdown
+  [x] todo      phased todo tool
+  [x] web       web fetch and search tools
+── ↑↓ move · Enter toggle · Esc close ──────────────────────
+```
 
 ## Themes
 
@@ -352,6 +457,11 @@ pi --use-theme synthwave84
 | Prompt box drawing | `extensions/ui/editor/field-editor.ts` |
 | Working-message phrases | `extensions/ui/editor/phrases.ts` |
 | Todo widget rendering | `extensions/tools/todo/render.ts` |
+| Background job limits and capture | `extensions/tools/job/manager.ts` |
+| Timer duration syntax | `extensions/tools/timer/parse.ts` |
+| Pomodoro phases and chaining | `extensions/tools/pomodoro/index.ts` |
+| Timer/pomodoro registry and footer feed | `shared/timers.ts` |
+| OS notification | `shared/os-notify.ts` |
 | Web providers | `extensions/tools/web/providers.ts`, `search-providers.ts` |
 | Settings schema and defaults | `shared/settings.ts` |
 | Shared UI glyphs | `shared/glyphs.ts` |
@@ -414,6 +524,11 @@ pi-adhd/
 │       │   ├── state.ts
 │       │   ├── format.ts
 │       │   └── prompts/         # static .md prompt assets
+│       ├── job/
+│       │   ├── index.ts         # extension factory: manager + tools + commands
+│       │   ├── manager.ts       # in-memory job registry (spawn, capture, kill)
+│       │   ├── tools.ts         # `job` / `job-kill` / `job-read` / `job-list`
+│       │   └── commands.ts      # `/job` `/job-kill` `/job-read` `/job-list`
 │       ├── spawn/               # vendored from @gotgenes/pi-subagents
 │       │   ├── index.ts         # extension factory: wiring + tool/command registration
 │       │   ├── runtime.ts       # mutable extension state
@@ -429,6 +544,12 @@ pi-adhd/
 │       │   ├── session/         # child session assembly
 │       │   ├── tools/           # the spawn tool
 │       │   └── ui/              # settings, session navigator
+│       ├── pomodoro/
+│       │   ├── index.ts         # extension factory: `/pomodoro` + phase state machine
+│       │   └── pane.ts          # the config dialog (SettingsList)
+│       ├── timer/
+│       │   ├── index.ts         # extension factory: `/timer` command
+│       │   └── parse.ts         # duration parsing
 │       ├── web/
 │       │   ├── index.ts         # extension factory: providers + tools + /web
 │       │   ├── webfetch-tool.ts # the `webfetch` tool (inline result preview)
@@ -456,19 +577,22 @@ pi-adhd/
 ├── shared/
 │   ├── child-sessions.ts    # spawned child-session registry
 │   ├── extension-catalog.ts # toggleable extensions and their aliases
-│   ├── extension-control.ts # `/couralabs:enable` / `disable` + enabled set
+│   ├── extension-control.ts # `/couralabs:toggle` + enabled set
 │   ├── extension-registry.ts # which optional pi-adhd extensions are loaded
+│   ├── extension-toggle.ts  # the `/couralabs:toggle` list dialog
 │   ├── format.ts            # compact token counts + cwd formatting
 │   ├── footer-sections.ts   # extra footer blocks registered by extensions
 │   ├── glyphs.ts            # shared UI symbols (`❯`, `│`, …)
 │   ├── interlock.ts         # goal ↔ submode mutual exclusion
 │   ├── labeled-rule.ts      # full-width rule with embedded labels
 │   ├── modes.ts             # Pi/Work agent-mode state
+│   ├── os-notify.ts         # native OS notifications + terminal bell
 │   ├── prompt-sections.ts   # system-prompt section tags shared across extensions
 │   ├── settings.ts          # `~/.pi/couralabs/settings.json` load/save
 │   ├── spawn-service.ts     # cross-extension spawn service slot
 │   ├── store.ts             # process-global value with change notifications
 │   ├── submodes.ts          # Plan/Grill/Straight submode state
+│   ├── timers.ts            # shared countdown registry + scheduler
 │   ├── tui-mode.ts          # TUI render-mode probe
 │   ├── usage.ts             # cumulative token/cost accounting
 │   └── util.ts              # small pure helpers
@@ -476,13 +600,14 @@ pi-adhd/
 └── package.json
 ```
 
-Each extension is a directory whose `index.ts` exports the default factory. Helper modules sit beside it and are imported with explicit `.ts` extensions. Cross-extension helpers live in `shared/`. Extensions are grouped by kind — `extensions/ui/` (editor, footer, messages, thinking), `extensions/agent/` (modes, submodes), and `extensions/tools/` (ask-user, goal, spawn, todo, web) — and every `index.ts` is loadable on its own. The `pi.extensions` manifest in `package.json` points at `extensions/index.ts`, a barrel that reads the enabled set from `~/.pi/couralabs/settings.json` and calls only those factories (ui → agent → tools), so the package loads from a single entry and helper modules are never loaded as extensions on their own. `/couralabs:enable` and `/couralabs:disable` edit that settings array and reload.
+Each extension is a directory whose `index.ts` exports the default factory. Helper modules sit beside it and are imported with explicit `.ts` extensions. Cross-extension helpers live in `shared/`. Extensions are grouped by kind — `extensions/ui/` (editor, footer, messages, thinking), `extensions/agent/` (modes, submodes), and `extensions/tools/` (ask-user, goal, job, pomodoro, spawn, timer, todo, web) — and every `index.ts` is loadable on its own. The `pi.extensions` manifest in `package.json` points at `extensions/index.ts`, a barrel that reads the enabled set from `~/.pi/couralabs/settings.json` and calls only those factories (ui → agent → tools), so the package loads from a single entry and helper modules are never loaded as extensions on their own. `/couralabs:toggle` edits that settings array and reloads.
 
 ### Loading extensions individually
 
 Every extension can be loaded alone (`pi -e extensions/tools/todo/index.ts`), and it degrades gracefully when an extension it cooperates with is absent:
 
 - The `footer` shows spawn cost only when the spawn service is published, and a submode label only when the submodes store is non-empty.
+- The `footer`'s countdown segment reads the shared timer registry, so it appears only when the `timer` or `pomodoro` extension is loaded; either one works with the footer absent.
 - `goal` reads `todo_updated` events and `todo-phases` entries when `todo` is loaded, and runs without task progress otherwise.
 - The `goal` ↔ submode interlock ignores the persisted `submodes.current` unless the submodes extension is loaded (see `shared/extension-registry.ts`), so a value left by an earlier install cannot block goal mode.
 - `submodes` filters its tool whitelist against the tools actually registered, so `spawn`, `ask`, and `todo` simply drop out when their extensions are absent.

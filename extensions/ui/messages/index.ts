@@ -3,8 +3,8 @@
  *
  * Built-in tool calls drop their full background for a heavy left rule (`│`)
  * colored with the tool's semantic status color as a bright pastel. Rendering
- * only: no tool behavior or model context changes. Enable or disable it with
- * `/couralabs:enable messages` and `/couralabs:disable messages`.
+ * only: no tool behavior or model context changes. Toggle it with
+ * `/couralabs:toggle messages`.
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";

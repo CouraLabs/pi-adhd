@@ -75,6 +75,24 @@ export interface SubmodesConfig {
 	current: Submode;
 }
 
+/** Configuration for the `timer` extension's `/timer` command. */
+export interface TimerConfig {
+	/** Push a native OS notification when a timer fires, in addition to the terminal bell. */
+	osNotification: boolean;
+}
+
+/** Configuration for the `pomodoro` extension's `/pomodoro` command. */
+export interface PomodoroConfig {
+	/** Length of a work session, in minutes. */
+	workMinutes: number;
+	/** Length of a short break, in minutes. */
+	breakMinutes: number;
+	/** Length of the long break after the last work session, in minutes. */
+	longBreakMinutes: number;
+	/** Work sessions before the long break. */
+	rounds: number;
+}
+
 /** Provider selection for one `web` service (fetch or search). */
 export interface WebProviderConfig {
 	/** Provider id, or "auto" to try every configured provider in order. */
@@ -98,6 +116,8 @@ export interface CouralabsSettings {
 	spawn: SpawnConfig;
 	modes: ModesConfig;
 	submodes: SubmodesConfig;
+	timer: TimerConfig;
+	pomodoro: PomodoroConfig;
 	web: WebConfigSection;
 }
 
@@ -109,6 +129,8 @@ export interface SettingsPatch {
 	spawn?: Partial<SpawnConfig>;
 	modes?: Partial<ModesConfig>;
 	submodes?: Partial<SubmodesConfig>;
+	timer?: Partial<TimerConfig>;
+	pomodoro?: Partial<PomodoroConfig>;
 	web?: {
 		fetch?: Partial<WebProviderConfig>;
 		search?: Partial<WebProviderConfig>;
@@ -138,6 +160,15 @@ export const DEFAULT_SETTINGS: CouralabsSettings = {
 	},
 	submodes: {
 		current: DEFAULT_SUBMODE,
+	},
+	timer: {
+		osNotification: true,
+	},
+	pomodoro: {
+		workMinutes: 25,
+		breakMinutes: 5,
+		longBreakMinutes: 15,
+		rounds: 4,
 	},
 	web: {
 		fetch: { provider: "auto", nineRouterModel: "exa" },

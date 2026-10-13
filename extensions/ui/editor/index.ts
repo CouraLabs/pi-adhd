@@ -8,8 +8,7 @@
  * rather than the thinking level. The "Working" label is replaced with a random
  * short joke phrase chosen fresh on every turn.
  *
- * Enable or disable it with `/couralabs:enable editor` and
- * `/couralabs:disable editor`.
+ * Toggle it with `/couralabs:toggle editor`.
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";

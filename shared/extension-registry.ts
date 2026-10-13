@@ -23,11 +23,14 @@ export type ExtensionName =
 	| "editor"
 	| "footer"
 	| "goal"
+	| "job"
 	| "messages"
 	| "modes"
+	| "pomodoro"
 	| "spawn"
 	| "submodes"
 	| "thinking"
+	| "timer"
 	| "todo"
 	| "web";
 
@@ -52,7 +55,7 @@ export function isExtensionLoaded(name: ExtensionName): boolean {
 
 /**
  * Forget every marked extension. The barrel calls this before it loads the
- * enabled set so a `/reload` after `/couralabs:enable` or `/couralabs:disable`
+ * enabled set so a `/reload` after `/couralabs:toggle`
  * does not keep reporting an extension that is no longer loaded.
  */
 export function resetExtensionRegistry(): void {

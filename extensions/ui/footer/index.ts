@@ -5,8 +5,7 @@
  * provider/model, thinking level, context-window gauge, and cumulative
  * token/cost usage. Statuses published by other extensions render on their own
  * line below, and any sections they register (see `shared/footer-sections.ts`)
- * render last of all. Enable or disable it with `/couralabs:enable footer` and
- * `/couralabs:disable footer`.
+ * render last of all. Toggle it with `/couralabs:toggle footer`.
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -16,6 +15,7 @@ import { getFooterSections, subscribeFooterSections } from "../../../shared/foot
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import { getAgentMode, subscribeAgentMode } from "../../../shared/modes.ts";
 import { getSubmode, subscribeSubmode } from "../../../shared/submodes.ts";
+import { getTimers, subscribeTimers } from "../../../shared/timers.ts";
 import { computeUsage, emptyUsage, type UsageTotals } from "../../../shared/usage.ts";
 import { renderFooter } from "./render.ts";
 
@@ -28,8 +28,23 @@ export default function (pi: ExtensionAPI) {
 	let unsubscribeMode: (() => void) | undefined;
 	let unsubscribeSubmode: (() => void) | undefined;
 	let unsubscribeSections: (() => void) | undefined;
+	let unsubscribeTimers: (() => void) | undefined;
+	let timerTick: NodeJS.Timeout | undefined;
 
 	const requestRender = () => tui?.requestRender();
+
+	/** Run a 1s render tick only while a countdown is active and the footer is mounted. */
+	const syncTimerTick = () => {
+		if (!tui) return;
+		const active = getTimers().length > 0;
+		if (active && !timerTick) {
+			timerTick = setInterval(() => requestRender(), 1000);
+			timerTick.unref?.();
+		} else if (!active && timerTick) {
+			clearInterval(timerTick);
+			timerTick = undefined;
+		}
+	};
 
 	/** Recompute cumulative usage only when the session branch or model changes. */
 	const usageTotals = (): UsageTotals => {
@@ -82,6 +97,7 @@ export default function (pi: ExtensionAPI) {
 							contextUsage: ctx?.getContextUsage(),
 							usage: usageTotals(),
 							spawnCost: spawnCost(),
+							timers: getTimers(),
 							statuses: footerData.getExtensionStatuses(),
 							sections,
 						},
@@ -94,6 +110,7 @@ export default function (pi: ExtensionAPI) {
 		unsubscribeSections?.();
 		unsubscribeSections = subscribeFooterSections(() => requestRender());
 		requestRender();
+		syncTimerTick();
 	};
 
 	pi.on("session_start", (_event, context) => {
@@ -105,6 +122,12 @@ export default function (pi: ExtensionAPI) {
 		unsubscribeMode = subscribeAgentMode(() => requestRender());
 		unsubscribeSubmode?.();
 		unsubscribeSubmode = subscribeSubmode(() => requestRender());
+		unsubscribeTimers?.();
+		unsubscribeTimers = subscribeTimers(() => {
+			syncTimerTick();
+			requestRender();
+		});
+		syncTimerTick();
 
 		if (context.mode !== "tui") return;
 		installFooter(context);
@@ -125,6 +148,12 @@ export default function (pi: ExtensionAPI) {
 		unsubscribeSubmode = undefined;
 		unsubscribeSections?.();
 		unsubscribeSections = undefined;
+		unsubscribeTimers?.();
+		unsubscribeTimers = undefined;
+		if (timerTick) {
+			clearInterval(timerTick);
+			timerTick = undefined;
+		}
 		tui = undefined;
 	});
 }

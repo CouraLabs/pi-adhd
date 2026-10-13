@@ -8,9 +8,22 @@
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { mixColors, truncateToWidth } from "@earendil-works/pi-tui";
 import { formatTokens } from "../../../shared/format.ts";
-import { CONTEXT_CLOSE, CONTEXT_EMPTY, CONTEXT_FILLED, CONTEXT_HALF, CONTEXT_OPEN, ELLIPSIS, SEPARATOR, THINKING_LEVELS } from "../../../shared/glyphs.ts";
+import {
+	CONTEXT_CLOSE,
+	CONTEXT_EMPTY,
+	CONTEXT_FILLED,
+	CONTEXT_HALF,
+	CONTEXT_OPEN,
+	ELLIPSIS,
+	POMODORO_BREAK,
+	POMODORO_WORK,
+	SEPARATOR,
+	THINKING_LEVELS,
+	TIMER_GLYPH,
+} from "../../../shared/glyphs.ts";
 import { AGENT_MODE_LABEL, agentModeColor, type AgentMode } from "../../../shared/modes.ts";
 import { SUBMODE_LABEL, submodeColor, type Submode } from "../../../shared/submodes.ts";
+import { earliestTimer, formatCountdown, remainingMs, type ActiveTimer } from "../../../shared/timers.ts";
 import { usageCost, usageGroup, type UsageTotals } from "../../../shared/usage.ts";
 
 type ModelInfo = NonNullable<ExtensionContext["model"]>;
@@ -29,6 +42,8 @@ export interface FooterState {
 	usage: UsageTotals;
 	/** Cumulative cost of the session's spawn runs, shown parenthesized after the session cost. */
 	spawnCost: number;
+	/** Running countdowns, shown before the agent mode; the earliest timer wins. */
+	timers: readonly ActiveTimer[];
 	statuses: ReadonlyMap<string, string>;
 	/**
 	 * Pre-rendered lines contributed by other extensions (see
@@ -75,12 +90,32 @@ function joinSegments(parts: string[], theme: Theme): string {
 	return parts.filter((part) => part.length > 0).join(theme.fg("dim", SEPARATOR));
 }
 
+/**
+ * The countdown segments drawn before the agent mode: the earliest plain timer
+ * and, when one is running, the current pomodoro phase. Both read the shared
+ * timer registry and recompute on every frame, so they tick down live.
+ */
+function timerSegments(theme: Theme, timers: readonly ActiveTimer[]): string[] {
+	const parts: string[] = [];
+	const timer = earliestTimer(timers, "timer");
+	if (timer) parts.push(theme.fg("accent", `${TIMER_GLYPH} ${formatCountdown(remainingMs(timer))}`));
+
+	const pomodoro = earliestTimer(timers, "pomodoro");
+	if (pomodoro) {
+		const work = pomodoro.phase === "work";
+		const glyph = work ? POMODORO_WORK : POMODORO_BREAK;
+		const label = `${glyph} ${pomodoro.name} ${formatCountdown(remainingMs(pomodoro))}`;
+		parts.push(theme.fg(work ? "warning" : "success", label));
+	}
+	return parts;
+}
+
 export function renderFooter(state: FooterState, width: number, theme: Theme): string[] {
 	if (width <= 0) return [];
 	const lines: string[] = [];
 
-	// ── One line: agent mode, model, thinking, context, and cumulative usage ──
-	const parts: string[] = [];
+	// ── One line: timers, agent mode, model, thinking, context, and cumulative usage ──
+	const parts: string[] = timerSegments(theme, state.timers);
 	const modeLabel = theme.fg(agentModeColor(state.mode), AGENT_MODE_LABEL[state.mode]);
 	parts.push(
 		state.submode === "none"

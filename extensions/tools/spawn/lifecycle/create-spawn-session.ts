@@ -52,8 +52,13 @@ import type {
  * list is the parent's plan. A custom agent that explicitly listed `todo` in
  * its `tools:` loses it in child sessions; that is the intended invariant (one
  * authoritative list per visible session).
+ *
+ * The `job` tools join for the same reason, plus process safety: a child's
+ * in-memory job registry is invisible to the parent's `job-list`, and a
+ * background process started in a child can outlive the child's teardown. The
+ * parent starts and owns background jobs.
  */
-const EXCLUDED_TOOL_NAMES = ["spawn", "todo"];
+const EXCLUDED_TOOL_NAMES = ["spawn", "todo", "job", "job-kill", "job-read", "job-list"];
 
 // ── IO boundary ───────────────────────────────────────────────────────────────
 

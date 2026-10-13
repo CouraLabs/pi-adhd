@@ -6,8 +6,8 @@
  * path so the package can be loaded from a single manifest entry. It reads the
  * top-level `extensions` array in `~/.pi/couralabs/settings.json` and calls
  * only the listed factories, so an extension absent from the array is never
- * loaded. `/couralabs:enable <extension>` and `/couralabs:disable <extension>`
- * edit that array and reload.
+ * loaded. `/couralabs:toggle <extension>` flips an extension in that array and
+ * reloads the set.
  *
  * Load order is deliberate and matches the previous manifest glob order:
  *   ui → agent → tools
@@ -32,7 +32,10 @@ import submodes from "./agent/submodes/index.ts";
 
 import askUser from "./tools/ask-user/index.ts";
 import goal from "./tools/goal/index.ts";
+import job from "./tools/job/index.ts";
+import pomodoro from "./tools/pomodoro/index.ts";
 import spawn from "./tools/spawn/index.ts";
+import timer from "./tools/timer/index.ts";
 import todo from "./tools/todo/index.ts";
 import web from "./tools/web/index.ts";
 
@@ -56,10 +59,13 @@ export default function piAdhd(pi: ExtensionAPI): void {
 	if (enabled.has("modes")) modes(pi);
 	if (enabled.has("submodes")) submodes(pi);
 
-	// Tools: ask, goal, spawn, todo, web.
+	// Tools: ask, goal, job, pomodoro, spawn, timer, todo, web.
 	if (enabled.has("ask-user")) askUser(pi);
 	if (enabled.has("goal")) goal(pi);
+	if (enabled.has("job")) job(pi);
+	if (enabled.has("pomodoro")) pomodoro(pi);
 	if (enabled.has("spawn")) spawn(pi);
+	if (enabled.has("timer")) timer(pi);
 	if (enabled.has("todo")) todo(pi);
 	if (enabled.has("web")) web(pi);
 }
