@@ -17,8 +17,6 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname, join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { DEFAULT_EXTENSION_NAMES } from "./extension-catalog.ts";
-import { DEFAULT_AGENT_MODE, type AgentMode } from "./modes.ts";
-import { DEFAULT_SUBMODE, type Submode } from "./submodes.ts";
 
 /** Prompt-inheritance strategy a child session adopts for a provider. */
 export type PromptInheritance = "full" | "portable";
@@ -65,18 +63,6 @@ export interface ThinkingConfig {
 	animationIntervalMs: number;
 }
 
-/** Configuration for the `modes` extension: the active Pi/Work agent mode. */
-export interface ModesConfig {
-	/** Mode restored at session start; switched at runtime with /mode. */
-	current: AgentMode;
-}
-
-/** Configuration for the `submodes` extension: the active Plan/Grill submode. */
-export interface SubmodesConfig {
-	/** Submode restored at session start; set at runtime with `/submode`. */
-	current: Submode;
-}
-
 /** Configuration for the `timer` extension's `/timer` command. */
 export interface TimerConfig {
 	/** Push a native OS notification when a timer fires, in addition to the terminal bell. */
@@ -116,8 +102,6 @@ export interface CouralabsSettings {
 	editor: EditorConfig;
 	thinking: ThinkingConfig;
 	spawn: SpawnConfig;
-	modes: ModesConfig;
-	submodes: SubmodesConfig;
 	timer: TimerConfig;
 	pomodoro: PomodoroConfig;
 	web: WebConfigSection;
@@ -129,8 +113,6 @@ export interface SettingsPatch {
 	editor?: { fullCwd?: boolean; loadingPhrases?: boolean };
 	thinking?: Partial<ThinkingConfig>;
 	spawn?: Partial<SpawnConfig>;
-	modes?: Partial<ModesConfig>;
-	submodes?: Partial<SubmodesConfig>;
 	timer?: Partial<TimerConfig>;
 	pomodoro?: Partial<PomodoroConfig>;
 	web?: {
@@ -156,12 +138,6 @@ export const DEFAULT_SETTINGS: CouralabsSettings = {
 		promptInheritance: {},
 		agentModels: {},
 		agentThinking: {},
-	},
-	modes: {
-		current: DEFAULT_AGENT_MODE,
-	},
-	submodes: {
-		current: DEFAULT_SUBMODE,
 	},
 	timer: {
 		osNotification: true,

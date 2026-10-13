@@ -19,6 +19,12 @@
  * The state lives on `globalThis`, keyed by a registered symbol, so every
  * pi-adhd extension instance reads and mutates the same value. Extensions
  * subscribe to re-render when the submode changes.
+ *
+ * The value is session-scoped, not global configuration: the `submodes`
+ * extension snapshots it into a `submode-state` session entry on every switch
+ * and restores the branch-local snapshot on `session_start`. Two pi instances
+ * (or two sessions in one process) therefore never share a submode — the store
+ * only mirrors the active session for the in-process extensions that read it.
  */
 
 import type { ThemeColor } from "@earendil-works/pi-coding-agent";
@@ -133,6 +139,26 @@ export function setSubmode(submode: Submode): void {
 /** Subscribe to submode changes; returns an unsubscribe function. */
 export function subscribeSubmode(listener: (submode: Submode) => void): () => void {
 	return store.subscribe(listener);
+}
+
+/** Session entry customType for submode snapshots (see pi.appendEntry). */
+export const SUBMODE_STATE_ENTRY_TYPE = "submode-state";
+
+/**
+ * Reconstruct the submode from session entries: the latest valid
+ * `submode-state` snapshot reachable on the current branch wins; malformed
+ * entries are skipped so a corrupt entry can never break startup. Returns
+ * undefined when the branch carries no snapshot, so the caller applies its own
+ * default.
+ */
+export function restoreSubmodeFromEntries(entries: readonly unknown[]): Submode | undefined {
+	for (let i = entries.length - 1; i >= 0; i--) {
+		const entry = entries[i] as { type?: string; customType?: string; data?: unknown } | undefined;
+		if (!entry || entry.type !== "custom" || entry.customType !== SUBMODE_STATE_ENTRY_TYPE) continue;
+		const data = entry.data as { submode?: unknown } | undefined;
+		if (isSubmode(data?.submode)) return data.submode;
+	}
+	return undefined;
 }
 
 /** Footer label color: Plan uses the success token, Grill uses warning, and

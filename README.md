@@ -79,7 +79,7 @@ Two agent modes, switched with `/mode [pi|work]`:
 - **⛑ Work** (default) replaces pi's default system prompt with the pi-adhd [Work rules](extensions/agent/modes/prompts/work.md). The rules are the ADHD contract: lead with the next action, number multi-step tasks, restate state every turn, cap lists, no preamble or closers. Work mode also makes the agent an orchestrator — delegate to `spawn` to keep the parent context small, use `ask` before inferring anything unknown, and drive multi-step work with `todo`.
 - **π Pi** leaves pi's default system prompt (or a user `SYSTEM.md`) untouched.
 
-The replacement uses pi's `customPrompt` slot, the same mechanism as `SYSTEM.md`, so tool declarations still reach the model while the default preamble is swapped. The active mode shows first in the footer (`π Pi` in the accent color, `⛑ Work` in the default foreground), the prompt field recolors its border (accent for Pi, default border for Work), and the choice persists in the pi-adhd settings file and restores on the next session.
+The replacement uses pi's `customPrompt` slot, the same mechanism as `SYSTEM.md`, so tool declarations still reach the model while the default preamble is swapped. The active mode shows first in the footer (`π Pi` in the accent color, `⛑ Work` in the default foreground), the prompt field recolors its border (accent for Pi, default border for Work), and the choice is recorded in the session and restored when that session is resumed. Modes are session-scoped: two pi instances (or two sessions in one process) each carry their own mode, and switching in one never changes another.
 
 The full Work prompt also covers orchestration: delegate to spawned agents, ask before inferring, and track with `todo`.
 
@@ -88,7 +88,7 @@ The full Work prompt also covers orchestration: delegate to spawned agents, ask 
 Three temporary submodes layered on top of the main mode. Unlike `modes`, which *replaces* the system prompt, a submode **appends** named prompt sections and sets the active tools to the submode's whitelist. Plan and Grill are read-only plus the spawn tools; **Straight keeps the full toolset**, because it is the only submode that may change code.
 
 1. Enter with `/submode plan`, `/submode grill`, or `/submode straight` (or toggle with `/plan`, `/grill`, `/straight`).
-2. Read the active submode in the footer next to the mode (`⛑ Work ∙ ⧉Plan`). It persists and restores on the next session.
+2. Read the active submode in the footer next to the mode (`⛑ Work ∙ ⧉Plan`). Like the mode, it is recorded in the session and restored when that session is resumed, never shared with another pi instance.
 3. Leave or switch with the `submode-exit` tool (`mode: "exit" | "plan" | "grill" | "straight"`); the current run ends so the target prompt and tools take effect next turn.
 
 The mode prompt and the submode prompt never bleed into each other. The mode replaces pi's preamble through the `customPrompt` slot, and the submode appends its own named section, so the effective system prompt is **Mode Prompt + Submode Prompt** with pi's cwd/context/skills sections still appended. Pi rebuilds the option object from its own base on every run, so a mode swap never leaves a stale submode section behind and a submode never rewrites the mode prompt.
@@ -365,8 +365,6 @@ It is organized as `{ feature: { option: value } }`, plus a top-level `extension
     "promptInheritance": {},
     "agentModels": {}
   },
-  "modes": { "current": "work" },
-  "submodes": { "current": "none" },
   "timer": { "osNotification": true },
   "pomodoro": { "workMinutes": 25, "breakMinutes": 5, "longBreakMinutes": 15, "rounds": 4 },
   "web": {
@@ -392,8 +390,6 @@ It is organized as `{ feature: { option: value } }`, plus a top-level `extension
 | `spawn` | `promptInheritance` | `{}` | Per-provider prompt strategy (`full` or `portable`) |
 | `spawn` | `agentModels` | `{}` | Per-built-in-agent model override, set by `/spawn:model` |
 | `spawn` | `agentThinking` | `{}` | Per-built-in-agent thinking override, set by `/spawn:model` |
-| `modes` | `current` | `"work"` | Active agent mode, restored on session start (toggle with `/mode`) |
-| `submodes` | `current` | `"none"` | Active submode, restored on session start (toggle with `/submode`) |
 | `timer` | `osNotification` | `true` | Push a native OS notification when a timer or pomodoro phase fires, in addition to the bell |
 | `pomodoro` | `workMinutes` | `25` | Length of a work session |
 | `pomodoro` | `breakMinutes` | `5` | Length of a short break |
@@ -611,7 +607,7 @@ Every extension can be loaded alone (`pi -e extensions/tools/todo/index.ts`), an
 - The `footer` shows spawn cost only when the spawn service is published, and a submode label only when the submodes store is non-empty.
 - The `footer`'s countdown segment reads the shared timer registry, so it appears only when the `timer` or `pomodoro` extension is loaded; either one works with the footer absent.
 - `goal` reads `todo_updated` events and `todo-phases` entries when `todo` is loaded, and runs without task progress otherwise.
-- The `goal` ↔ submode interlock ignores the persisted `submodes.current` unless the submodes extension is loaded (see `shared/extension-registry.ts`), so a value left by an earlier install cannot block goal mode.
+- The `goal` ↔ submode interlock reads only the active session's live submode state (restored from the session branch), so a value left by another pi instance or an earlier install cannot block goal mode.
 - `submodes` filters its tool whitelist against the tools actually registered, so `spawn`, `ask`, and `todo` simply drop out when their extensions are absent.
 - The `todo_upkeep` prompt section is added when `todo` is callable and removed by `submodes` whenever the active submode excludes it, regardless of which extension loads first.
 

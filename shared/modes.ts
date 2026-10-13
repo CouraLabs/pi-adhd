@@ -12,6 +12,12 @@
  * `footer` that draws the label, and the `editor` that colors its border —
  * reads and mutates the same value even when their modules are loaded twice.
  * Extensions subscribe to re-render when the mode changes.
+ *
+ * The value is session-scoped, not global configuration: the `modes` extension
+ * snapshots it into a `mode-state` session entry on every switch and restores
+ * the branch-local snapshot on `session_start`. Two pi instances (or two
+ * sessions in one process) therefore never share a mode — the store only
+ * mirrors the active session for the in-process extensions that read it.
  */
 
 import type { ThemeColor } from "@earendil-works/pi-coding-agent";
@@ -51,6 +57,30 @@ export function setAgentMode(mode: AgentMode): void {
 /** Subscribe to mode changes; returns an unsubscribe function. */
 export function subscribeAgentMode(listener: (mode: AgentMode) => void): () => void {
 	return store.subscribe(listener);
+}
+
+/** Session entry customType for agent-mode snapshots (see pi.appendEntry). */
+export const MODE_STATE_ENTRY_TYPE = "mode-state";
+
+/** Whether `value` is an agent mode; guards session snapshots and user input. */
+export function isAgentMode(value: unknown): value is AgentMode {
+	return value === "pi" || value === "work";
+}
+
+/**
+ * Reconstruct the agent mode from session entries: the latest valid
+ * `mode-state` snapshot reachable on the current branch wins; malformed entries
+ * are skipped so a corrupt entry can never break startup. Returns undefined
+ * when the branch carries no snapshot, so the caller applies its own default.
+ */
+export function restoreModeFromEntries(entries: readonly unknown[]): AgentMode | undefined {
+	for (let i = entries.length - 1; i >= 0; i--) {
+		const entry = entries[i] as { type?: string; customType?: string; data?: unknown } | undefined;
+		if (!entry || entry.type !== "custom" || entry.customType !== MODE_STATE_ENTRY_TYPE) continue;
+		const data = entry.data as { mode?: unknown } | undefined;
+		if (isAgentMode(data?.mode)) return data.mode;
+	}
+	return undefined;
 }
 
 const MODE_COLOR: Record<AgentMode, { text: ThemeColor; border: ThemeColor }> = {

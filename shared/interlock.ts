@@ -10,12 +10,17 @@
  * pi-adhd extension instance reads and writes the same value (see
  * `shared/store.ts`). The goal extension publishes it whenever the armed goal
  * changes.
+ *
+ * Both sides of the interlock are session-scoped: the submode store is restored
+ * from the active session's branch (see `shared/submodes.ts`), and the goal flag
+ * is published by the goal extension for the active session. Nothing is read
+ * from the shared settings file, so a mode or goal in one pi instance can never
+ * block a switch in another.
  */
 
 import { isExtensionLoaded } from "./extension-registry.ts";
-import { loadSettings } from "./settings.ts";
 import { createGlobalStore } from "./store.ts";
-import { SUBMODE_NAME, getSubmode, isSubmode, type Submode } from "./submodes.ts";
+import { SUBMODE_NAME, getSubmode, type Submode } from "./submodes.ts";
 
 const store = createGlobalStore<boolean>(Symbol.for("@couralabs/pi-adhd/goal-active"), false);
 
@@ -30,25 +35,18 @@ export function setGoalActive(active: boolean): void {
 }
 
 /**
- * The submode that is active or persisted. Reads the live store first, then the
- * stored setting: another extension's `session_start` handler may run before the
- * submodes extension restores the stored submode, so a guard cannot rely on the
- * store alone. Only the submodes extension owns the persisted value, so a
- * setting written by an earlier install is ignored when that extension is not
- * loaded.
+ * The submode active in the current session. Reads the live store, which the
+ * submodes extension restores from the session branch on `session_start`. The
+ * barrel loads `submodes` before `goal`, so the restore publishes before the
+ * goal handler consults it; a goal loaded without the submodes extension sees
+ * `none`.
  */
 function activeSubmode(): Submode {
 	if (!isExtensionLoaded("submodes")) return "none";
-	const live = getSubmode();
-	// The persisted value is user-editable JSON; an invalid entry (a hand edit,
-	// a renamed submode) must not read as an active submode and permanently
-	// block goal mode, so it falls back to `none`.
-	const stored = loadSettings().submodes.current;
-	const persisted = isSubmode(stored) ? stored : "none";
-	return live === "none" ? persisted : live;
+	return getSubmode();
 }
 
-/** Whether a submode is active or persisted. */
+/** Whether a submode is active in the current session. */
 export function submodeIsActive(): boolean {
 	return activeSubmode() !== "none";
 }

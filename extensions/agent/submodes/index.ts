@@ -16,18 +16,21 @@
  *
  * Enter with `/submode plan` / `/submode grill` / `/submode straight` (or toggle
  * with `/plan` / `/grill` / `/straight`); the model leaves or switches with the
- * `submode-exit` tool. The active submode is persisted in the pi-adhd settings
- * file and restored on the next session.
+ * `submode-exit` tool. The submode is session-scoped: every switch is
+ * snapshotted into a `submode-state` session entry and restored from the current
+ * branch on session start, so two pi instances (or two sessions in one process)
+ * never share a submode and a value cannot leak through the shared settings
+ * file.
  */
 
 import { readFileSync } from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ExtensionAPI, ExtensionToolContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, ExtensionToolContext } from "@earendil-works/pi-coding-agent";
+import { isChildSession } from "../../../shared/child-sessions.ts";
 import { isGoalActive, switchBlockedByGoalMessage } from "../../../shared/interlock.ts";
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import { TODO_UPKEEP_SECTION } from "../../../shared/prompt-sections.ts";
-import { loadSettings, updateSettings } from "../../../shared/settings.ts";
 import { offloadPrompt, readUserPrompt } from "../../../shared/user-prompts.ts";
 import {
 	GRILL_SECTION,
@@ -37,8 +40,10 @@ import {
 	SUBMODE_LABEL,
 	SUBMODE_NAME,
 	SUBMODE_NOTICE,
+	SUBMODE_STATE_ENTRY_TYPE,
 	SUBMODE_TOOLS,
 	getSubmode,
+	restoreSubmodeFromEntries,
 	setSubmode,
 	type ActiveSubmode,
 	type Submode,
@@ -125,10 +130,6 @@ type PendingHandoff =
 	| { kind: "switch"; mode: ActiveSubmode }
 	| { kind: "plan"; markdown: string };
 
-function isSubmode(value: unknown): value is Submode {
-	return value === "none" || value === "plan" || value === "grill" || value === "straight";
-}
-
 export default function piSubmodesExtension(pi: ExtensionAPI): void {
 	markExtensionLoaded("submodes");
 
@@ -142,6 +143,10 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 	let savedTools: string[] | undefined;
 	/** Whether this host can open a dialog; `ask-user` withdraws `ask` when it cannot. */
 	let hasUI = true;
+	/** Whether this instance belongs to a spawned child session, which stays
+	 *  inert so it never narrows the parent's tool set or appends the parent's
+	 *  prompt sections to its own run. */
+	let childSession = false;
 	/** The last plan submitted through `plan-write`, awaiting the model's exit. */
 	let pendingPlan: PendingPlan | undefined;
 	/** A plan whose approval asked for compaction before implementation. */
@@ -167,19 +172,36 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 		pi.setActiveTools(allowedTools(submode));
 	};
 
-	/** Enter a submode and persist it. Returns false when goal mode blocks the switch. */
+	/** Enter a submode and snapshot it into the session. Returns false when goal
+	 *  mode blocks the switch. */
 	const enterSubmode = (submode: ActiveSubmode): boolean => {
 		if (isGoalActive()) return false;
+		if (getSubmode() === submode) return true;
 		setSubmode(submode);
 		applyTools(submode);
-		updateSettings({ submodes: { current: submode } });
+		pi.appendEntry(SUBMODE_STATE_ENTRY_TYPE, { submode });
 		return true;
 	};
 
 	const exitSubmode = () => {
+		if (getSubmode() === "none") return;
 		setSubmode("none");
 		applyTools("none");
-		updateSettings({ submodes: { current: "none" } });
+		pi.appendEntry(SUBMODE_STATE_ENTRY_TYPE, { submode: "none" });
+	};
+
+	/** Restore the branch-local submode: the latest valid snapshot wins, else
+	 *  `none`. Called on session start and tree navigation. */
+	const restoreSubmode = (ctx: ExtensionContext): void => {
+		const submode = restoreSubmodeFromEntries(ctx.sessionManager.getBranch()) ?? "none";
+		if (submode === "none") {
+			setSubmode("none");
+			applyTools("none");
+			return;
+		}
+		if (savedTools === undefined) savedTools = captureSavedTools();
+		setSubmode(submode);
+		pi.setActiveTools(allowedTools(submode));
 	};
 
 	/** Toggle a submode on, or off when it is already active. Returns false when
@@ -289,6 +311,7 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 	// Sections are additive, so the main mode's prompt is untouched. The policy
 	// section is inserted last so it is the final text of the system prompt.
 	pi.on("before_agent_start", (event) => {
+		if (childSession) return;
 		const { sections } = event.systemPromptOptions;
 		delete sections[PLAN_SECTION];
 		delete sections[GRILL_SECTION];
@@ -316,16 +339,31 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 
 	pi.on("session_start", (_event, ctx) => {
 		hasUI = ctx.hasUI;
-		const stored = loadSettings().submodes.current;
-		const submode = isSubmode(stored) ? stored : "none";
-		if (submode === "none") {
-			setSubmode("none");
-			applyTools("none");
-		} else {
-			if (savedTools === undefined) savedTools = captureSavedTools();
-			setSubmode(submode);
-			pi.setActiveTools(allowedTools(submode));
-		}
+		childSession = isChildSession(ctx.sessionManager.getSessionId());
+		// A new session starts clean: no plan, handoff, or saved tool set carries
+		// over from the previous one in this process.
+		savedTools = undefined;
+		pendingPlan = undefined;
+		pendingCompactPlan = undefined;
+		pendingHandoff = undefined;
+		if (childSession) return;
+		restoreSubmode(ctx);
+	});
+
+	// Tree navigation restores the submode recorded on the branch the user landed
+	// on, so a fork back to an earlier point does not keep the abandoned branch's
+	// submode or tool set.
+	pi.on("session_tree", (_event, ctx) => {
+		if (childSession) return;
+		restoreSubmode(ctx);
+	});
+
+	pi.on("session_shutdown", () => {
+		savedTools = undefined;
+		pendingPlan = undefined;
+		pendingCompactPlan = undefined;
+		pendingHandoff = undefined;
+		childSession = false;
 	});
 
 	// A submode switch and an approved plan both need a fresh run so the target
