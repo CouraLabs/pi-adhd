@@ -13,7 +13,7 @@
 import type { Model } from "@earendil-works/pi-ai";
 import type { AgentConfigLookup } from "../config/agent-types.ts";
 import type { EnvInfo } from "./env.ts";
-import type { ModelRegistry } from "./model-resolver.ts";
+import { resolveModel, type ModelRegistry } from "./model-resolver.ts";
 import type { ProjectContextLoader } from "./project-context.ts";
 import type { InheritedPrompt } from "./prompts.ts";
 import type {
@@ -116,33 +116,19 @@ export interface SessionConfig {
 /**
  * Resolve the default model from the agent config's model string.
  *
- * Priority: parentModel is the fallback; if `configModel` is a "provider/modelId"
- * string that resolves against the registry AND is in the available set, return
- * that model instead.
+ * Delegates to the shared `resolveModel` — exact `provider/modelId` match
+ * against the full registry, then fuzzy match against available models — so
+ * both resolution paths accept the same strings. `parentModel` remains the
+ * fallback when the string resolves to nothing.
  */
 function resolveDefaultModel(
   parentModel: Model<any> | undefined,
   registry: AssemblerContext["modelRegistry"],
   configModel?: string,
 ): Model<any> | undefined {
-  if (configModel) {
-    const slashIdx = configModel.indexOf("/");
-    if (slashIdx !== -1) {
-      const provider = configModel.slice(0, slashIdx);
-      const modelId = configModel.slice(slashIdx + 1);
-
-      const available = registry.getAvailable?.();
-      const availableKeys = available
-        ? new Set(available.map((m) => `${m.provider}/${m.id}`))
-        : undefined;
-      const isAvailable = (p: string, id: string) =>
-        !availableKeys || availableKeys.has(`${p}/${id}`);
-
-      const found = registry.find(provider, modelId);
-      if (found && isAvailable(provider, modelId)) return found;
-    }
-  }
-  return parentModel;
+  if (!configModel) return parentModel;
+  const resolved = resolveModel(configModel, registry);
+  return typeof resolved === "string" ? parentModel : resolved;
 }
 
 // ── Public function ──────────────────────────────────────────────────────────

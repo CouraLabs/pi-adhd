@@ -111,8 +111,9 @@ export function resolveSpawnConfig(
     resolvedConfig.modelFromParams,
     modelInfo.modelRegistry,
   );
-  if (resolution.error) return { error: resolution.error };
+  if (resolution.error !== undefined) return { error: resolution.error };
   const model = resolution.model;
+  const modelFallbackNote = resolution.fallbackNote ? [resolution.fallbackNote] : [];
 
   const thinking = resolvedConfig.thinking;
   const inheritContext = resolvedConfig.inheritContext;
@@ -147,6 +148,7 @@ export function resolveSpawnConfig(
       ...buildFallbackNote(rawType, fellBack),
       ...buildLockNote(spawnType, resolvedConfig.discarded),
       ...buildMinimumTurnsNote(resolvedConfig.maxTurns),
+      ...modelFallbackNote,
     ],
     execution: {
       prompt: params.prompt as string,

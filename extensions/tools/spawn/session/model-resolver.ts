@@ -13,6 +13,13 @@ export interface ModelRegistry {
 export interface ModelResolutionResult {
   model: Model<any> | undefined;
   error?: undefined;
+  /**
+   * Set when a model string supplied by the agent's configuration (not the
+   * caller) failed to resolve and the parent model was used instead. The
+   * caller renders it as an advisory so a configured model degrades loudly
+   * rather than silently.
+   */
+  fallbackNote?: string;
 }
 
 /** Failed model resolution when the model was user-specified (params) — surface the error. */
@@ -32,7 +39,9 @@ export type ModelResolution = ModelResolutionResult | ModelResolutionError;
  * 2. `modelInput` resolves → return the resolved model.
  * 3. `modelInput` fails:
  *    - `modelFromParams` true  → return `{ error }` so the caller can surface it.
- *    - `modelFromParams` false → silent fallback to `parentModel`.
+ *    - `modelFromParams` false → fall back to `parentModel`, with a
+ *      `fallbackNote` the caller renders — a configured model that stops
+ *      resolving must not degrade silently onto the session model.
  *
  * `modelFromParams` reports which side supplied the winning string, not merely whether
  * the caller passed one — a caller whose value an agent's `locked:` frontmatter discarded
@@ -45,46 +54,64 @@ export function resolveInvocationModel(
   registry: ModelRegistry | undefined,
 ): ModelResolution {
   if (!modelInput) return { model: parentModel };
-  if (!registry) return { error: "No model registry available." };
+  if (!registry) {
+    if (modelFromParams) return { error: "No model registry available." };
+    return {
+      model: parentModel,
+      fallbackNote: `Agent model "${modelInput}" could not be resolved (no model registry available), so the spawn runs on the session model.`,
+    };
+  }
   const resolved = resolveModel(modelInput, registry);
   if (typeof resolved !== "string") return { model: resolved };
   if (modelFromParams) return { error: resolved };
-  return { model: parentModel };
+  return {
+    model: parentModel,
+    fallbackNote: `Agent model "${modelInput}" did not match an available model, so the spawn runs on the session model instead.`,
+  };
 }
 
 /**
  * Resolve a model string to a Model instance.
- * Tries exact match first ("provider/modelId"), then fuzzy match against all available models.
+ *
+ * An exact "provider/modelId" reference is looked up in the FULL registry,
+ * not just the available set: an explicitly named model is a deliberate
+ * choice, and the available snapshot only lists models whose provider passed
+ * an auth/availability pass — a pass that runs asynchronously for
+ * extension-registered providers and can be empty or stale at spawn time.
+ * Gating the exact match on it silently discarded every configured agent
+ * model onto the parent's model. An unresolvable exact reference still
+ * surfaces as an error string; a model that exists but lacks auth fails
+ * loudly at request time, which beats silently running on the wrong model.
+ *
+ * Fuzzy matching stays restricted to available models, so a guess never
+ * lands on a provider with no credentials.
  * Returns the Model on success, or an error message string on failure.
  */
 export function resolveModel(
   input: string,
   registry: ModelRegistry,
 ): Model<any> | string {
-  // Available models (those with auth configured)
-  const all = registry.getAvailable?.() ?? registry.getAll();
-  const availableSet = new Set(all.map(m => `${m.provider}/${m.id}`.toLowerCase()));
+  // Available models (those with auth configured), for fuzzy matching.
+  const available = registry.getAvailable?.() ?? registry.getAll();
 
-  // 1. Exact match: "provider/modelId" — only if available (has auth)
+  // 1. Exact match: "provider/modelId" — full registry, availability aside.
   const slashIdx = input.indexOf("/");
   if (slashIdx !== -1) {
     const provider = input.slice(0, slashIdx);
     const modelId = input.slice(slashIdx + 1);
-    if (availableSet.has(input.toLowerCase())) {
-      const found = registry.find(provider, modelId);
-      if (found) return found;
-    }
+    const exact = registry.find(provider, modelId);
+    if (exact) return exact;
   }
 
   // 2. Fuzzy match against available models
-  const bestMatch = findBestFuzzyMatch(all, input.toLowerCase());
+  const bestMatch = findBestFuzzyMatch(available, input.toLowerCase());
   if (bestMatch) {
     const found = registry.find(bestMatch.provider, bestMatch.id);
     if (found) return found;
   }
 
   // 3. No match — list available models
-  const modelList = all
+  const modelList = available
     .map(m => `  ${m.provider}/${m.id}`)
     .sort()
     .join("\n");
