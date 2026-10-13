@@ -78,7 +78,7 @@ export interface UsageTheme {
 export function usageGroup(totals: UsageTotals, theme: UsageTheme): string {
 	const parts: string[] = [];
 	if (totals.input > 0) {
-		parts.push(theme.fg("success", `${INPUT} `) + theme.fg("thinkingText", `${formatTokens(totals.input)}`));
+		parts.push(theme.fg("success", `${INPUT} `) + theme.fg("thinkingText", `${formatTokens(totals.input + totals.cacheWrite)}`));
 	}
 	if (totals.output > 0) {
 		parts.push(theme.fg("accent", `${OUTPUT} `) + theme.fg("thinkingText", `${formatTokens(totals.output)}`));
