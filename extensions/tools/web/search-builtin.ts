@@ -334,7 +334,7 @@ const glm: SearchProvider = {
 			},
 			body: JSON.stringify({
 				jsonrpc: "2.0",
-				id: `pi-tdah-${Date.now()}`,
+				id: `pi-adhd-${Date.now()}`,
 				method: "tools/call",
 				params: {
 					name: "web_search_prime",

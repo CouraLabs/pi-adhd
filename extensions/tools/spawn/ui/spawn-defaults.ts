@@ -9,7 +9,7 @@
  *
  * Built-in agents (`general-purpose`, `plan-reviewer`, `Arquitect`,
  * `Code-Review`, `Explore`) have no markdown file, so their choices are stored
- * in the pi-tdah settings file (`spawn.agentModels` / `spawn.agentThinking`).
+ * in the pi-adhd settings file (`spawn.agentModels` / `spawn.agentThinking`).
  * A custom agent loaded from `.agents/agents/*.md` gets `model:` / `thinking:`
  * written into its own frontmatter instead, and the registry is reloaded so the
  * annotation reflects the file immediately.

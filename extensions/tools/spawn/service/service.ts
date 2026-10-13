@@ -4,7 +4,7 @@
  * Consumers declare this package as an optional peer dependency and use
  * dynamic import to access the accessor functions:
  *
- *   const { getSpawnService } = await import("@couralabs/pi-tdah/shared/spawn-service.ts");
+ *   const { getSpawnService } = await import("@couralabs/pi-adhd/shared/spawn-service.ts");
  *   const svc = getSpawnService();
  *   svc?.listAgents();
  */

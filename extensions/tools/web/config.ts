@@ -1,5 +1,5 @@
 /**
- * config.ts — Web provider settings, persisted in the pi-tdah settings file.
+ * config.ts — Web provider settings, persisted in the pi-adhd settings file.
  */
 
 import { loadSettings, updateSettings } from "../../../shared/settings.ts";

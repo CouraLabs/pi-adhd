@@ -121,7 +121,7 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	pi.registerCommand("prompt-ui", {
-		description: "Toggle the pi-tdah prompt field (usage: /prompt-ui [on|off])",
+		description: "Toggle the pi-adhd prompt field (usage: /prompt-ui [on|off])",
 		handler: async (args, commandCtx) => {
 			const arg = args.trim().toLowerCase();
 			if (arg === "on") enabled = true;
@@ -132,7 +132,7 @@ export default function (pi: ExtensionAPI) {
 
 			if (enabled) {
 				installEditor(commandCtx);
-				commandCtx.ui.notify("pi-tdah prompt field enabled", "info");
+				commandCtx.ui.notify("pi-adhd prompt field enabled", "info");
 			} else {
 				uninstallEditor(commandCtx);
 				commandCtx.ui.notify("Default editor restored", "info");

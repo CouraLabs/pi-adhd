@@ -155,7 +155,7 @@ export default function (pi: ExtensionAPI) {
   });
 
   // Typed service published via Symbol.for() for cross-extension access.
-  // Consumers: const { getSpawnService } = await import("@couralabs/pi-tdah/shared/spawn-service.ts");
+  // Consumers: const { getSpawnService } = await import("@couralabs/pi-adhd/shared/spawn-service.ts");
   const service = new SpawnServiceAdapter(manager);
   publishSpawnService(service);
 
@@ -172,7 +172,7 @@ export default function (pi: ExtensionAPI) {
     },
   );
 
-  // ---- pi-tdah enable/disable toggle ----
+  // ---- pi-adhd enable/disable toggle ----
   // Tools stay registered so the command can re-arm them; enabling/disabling
   // only changes the active tool set (what the model is offered). The choice
   // persists in `~/.pi/couralabs/settings.json`.
@@ -224,7 +224,7 @@ export default function (pi: ExtensionAPI) {
   // ---- /spawn command ----
 
   pi.registerCommand("spawn", {
-    description: "Toggle pi-tdah spawn and their tools (usage: /spawn [on|off])",
+    description: "Toggle pi-adhd spawn and their tools (usage: /spawn [on|off])",
     handler: async (args, ctx) => {
       if (isChildSession(ctx.sessionManager.getSessionId())) {
         ctx.ui.notify("Spawn cannot be enabled inside a spawned child session", "warning");
@@ -239,8 +239,8 @@ export default function (pi: ExtensionAPI) {
       applySpawnEnabled(false);
       ctx.ui.notify(
         spawnEnabled
-          ? "pi-tdah spawn enabled"
-          : "pi-tdah spawn disabled — tools hidden",
+          ? "pi-adhd spawn enabled"
+          : "pi-adhd spawn disabled — tools hidden",
         "info",
       );
     },
@@ -251,10 +251,10 @@ export default function (pi: ExtensionAPI) {
   const spawnSettings = new SpawnSettingsHandler(settings);
 
   pi.registerCommand("spawn:settings", {
-    description: "Configure pi-tdah spawn (turn limits, retention)",
+    description: "Configure pi-adhd spawn (turn limits, retention)",
     handler: async (_args, ctx) => {
       if (!spawnEnabled) {
-        ctx.ui.notify("pi-tdah spawn is disabled — run /spawn on", "warning");
+        ctx.ui.notify("pi-adhd spawn is disabled — run /spawn on", "warning");
         return;
       }
       await spawnSettings.handle({ ui: ctx.ui });
@@ -269,7 +269,7 @@ export default function (pi: ExtensionAPI) {
     description: "View a spawned agent's session transcript (read-only)",
     handler: async (_args, ctx) => {
       if (!spawnEnabled) {
-        ctx.ui.notify("pi-tdah spawn is disabled — run /spawn on", "warning");
+        ctx.ui.notify("pi-adhd spawn is disabled — run /spawn on", "warning");
         return;
       }
       await sessionNavigator.handle({
@@ -291,7 +291,7 @@ export default function (pi: ExtensionAPI) {
     description: "Set a spawned agent's default model and thinking level (built-in or .agents/agents/*.md)",
     handler: async (_args, ctx) => {
       if (!spawnEnabled) {
-        ctx.ui.notify("pi-tdah spawn is disabled — run /spawn on", "warning");
+        ctx.ui.notify("pi-adhd spawn is disabled — run /spawn on", "warning");
         return;
       }
       await spawnDefaultsHandler.handle({

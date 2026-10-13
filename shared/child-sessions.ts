@@ -11,7 +11,7 @@
  * IDs are never reused, so entries are never removed and stale ones are inert.
  */
 
-const CHILD_SESSION_IDS = Symbol.for("@couralabs/pi-tdah/spawn-child-sessions");
+const CHILD_SESSION_IDS = Symbol.for("@couralabs/pi-adhd/spawn-child-sessions");
 
 function childSessionIds(): Set<string> {
 	const store = globalThis as Record<symbol, unknown>;

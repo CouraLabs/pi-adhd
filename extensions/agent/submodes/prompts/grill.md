@@ -41,7 +41,7 @@ The session is done when the frontier is empty: every branch of the design tree 
 # MANDATORY
 Use the "ask" tool to ask the user the questions, always mark the recommended answer as (recommended).
 
-# Tool availability (pi-tdah)
+# Tool availability (pi-adhd)
 
 The `<submode_policy>` section at the end of this prompt lists the exact tools you may
 call and names every tool that does not exist here — read it before calling a tool. In

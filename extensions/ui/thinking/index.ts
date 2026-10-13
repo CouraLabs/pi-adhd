@@ -1,7 +1,7 @@
 /**
  * thinking — compact animated reasoning previews.
  *
- * A vendored, pi-tdah-adapted port of `pi-compact-thinking` (MIT). It replaces
+ * A vendored, pi-adhd-adapted port of `pi-compact-thinking` (MIT). It replaces
  * pi's built-in hidden-thinking renderer with a single compact run: an animated
  * heading (the OpenAI summary title, or `Thinking...`), the elapsed time, and a
  * few preview lines. Visible mode is left exactly as pi renders it, so

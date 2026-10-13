@@ -1,6 +1,6 @@
 /**
  * command.ts — the `/web` command: pick the default fetch and search providers,
- * persisted in the pi-tdah settings file.
+ * persisted in the pi-adhd settings file.
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";

@@ -1,8 +1,8 @@
 {
-  "name": "@couralabs/pi-tdah",
+  "name": "@couralabs/pi-adhd",
   "version": "0.1.0",
   "description": "A collection of pi extensions: tools, commands, and lifecycle hooks for the pi coding agent, shaped for ADHD-readable output",
-  "keywords": ["pi-package", "pi-tdah"],
+  "keywords": ["pi-package", "pi-adhd"],
   "type": "module",
   "license": "MIT",
   "pi": {

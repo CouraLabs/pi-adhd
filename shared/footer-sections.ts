@@ -1,5 +1,5 @@
 /**
- * footer-sections — the process-global list of extra blocks the pi-tdah footer
+ * footer-sections — the process-global list of extra blocks the pi-adhd footer
  * draws after its own lines.
  *
  * The footer is the last component in pi's dock (below the editor and every
@@ -39,7 +39,7 @@ export interface FooterSection {
 }
 
 const store = createGlobalStore<readonly FooterSection[]>(
-	Symbol.for("@couralabs/pi-tdah/footer-sections"),
+	Symbol.for("@couralabs/pi-adhd/footer-sections"),
 	[],
 );
 

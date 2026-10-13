@@ -71,6 +71,6 @@ Goal: the code is simple, DRY, elegant, readable, and functionally correct.
 1. Mark every `todo` item complete.
 2. Summarize what was built, the decisions made, the files changed, and the suggested next steps.
 
-# Tool availability (pi-tdah)
+# Tool availability (pi-adhd)
 
 The `<submode_policy>` section at the end of this prompt lists the exact tools you may call. Straight has the full toolset — you implement the feature yourself rather than handing it off. Leave the submode with `submode-exit` once the user has the result.

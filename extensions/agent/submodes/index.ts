@@ -16,7 +16,7 @@
  *
  * Enter with `/submode plan` / `/submode grill` / `/submode straight` (or toggle
  * with `/plan` / `/grill` / `/straight`); the model leaves or switches with the
- * `submode-exit` tool. The active submode is persisted in the pi-tdah settings
+ * `submode-exit` tool. The active submode is persisted in the pi-adhd settings
  * file and restored on the next session.
  */
 

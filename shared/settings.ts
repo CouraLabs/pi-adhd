@@ -1,14 +1,14 @@
 /**
- * settings — persistent configuration shared by every pi-tdah extension.
+ * settings — persistent configuration shared by every pi-adhd extension.
  *
- * All pi-tdah ("couralabs") configuration lives in a single JSON file,
+ * All pi-adhd ("couralabs") configuration lives in a single JSON file,
  * organized as `{ feature: { option: value } }`:
  *
  *   ~/.pi/couralabs/settings.json
  *
  * The file is created with the defaults on first load. Extensions read the
  * current values at session start and write them back when a command changes
- * them. Unknown keys are preserved so a newer version of pi-tdah (or a hand
+ * them. Unknown keys are preserved so a newer version of pi-adhd (or a hand
  * edit) never loses data.
  */
 
@@ -21,7 +21,7 @@ import { DEFAULT_SUBMODE, type Submode } from "./submodes.ts";
 /** Prompt-inheritance strategy a child session adopts for a provider. */
 export type PromptInheritance = "full" | "portable";
 
-/** Configuration for the `editor` extension: the pi-tdah prompt field. */
+/** Configuration for the `editor` extension: the pi-adhd prompt field. */
 export interface EditorConfig {
 	/** Master switch: when false the built-in editor is restored. */
 	enabled: boolean;
@@ -31,8 +31,8 @@ export interface EditorConfig {
 
 /**
  * Operational configuration for the `spawn` extension. It lives under the
- * `spawn` key of the pi-tdah settings file, next to its `enabled` toggle,
- * so every pi-tdah knob is in one place.
+ * `spawn` key of the pi-adhd settings file, next to its `enabled` toggle,
+ * so every pi-adhd knob is in one place.
  */
 export interface SpawnConfig {
 	/** Master switch: when false the tools are hidden. */
@@ -93,7 +93,7 @@ export interface WebConfigSection {
 	search: WebProviderConfig;
 }
 
-/** Persisted pi-tdah configuration. */
+/** Persisted pi-adhd configuration. */
 export interface CouralabsSettings {
 	footer: { enabled: boolean };
 	editor: EditorConfig;
@@ -153,7 +153,7 @@ export const DEFAULT_SETTINGS: CouralabsSettings = {
 	},
 };
 
-/** Path of the pi-tdah settings file (`~/.pi/couralabs/settings.json`). */
+/** Path of the pi-adhd settings file (`~/.pi/couralabs/settings.json`). */
 export function getSettingsPath(): string {
 	return join(dirname(getAgentDir()), "couralabs", "settings.json");
 }

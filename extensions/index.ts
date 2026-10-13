@@ -1,5 +1,5 @@
 /**
- * pi-tdah — single entry point that loads every bundled extension.
+ * pi-adhd — single entry point that loads every bundled extension.
  *
  * Each extension keeps its own default factory and stays individually loadable
  * (`pi -e extensions/tools/todo/index.ts`); this barrel only wires them into
@@ -31,7 +31,7 @@ import spawn from "./tools/spawn/index.ts";
 import todo from "./tools/todo/index.ts";
 import web from "./tools/web/index.ts";
 
-export default function piTdah(pi: ExtensionAPI): void {
+export default function piAdhd(pi: ExtensionAPI): void {
 	// UI: editor, footer, tool-call rendering, thinking display.
 	editor(pi);
 	footer(pi);

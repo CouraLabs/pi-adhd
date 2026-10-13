@@ -21,7 +21,7 @@ export interface FetchProvider {
 	env?: string[];
 }
 
-const REGISTRY = Symbol.for("@couralabs/pi-tdah/providers");
+const REGISTRY = Symbol.for("@couralabs/pi-adhd/providers");
 
 function providers(): Map<string, FetchProvider> {
 	const root = globalThis as typeof globalThis & { [REGISTRY]?: Map<string, FetchProvider> };

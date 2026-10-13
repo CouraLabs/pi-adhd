@@ -1,5 +1,5 @@
 /**
- * Pure rendering for the pi-tdah footer: a single stats line with the agent
+ * Pure rendering for the pi-adhd footer: a single stats line with the agent
  * mode, submode, model, thinking level, context gauge, and cumulative
  * token/cost usage, followed by extension statuses on their own line and any
  * registered sections (see `shared/footer-sections.ts`) last of all.

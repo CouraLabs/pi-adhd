@@ -1,14 +1,14 @@
 /**
  * modes — two agent modes for pi: Work (default) and Pi.
  *
- *   - Work replaces pi's default system prompt with the pi-tdah Work rules
+ *   - Work replaces pi's default system prompt with the pi-adhd Work rules
  *     (see `prompts/work.md`), turning the agent into an orchestrator that
  *     delegates to spawned agents and tracks work with the todo tool.
  *   - Pi leaves pi's default system prompt untouched.
  *
  * Switch modes with `/mode [pi|work]`. The footer shows the active mode and the
  * prompt field recolors its border. The selected mode is persisted in the
- * pi-tdah settings file and restored on the next session.
+ * pi-adhd settings file and restored on the next session.
  */
 
 import { readFileSync } from "node:fs";
@@ -53,7 +53,7 @@ export default function (pi: ExtensionAPI) {
 		setAgentMode(isAgentMode(stored) ? stored : DEFAULT_AGENT_MODE);
 	});
 
-	// Work mode swaps in the pi-tdah Work rules; Pi mode leaves the default
+	// Work mode swaps in the pi-adhd Work rules; Pi mode leaves the default
 	// prompt (or a user SYSTEM.md) in place. `customPrompt` replaces pi's
 	// default system prompt, matching how SYSTEM.md is applied.
 	pi.on("before_agent_start", (event) => {

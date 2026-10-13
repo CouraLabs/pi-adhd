@@ -1,25 +1,25 @@
-# pi-tdah
+# pi-adhd
 
-**TDAH = ADHD.** *Transtorno de Déficit de Atenção e Hiperatividade* is the Portuguese, Spanish, and French name for ADHD. `pi-tdah` packages [pi](https://pi.dev) extensions that shape the agent's output for an ADHD reader: the next action first, numbered steps, visible progress, no preamble, no closer.
+**ADHD = attention deficit hyperactivity disorder.** `pi-adhd` packages [pi](https://pi.dev) extensions that shape the agent's output for an ADHD reader: the next action first, numbered steps, visible progress, no preamble, no closer.
 
 ## Install
 
 ```bash
-pi install git:github.com/CouraLabs/pi-tdah
+pi install git:github.com/CouraLabs/pi-adhd
 ```
 
 Other sources:
 
 ```bash
-pi install /path/to/pi-tdah        # local checkout
-pi -e /path/to/pi-tdah             # try without installing
+pi install /path/to/pi-adhd        # local checkout
+pi -e /path/to/pi-adhd             # try without installing
 ```
 
 Then start `pi`. **Work mode** (the ADHD output contract) is the default.
 
 ## 60-second start
 
-1. Run `pi install npm:@couralabs/pi-tdah`.
+1. Run `pi install npm:@couralabs/pi-adhd`.
 2. Run `pi`.
 3. Confirm the footer starts with `⛑ Work`.
 4. Type a request; the first line of the reply is the action.
@@ -27,7 +27,7 @@ Then start `pi`. **Work mode** (the ADHD output contract) is the default.
 
 About 2 minutes.
 
-![pi-tdah in action: the editor box, working indicator, todo widget, and footer](./demo.png)
+![pi-adhd in action: the editor box, working indicator, todo widget, and footer](./demo.png)
 
 ## What you get
 
@@ -71,10 +71,10 @@ Eleven extensions, grouped by job. Each one can be toggled on its own.
 
 Two agent modes, switched with `/mode [pi|work]`:
 
-- **⛑ Work** (default) replaces pi's default system prompt with the pi-tdah [Work rules](extensions/agent/modes/prompts/work.md). The rules are the ADHD contract: lead with the next action, number multi-step tasks, restate state every turn, cap lists, no preamble or closers. Work mode also makes the agent an orchestrator — delegate to `spawn` to keep the parent context small, use `ask` before inferring anything unknown, and drive multi-step work with `todo`.
+- **⛑ Work** (default) replaces pi's default system prompt with the pi-adhd [Work rules](extensions/agent/modes/prompts/work.md). The rules are the ADHD contract: lead with the next action, number multi-step tasks, restate state every turn, cap lists, no preamble or closers. Work mode also makes the agent an orchestrator — delegate to `spawn` to keep the parent context small, use `ask` before inferring anything unknown, and drive multi-step work with `todo`.
 - **π Pi** leaves pi's default system prompt (or a user `SYSTEM.md`) untouched.
 
-The replacement uses pi's `customPrompt` slot, the same mechanism as `SYSTEM.md`, so tool declarations still reach the model while the default preamble is swapped. The active mode shows first in the footer (`π Pi` in the accent color, `⛑ Work` in the default foreground), the prompt field recolors its border (accent for Pi, default border for Work), and the choice persists in the pi-tdah settings file and restores on the next session.
+The replacement uses pi's `customPrompt` slot, the same mechanism as `SYSTEM.md`, so tool declarations still reach the model while the default preamble is swapped. The active mode shows first in the footer (`π Pi` in the accent color, `⛑ Work` in the default foreground), the prompt field recolors its border (accent for Pi, default border for Work), and the choice persists in the pi-adhd settings file and restores on the next session.
 
 The full Work prompt also covers orchestration: delegate to spawned agents, ask before inferring, and track with `todo`.
 
@@ -133,7 +133,7 @@ A rejection's line comments come back as `line N: <comment>` so the model can re
 
 ### Plan reviewer agent
 
-The built-in `plan-reviewer` agent is a practical, read-only blocker-finder (`read`, `grep`, `find`, `ls`) that verifies referenced files exist and returns `[OKAY]` or a max-3 `[REJECT]`. It ships as an embedded default, so it is available wherever pi-tdah is installed. The Plan agent spawns it with the `spawn` tool before calling `plan-write` (see [plan.md](extensions/agent/submodes/prompts/plan.md)).
+The built-in `plan-reviewer` agent is a practical, read-only blocker-finder (`read`, `grep`, `find`, `ls`) that verifies referenced files exist and returns `[OKAY]` or a max-3 `[REJECT]`. It ships as an embedded default, so it is available wherever pi-adhd is installed. The Plan agent spawns it with the `spawn` tool before calling `plan-write` (see [plan.md](extensions/agent/submodes/prompts/plan.md)).
 
 ## Prompt field: `editor`
 
@@ -142,7 +142,7 @@ Wraps the prompt editor in a closed field drawn with terminal box characters (`�
 ```
  ╭─ 🞘 Consulting the rubber duck ───────────────────────╮
  │ ❯ explain this codebase                              │
- ╰──────────────────────────── pi-tdah ∙ ⌥ main +12 -3 ─╯
+ ╰──────────────────────────── pi-adhd ∙ ⌥ main +12 -3 ─╯
 ```
 
 The box border color follows the active agent mode (see [`modes`](#the-output-contract-modes)): the theme's `border` token in Work, the `accent` token in Pi, instead of tracking the thinking level. The bottom-border location segment shows the working directory followed by the git branch and the added/removed line counts from `git diff --numstat` (`+n` in success green, `-n` in error red). By default only the last folder of the working directory is shown; `/full-cwd` toggles the full path on and off (`/full-cwd on` / `/full-cwd off`), keeping the home directory itself rendered as `~` either way. Toggle the whole prompt field at any time with `/prompt-ui` (or `/prompt-ui on` / `/prompt-ui off`); disabling it restores pi's default editor and the plain "Working" label.
@@ -160,7 +160,7 @@ The stats line shows the active agent mode (see [`modes`](#the-output-contract-m
 
 ## Tool calls: `messages`
 
-Restyles tool calls to share the pi-tdah look. Built-in tool calls drop their full background and instead show a heavy left rule (`│`) colored with the tool's status background token, so it shifts from pending to success/error exactly like the old shell. Toggle it at any time with `/messages-ui` (or `/messages-ui on` / `/messages-ui off`).
+Restyles tool calls to share the pi-adhd look. Built-in tool calls drop their full background and instead show a heavy left rule (`│`) colored with the tool's status background token, so it shifts from pending to success/error exactly like the old shell. Toggle it at any time with `/messages-ui` (or `/messages-ui on` / `/messages-ui off`).
 
 ```
 │ read src/index.ts
@@ -183,7 +183,7 @@ Goal mode and the submodes are mutually exclusive. A goal refuses to arm while P
 
 ## Reasoning preview: `thinking`
 
-A vendored, pi-tdah-adapted port of [`pi-compact-thinking`](https://github.com/nostalfinals/pi-compact-thinking): replaces the built-in **hidden** thinking renderer with a compact, animated run. Each run shows an animated heading — the latest OpenAI reasoning-summary title when available, otherwise `Thinking...` — the elapsed time, and a few preview lines. When the body is truncated, the heading gains a `(N more lines, key to expand)` hint:
+A vendored, pi-adhd-adapted port of [`pi-compact-thinking`](https://github.com/nostalfinals/pi-compact-thinking): replaces the built-in **hidden** thinking renderer with a compact, animated run. Each run shows an animated heading — the latest OpenAI reasoning-summary title when available, otherwise `Thinking...` — the elapsed time, and a few preview lines. When the body is truncated, the heading gains a `(N more lines, key to expand)` hint:
 
 ```
 Reviewing the failing test · 4s (12 more lines, shift+tab to expand)
@@ -215,7 +215,7 @@ II. Implementation  2/6
 
 ## Subagents: `spawn`
 
-In-process autonomous spawned agents, vendored from [`@gotgenes/pi-subagents`](https://github.com/gotgenes/pi-packages/tree/main/packages/pi-subagents) (MIT) and restructured to the pi-tdah layout. Agents run inside the same pi runtime — no subprocesses — each in an isolated child session with its own tools, system prompt, model, and thinking level.
+In-process autonomous spawned agents, vendored from [`@gotgenes/pi-subagents`](https://github.com/gotgenes/pi-packages/tree/main/packages/pi-subagents) (MIT) and restructured to the pi-adhd layout. Agents run inside the same pi runtime — no subprocesses — each in an isolated child session with its own tools, system prompt, model, and thinking level.
 
 The model spawns agents with the `spawn` tool (`spawn_type`, `prompt`, `description`, and optional `model`, `thinking`, `max_turns`, `resume`, `inherit_context`). Every agent runs foreground: the call blocks until the agent finishes and its result comes back inline, so several independent pieces of work are launched in one turn and their results are synthesized as they arrive. `/spawn:settings` tunes turn limits and session retention; `/spawn:sessions` opens a running or completed agent's transcript in pi's read-only viewer.
 
@@ -245,13 +245,13 @@ Each provider names its env vars: `EXA_API_KEY`, `TAVILY_API_KEY`, `FIRECRAWL_AP
 
 ## Configuration
 
-Every pi-tdah setting lives in a single JSON file:
+Every pi-adhd setting lives in a single JSON file:
 
 ```
 ~/.pi/couralabs/settings.json
 ```
 
-It is organized as `{ feature: { option: value } }` and created with the defaults the first time pi-tdah loads, so it always contains the complete set of knobs:
+It is organized as `{ feature: { option: value } }` and created with the defaults the first time pi-adhd loads, so it always contains the complete set of knobs:
 
 ```json
 {
@@ -285,15 +285,15 @@ It is organized as `{ feature: { option: value } }` and created with the default
 
 | Feature | Option | Default | Description |
 |---|---|---|---|
-| `footer` | `enabled` | `true` | pi-tdah footer (toggle with `/footer-ui`) |
-| `editor` | `enabled` | `true` | pi-tdah prompt field (toggle with `/prompt-ui`) |
+| `footer` | `enabled` | `true` | pi-adhd footer (toggle with `/footer-ui`) |
+| `editor` | `enabled` | `true` | pi-adhd prompt field (toggle with `/prompt-ui`) |
 | `editor` | `fullCwd` | `false` | Show the full working directory instead of only its last folder (toggle with `/full-cwd`) |
-| `messages` | `enabled` | `true` | pi-tdah message UI (toggle with `/messages-ui`) |
+| `messages` | `enabled` | `true` | pi-adhd message UI (toggle with `/messages-ui`) |
 | `thinking` | `enabled` | `true` | Compact hidden-thinking renderer (toggle with `/thinking-ui`) |
 | `thinking` | `useSummaryTitlesAsThinkingTitle` | `true` | Use the latest OpenAI reasoning-summary heading as the live title |
 | `thinking` | `previewLines` | `5` | Reasoning-preview lines retained; `0` hides the preview |
 | `thinking` | `animationIntervalMs` | `90` | Milliseconds between animation frames while reasoning |
-| `spawn` | `enabled` | `true` | pi-tdah spawn and its tools (toggle with `/spawn`) |
+| `spawn` | `enabled` | `true` | pi-adhd spawn and its tools (toggle with `/spawn`) |
 | `spawn` | `defaultMaxTurns` | `0` | Default turn ceiling; `0` = unlimited |
 | `spawn` | `wrapUpTurns` | `2` | Turns left when an agent is warned to wrap up |
 | `spawn` | `consumedSessionRetentionMinutes` | `10` | Minutes a consumed agent's session is retained |
@@ -357,7 +357,7 @@ pi --use-theme synthwave84
 ## Project layout
 
 ```text
-pi-tdah/
+pi-adhd/
 ├── extensions/
 │   ├── index.ts             # barrel: loads every extension below (ui → agent → tools)
 │   ├── ui/                  # individually loadable UI extensions
@@ -453,7 +453,7 @@ pi-tdah/
 │           └── prompts/         # static .md prompt assets
 ├── shared/
 │   ├── child-sessions.ts    # spawned child-session registry
-│   ├── extension-registry.ts # which optional pi-tdah extensions are loaded
+│   ├── extension-registry.ts # which optional pi-adhd extensions are loaded
 │   ├── format.ts            # compact token counts + cwd formatting
 │   ├── footer-sections.ts   # extra footer blocks registered by extensions
 │   ├── glyphs.ts            # shared UI symbols (`❯`, `│`, …)

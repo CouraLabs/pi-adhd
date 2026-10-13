@@ -1,5 +1,5 @@
 // Persistence for pi-spawn operational settings.
-// Stored under the `spawn` key of the pi-tdah settings file
+// Stored under the `spawn` key of the pi-adhd settings file
 // (~/.pi/couralabs/settings.json), written by /spawn:settings.
 
 import {
@@ -47,7 +47,7 @@ export type SpawnSettings = Partial<Omit<SpawnConfig, "enabled">> & {
 
 /**
  * The persisted form of the in-memory settings values.
- * `saveSettings` merges this shape into the shared pi-tdah settings file, so
+ * `saveSettings` merges this shape into the shared pi-adhd settings file, so
  * every key that must survive a `/spawn:settings` edit has to
  * appear here.
  */
@@ -435,13 +435,13 @@ function assignmentWithout(map: Record<string, string>, key: string, value: stri
   return next;
 }
 
-/** Load the operational settings from the shared pi-tdah settings file, sanitized. */
+/** Load the operational settings from the shared pi-adhd settings file, sanitized. */
 export function loadSettings(): SpawnSettings {
   return sanitize(loadCouralabsSettings().spawn);
 }
 
 /**
- * Merge operational settings into the shared pi-tdah settings file.
+ * Merge operational settings into the shared pi-adhd settings file.
  * Returns `true` on success, `false` if the write failed so the caller can
  * surface a warning — persistence isn't fatal but isn't silent.
  */

@@ -1,7 +1,7 @@
 /**
- * extension-registry — which optional pi-tdah extensions are loaded.
+ * extension-registry — which optional pi-adhd extensions are loaded.
  *
- * Every pi-tdah extension is individually loadable: a host may load one, a
+ * Every pi-adhd extension is individually loadable: a host may load one, a
  * few, or the whole package. When one extension reads state another owns —
  * goal mode consulting the persisted submode, for example — it must not act
  * on that state unless the owner is actually loaded, or a value persisted by
@@ -16,7 +16,7 @@
 
 import { createGlobalStore } from "./store.ts";
 
-/** Names of the pi-tdah extensions a consumer may check for. */
+/** Names of the pi-adhd extensions a consumer may check for. */
 export type ExtensionName =
 	| "ask-user"
 	| "editor"
@@ -31,7 +31,7 @@ export type ExtensionName =
 	| "web";
 
 const store = createGlobalStore<ReadonlySet<ExtensionName>>(
-	Symbol.for("@couralabs/pi-tdah/loaded-extensions"),
+	Symbol.for("@couralabs/pi-adhd/loaded-extensions"),
 	new Set<ExtensionName>(),
 );
 

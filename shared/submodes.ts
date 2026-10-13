@@ -1,5 +1,5 @@
 /**
- * submodes — shared agent-submode state for pi-tdah.
+ * submodes — shared agent-submode state for pi-adhd.
  *
  * A submode is a temporary, additive mode layered on top of the main agent
  * mode (see `shared/modes.ts`). Unlike the main mode, which *replaces* pi's
@@ -16,7 +16,7 @@
  *     toolset.
  *
  * The state lives on `globalThis`, keyed by a registered symbol, so every
- * pi-tdah extension instance reads and mutates the same value. Extensions
+ * pi-adhd extension instance reads and mutates the same value. Extensions
  * subscribe to re-render when the submode changes.
  */
 
@@ -110,7 +110,7 @@ export const STRAIGHT_SECTION = "straight_mode";
  */
 export const POLICY_SECTION = "submode_policy";
 
-const store = createGlobalStore<Submode>(Symbol.for("@couralabs/pi-tdah/agent-submode"), DEFAULT_SUBMODE);
+const store = createGlobalStore<Submode>(Symbol.for("@couralabs/pi-adhd/agent-submode"), DEFAULT_SUBMODE);
 
 /** The current submode. */
 export function getSubmode(): Submode {

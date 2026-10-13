@@ -8,7 +8,7 @@
  */
 
 /** Key of the process-global service slot (`Symbol.for` so every loaded copy agrees). */
-const SERVICE_KEY = Symbol.for("@couralabs/pi-tdah/spawn");
+const SERVICE_KEY = Symbol.for("@couralabs/pi-adhd/spawn");
 
 /** The usage slice a consumer reads from an agent record. */
 export interface SpawnUsageRecord {

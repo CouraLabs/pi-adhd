@@ -1,5 +1,5 @@
 /**
- * The pi-tdah prompt editor: a closed field-style box drawn with terminal box
+ * The pi-adhd prompt editor: a closed field-style box drawn with terminal box
  * characters around the built-in editor, with a `❯` marker on the first input
  * line, the working indicator embedded in the top border, and the working
  * directory + git state embedded in the bottom border. The box border color

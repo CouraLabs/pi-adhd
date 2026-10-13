@@ -105,7 +105,7 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	pi.registerCommand("footer-ui", {
-		description: "Toggle the pi-tdah footer (usage: /footer-ui [on|off])",
+		description: "Toggle the pi-adhd footer (usage: /footer-ui [on|off])",
 		handler: async (args, commandCtx) => {
 			const arg = args.trim().toLowerCase();
 			if (arg === "on") enabled = true;
@@ -116,7 +116,7 @@ export default function (pi: ExtensionAPI) {
 
 			if (enabled) {
 				installFooter(commandCtx);
-				commandCtx.ui.notify("pi-tdah footer enabled", "info");
+				commandCtx.ui.notify("pi-adhd footer enabled", "info");
 			} else {
 				uninstallFooter(commandCtx);
 				commandCtx.ui.notify("Default footer restored", "info");

@@ -2,7 +2,7 @@
  * thinking — shared types for the compact reasoning preview.
  *
  * The renderer patches pi's internal `AssistantMessageComponent` (the extension
- * is a vendored, pi-tdah-adapted port of `pi-compact-thinking`), so the
+ * is a vendored, pi-adhd-adapted port of `pi-compact-thinking`), so the
  * internals it touches are typed structurally here rather than through the
  * public API. Keeping them in one place makes the surface easy to audit when
  * pi's component changes.
