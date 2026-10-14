@@ -66,7 +66,18 @@ Goal: the code is simple, DRY, elegant, readable, and functionally correct.
 3. Present them to the user and ask what to do with each: fix now, fix later, or leave as is.
 4. Act on the answer.
 
-# Phase 7 — Summary
+# Phase 7 — QA verification (web apps only)
+
+Goal: the implemented UI actually works from a user's point of view, verified end to end.
+
+1. Decide whether this change is testable through a UI. If the feature has no web UI (CLI, library, backend-only), skip this phase and say so in the summary.
+2. If the app isn't running or you don't know its base URL, ask the user: "What URL is the app running on?" Do not start the app yourself unless the user asks.
+3. Derive the test steps from what was actually implemented — one observable action plus expected outcome per step, covering the main flow and the edge cases the user confirmed in Phase 3.
+4. Spawn exactly one QA agent — a single `spawn` call with `spawn_type: "qa"` — passing the base URL and the ordered list of steps. Do not spawn multiple QA agents in parallel.
+5. Read the agent's report. For each FAIL, reproduce the issue yourself enough to understand it, then present the findings to the user: fix now, fix later, or leave as is.
+6. If the user chooses "fix now", apply the fixes and re-run the failed steps with one more `spawn` call before moving on.
+
+# Phase 8 — Summary
 
 1. Mark every `todo` item complete.
 2. Summarize what was built, the decisions made, the files changed, and the suggested next steps.
