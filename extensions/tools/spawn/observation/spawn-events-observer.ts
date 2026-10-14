@@ -1,5 +1,6 @@
 import type { SpawnManagerObserver } from "../lifecycle/spawn-manager.ts";
 import { SPAWN_RECORD_ENTRY, toPersistedRecord } from "../persisted-record.ts";
+import { SUBAGENT_USAGE_ENTRY, toSubagentUsage } from "../../../../shared/subagent-usage.ts";
 import type { CompactionInfo, Spawn } from "../types.ts";
 
 /** Emit callback — a subset of `pi.events.emit`. */
@@ -77,9 +78,14 @@ export class SpawnEventsObserver implements SpawnManagerObserver {
 	/**
 	 * Persist the terminal record for cross-extension history reconstruction.
 	 * Shared by every terminal-state handler (fresh and resumed).
+	 *
+	 * The record's cumulative usage rides its own `subagent-usage` entry, so the
+	 * session file keeps the spend after the live SpawnManager is gone and the
+	 * footer can recompute it from the entries alone.
 	 */
 	private persist(record: Spawn): void {
 		this.appendEntry(SPAWN_RECORD_ENTRY, toPersistedRecord(record));
+		this.appendEntry(SUBAGENT_USAGE_ENTRY, toSubagentUsage(record));
 	}
 
 	onSpawnCompacted(record: Spawn, info: CompactionInfo): void {

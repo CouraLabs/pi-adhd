@@ -2,6 +2,7 @@ import type { Usage } from "@earendil-works/pi-ai";
 import type { ExtensionContext, ThemeColor } from "@earendil-works/pi-coding-agent";
 import { formatTokens } from "./format.ts";
 import { CACHE_GLYPH, INPUT, OUTPUT } from "./glyphs.ts";
+import { readSubagentUsage } from "./subagent-usage.ts";
 
 /** The session entries a branch exposes; used to walk usage records. */
 export type SessionEntries = ReturnType<ExtensionContext["sessionManager"]["getEntries"]>;
@@ -15,10 +16,12 @@ export interface UsageTotals {
 	cost: number;
 	cacheHitRate: number;
 	entries: number;
+	/** Cumulative cost of the session's terminal spawn runs, read from the `subagent-usage` entries. */
+	subagentCost: number;
 }
 
 export function emptyUsage(): UsageTotals {
-	return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, cacheHitRate: 0, entries: 0 };
+	return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, cacheHitRate: 0, entries: 0, subagentCost: 0 };
 }
 
 export function addUsage(totals: UsageTotals, usage: Usage | undefined): void {
@@ -55,6 +58,7 @@ export function computeUsage(entries: SessionEntries): UsageTotals {
 
 	return {
 		...totals, 
+		subagentCost: readSubagentUsage(entries).cost,
 		cacheHitRate: latestCacheHitRate ?? 0
 	};
 }

@@ -10,7 +10,6 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { TUI } from "@earendil-works/pi-tui";
-import { getSpawnService, type SpawnServiceConsumer } from "../../../shared/spawn-service.ts";
 import { getFooterSections, subscribeFooterSections } from "../../../shared/footer-sections.ts";
 import { isExtensionLoaded, markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import { getAgentMode, subscribeAgentMode } from "../../../shared/modes.ts";
@@ -61,16 +60,13 @@ export default function (pi: ExtensionAPI) {
 	/**
 	 * Cumulative cost of every spawned agent this session has run.
 	 *
-	 * Read live from the published SpawnService rather than cached: a child
-	 * accrues cost between parent turns, and the service may be absent (spawn
-	 * not installed, or published by a child session), in which case the footer
-	 * shows only the session cost.
+	 * Read from the `subagent-usage` entries `computeUsage` sums (via
+	 * `usageTotals().subagentCost`), so it survives a `/resume`: the entries live
+	 * in the session file, where the live `SpawnService` does not. Each terminal
+	 * run appends an entry, and appending advances the leaf, so the usage cache's
+	 * session:leaf key recomputes the totals on the next frame.
 	 */
-	const spawnCost = (): number => {
-		const service = getSpawnService<SpawnServiceConsumer>();
-		if (!service) return 0;
-		return service.listAgents().reduce((sum, record) => sum + (record.lifetimeUsage?.cost ?? 0), 0);
-	};
+	const spawnCost = (): number => usageTotals().subagentCost;
 
 	const installFooter = (context: ExtensionContext) => {
 		if (context.mode !== "tui") return;

@@ -63,6 +63,7 @@ export function toUsageTotals(u: LifetimeUsage): UsageTotals {
     cost: u.cost,
     cacheHitRate: latestPromptTokens > 0 ? (u.lastCacheRead / latestPromptTokens) * 100 : 0,
     entries: 0,
+    subagentCost: 0,
   };
 }
 
