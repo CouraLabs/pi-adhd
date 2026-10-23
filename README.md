@@ -37,7 +37,7 @@ Fourteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`
 |---|---|---|
 | Shape the reply | `modes` | `/mode [pi\|work]`: swaps the system prompt, footer label, and editor border |
 | Shape the reply | `submodes` | `/plan` `/grill` `/straight`: read-only or guided working modes layered on top of the main mode |
-| See progress | `footer` | One-line themed status bar: countdowns, mode, model, thinking, context, cost |
+| See progress | `footer` | One-line themed status bar: countdowns, mode, model, thinking, context, tokens/sec, cost |
 | See progress | `todo` | Phased todo list persisted with the session |
 | See progress | `thinking` | Compact animated reasoning preview |
 | Drive the loop | `goal` | Persistent autonomous objective with budgets and continuation turns |

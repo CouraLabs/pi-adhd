@@ -29,6 +29,10 @@ export default function (pi: ExtensionAPI) {
 	let unsubscribeSections: (() => void) | undefined;
 	let unsubscribeTimers: (() => void) | undefined;
 	let timerTick: NodeJS.Timeout | undefined;
+	/** When the in-flight assistant message started streaming; undefined when none is. */
+	let assistantStart: number | undefined;
+	/** Tokens/sec of the most recently completed assistant message; undefined until one completes. */
+	let tps: number | undefined;
 
 	const requestRender = () => tui?.requestRender();
 
@@ -95,6 +99,7 @@ export default function (pi: ExtensionAPI) {
 							submode: isExtensionLoaded("submodes") ? getSubmode() : undefined,
 							thinkingLevel: pi.getThinkingLevel(),
 							contextUsage: ctx?.getContextUsage(),
+							tps,
 							usage: usageTotals(),
 							spawnCost: spawnCost(),
 							timers: getTimers(),
@@ -116,6 +121,8 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_start", (_event, context) => {
 		ctx = context;
 		usageCache = undefined;
+		tps = undefined;
+		assistantStart = undefined;
 
 		// Re-render when /mode switches the agent mode or /plan / /grill the submode.
 		unsubscribeMode?.();
@@ -140,6 +147,39 @@ export default function (pi: ExtensionAPI) {
 	pi.on("model_select", () => requestRender());
 	pi.on("thinking_level_select", () => requestRender());
 	pi.on("session_info_changed", () => requestRender());
+
+	// Tokens/sec of the last assistant message, timed hybrid: prefer the
+	// message's own durationMs (measured on a monotonic clock), falling back to
+	// the wall clock armed when it started streaming for messages without one
+	// (legacy or deferred results). User and toolResult messages neither arm nor
+	// reset the clock, so a turn's tool loop keeps timing only its own assistant
+	// segments.
+	pi.on("message_start", (event) => {
+		if (event.message.role !== "assistant") return;
+		assistantStart = Date.now();
+	});
+	pi.on("message_end", (event) => {
+		if (event.message.role !== "assistant") return;
+		const started = assistantStart;
+		assistantStart = undefined;
+		const output = event.message.usage.output;
+		// The message's own duration is a monotonic span and the better source;
+		// the armed wall clock only stands in when it is absent (and can be
+		// skewed by suspend/resume).
+		const durationMs = event.message.durationMs;
+		const seconds =
+			typeof durationMs === "number" && Number.isFinite(durationMs) && durationMs > 0
+				? durationMs / 1000
+				: started !== undefined
+					? (Date.now() - started) / 1000
+					: undefined;
+		// No elapsed source, a zero output, or a non-positive elapsed time (clock
+		// went backwards, messages too close to resolve) is no rate at all — keep
+		// the previous value rather than show a misleading 0 or Infinity.
+		if (seconds === undefined || !(output > 0) || seconds <= 0) return;
+		tps = output / seconds;
+		requestRender();
+	});
 
 	pi.on("session_shutdown", () => {
 		unsubscribeMode?.();
