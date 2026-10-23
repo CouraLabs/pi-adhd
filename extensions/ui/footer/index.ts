@@ -148,10 +148,12 @@ export default function (pi: ExtensionAPI) {
 	pi.on("thinking_level_select", () => requestRender());
 	pi.on("session_info_changed", () => requestRender());
 
-	// Tokens/sec of the last assistant message: arm the clock when one starts
-	// streaming, then divide its reported output by the elapsed time when it
-	// ends. User and toolResult messages neither arm nor reset the clock, so a
-	// turn's tool loop keeps timing only its own assistant segments.
+	// Tokens/sec of the last assistant message, timed hybrid: prefer the
+	// message's own durationMs (measured on a monotonic clock), falling back to
+	// the wall clock armed when it started streaming for messages without one
+	// (legacy or deferred results). User and toolResult messages neither arm nor
+	// reset the clock, so a turn's tool loop keeps timing only its own assistant
+	// segments.
 	pi.on("message_start", (event) => {
 		if (event.message.role !== "assistant") return;
 		assistantStart = Date.now();
@@ -161,12 +163,20 @@ export default function (pi: ExtensionAPI) {
 		const started = assistantStart;
 		assistantStart = undefined;
 		const output = event.message.usage.output;
-		if (started === undefined) return;
-		const seconds = (Date.now() - started) / 1000;
-		// A zero output or a non-positive elapsed time (clock went backwards,
-		// messages too close to resolve) is no rate at all — keep the previous
-		// value rather than show a misleading 0 or Infinity.
-		if (output <= 0 || seconds <= 0) return;
+		// The message's own duration is a monotonic span and the better source;
+		// the armed wall clock only stands in when it is absent (and can be
+		// skewed by suspend/resume).
+		const durationMs = event.message.durationMs;
+		const seconds =
+			typeof durationMs === "number" && Number.isFinite(durationMs) && durationMs > 0
+				? durationMs / 1000
+				: started !== undefined
+					? (Date.now() - started) / 1000
+					: undefined;
+		// No elapsed source, a zero output, or a non-positive elapsed time (clock
+		// went backwards, messages too close to resolve) is no rate at all — keep
+		// the previous value rather than show a misleading 0 or Infinity.
+		if (seconds === undefined || !(output > 0) || seconds <= 0) return;
 		tps = output / seconds;
 		requestRender();
 	});
