@@ -9,12 +9,8 @@ import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-c
 import { mixColors, truncateToWidth } from "@earendil-works/pi-tui";
 import { formatTokens } from "../../../shared/format.ts";
 import {
-	CONTEXT_CLOSE,
-	CONTEXT_EMPTY,
-	CONTEXT_FILLED,
-	CONTEXT_HALF,
-	CONTEXT_OPEN,
 	ELLIPSIS,
+	GAUGE_GLYPHS,
 	POMODORO_BREAK,
 	POMODORO_WORK,
 	SEPARATOR,
@@ -59,23 +55,43 @@ export interface FooterState {
 }
 
 /**
- * A ten-cell gauge — each cell 10%, each half cell 5% — whose filled cells
- * follow the usage percentage along a teal→red gradient from the active theme.
- * The brackets and the empty cells are dim.
+ * A five-position gauge — each position 20% of the window — drawn with the
+ * `GAUGE_GLYPHS` shading ramp: consumed positions shade up (░ empty → █ full),
+ * the partially-consumed position picks its glyph from the leftover fraction,
+ * and untouched positions stay empty and dim. No brackets.
  */
-function contextBar(theme: Theme, percent: number, cells = 10): string {
+export function contextBar(theme: Theme, percent: number, positions = 5): string {
 	const clamped = Math.max(0, Math.min(100, percent));
-	const halves = Math.round((clamped / 100) * cells * 2);
-	const full = Math.floor(halves / 2);
-	const half = halves % 2;
-	const empty = cells - full - half;
+	const consumed = (clamped / 100) * positions;
+	const full = Math.floor(consumed);
 	const color = mixColors(theme.colors.success, theme.colors.error, clamped / 100);
-	const filled = CONTEXT_FILLED.repeat(full) + (half === 1 ? CONTEXT_HALF : "");
-	return (
-		theme.fg("dim", CONTEXT_OPEN) +
-		theme.style(filled, { fg: color }) +
-		theme.fg("dim", CONTEXT_EMPTY.repeat(empty) + CONTEXT_CLOSE)
-	);
+	const glyphs: string[] = [];
+	for (let position = 0; position < positions; position++) {
+		if (position < full) {
+			glyphs.push(GAUGE_GLYPHS[3]);
+			continue;
+		}
+		if (position > full || full === positions) {
+			glyphs.push(GAUGE_GLYPHS[0]);
+			continue;
+		}
+		const remainder = consumed - full;
+		glyphs.push(
+			remainder <= 0
+				? GAUGE_GLYPHS[0]
+				: remainder <= 1 / 3
+					? GAUGE_GLYPHS[1]
+					: remainder <= 2 / 3
+						? GAUGE_GLYPHS[2]
+						: GAUGE_GLYPHS[3],
+		);
+	}
+	// Positions that carry fill (including a partial one) ride the usage
+	// gradient; untouched ones are dim, like the old brackets were.
+	const lit = full + (full < positions && consumed - full > 0 ? 1 : 0);
+	const colored = glyphs
+		.map((glyph, position) => (position < lit ? theme.style(glyph, { fg: color }) : theme.fg("dim", glyph)));
+	return colored.join("");
 }
 
 /** Color context text along the same teal→red gradient as the gauge. */

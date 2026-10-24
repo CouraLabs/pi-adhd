@@ -106,7 +106,6 @@ export const SUBMODE_TOOLS: Record<ActiveSubmode, readonly string[]> = {
 		"find",
 		"ls",
 		"ask",
-		"todo",
 		"spawn",
 		"submode-exit",
 	],

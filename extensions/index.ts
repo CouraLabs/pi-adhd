@@ -2,7 +2,7 @@
  * pi-adhd — single entry point that loads the enabled bundled extensions.
  *
  * Each extension keeps its own default factory and stays individually loadable
- * (`pi -e extensions/tools/todo/index.ts`); this barrel wires them into one
+ * (`pi -e extensions/tools/web/index.ts`); this barrel wires them into one
  * path so the package can be loaded from a single manifest entry. It reads the
  * top-level `extensions` array in `~/.pi/couralabs/settings.json` and calls
  * only the listed factories, so an extension absent from the array is never
@@ -11,10 +11,6 @@
  *
  * Load order is deliberate and matches the previous manifest glob order:
  *   ui → agent → tools
- * The one hard constraint is `submodes` before `todo`: both add a
- * `before_agent_start` handler, and submodes' tool-policy re-assert must run
- * first so todo's upkeep section is dropped when the submode excludes `todo`
- * (see extensions/tools/todo/index.ts).
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -27,6 +23,7 @@ import footer from "./ui/footer/index.ts";
 import messages from "./ui/messages/index.ts";
 import thinking from "./ui/thinking/index.ts";
 
+import commands from "./agent/commands/index.ts";
 import modes from "./agent/modes/index.ts";
 import submodes from "./agent/submodes/index.ts";
 
@@ -36,7 +33,6 @@ import job from "./tools/job/index.ts";
 import pomodoro from "./tools/pomodoro/index.ts";
 import spawn from "./tools/spawn/index.ts";
 import timer from "./tools/timer/index.ts";
-import todo from "./tools/todo/index.ts";
 import web from "./tools/web/index.ts";
 
 export default function piAdhd(pi: ExtensionAPI): void {
@@ -55,17 +51,17 @@ export default function piAdhd(pi: ExtensionAPI): void {
 	if (enabled.has("messages")) messages(pi);
 	if (enabled.has("thinking")) thinking(pi);
 
-	// Agent behavior: Pi/Work mode + Plan/Grill/Straight submodes.
+	// Agent behavior: Pi/Work mode + Plan/Grill/Straight submodes + prompt commands.
 	if (enabled.has("modes")) modes(pi);
 	if (enabled.has("submodes")) submodes(pi);
+	if (enabled.has("commands")) commands(pi);
 
-	// Tools: ask, goal, job, pomodoro, spawn, timer, todo, web.
+	// Tools: ask, goal, job, pomodoro, spawn, timer, web.
 	if (enabled.has("ask-user")) askUser(pi);
 	if (enabled.has("goal")) goal(pi);
 	if (enabled.has("job")) job(pi);
 	if (enabled.has("pomodoro")) pomodoro(pi);
 	if (enabled.has("spawn")) spawn(pi);
 	if (enabled.has("timer")) timer(pi);
-	if (enabled.has("todo")) todo(pi);
 	if (enabled.has("web")) web(pi);
 }

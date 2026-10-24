@@ -46,19 +46,12 @@ import type {
  * child extension registering a tool of its own. Filtering the active set once
  * after `bindExtensions` would be undone by that rebuild (#725).
  *
- * `todo` joins the guard for integration reasons rather than recursion: a
- * child's todo list would be a second, private list — it renders nowhere and
- * never reaches the parent's widget or `todo_updated` consumers, so the visible
- * list is the parent's plan. A custom agent that explicitly listed `todo` in
- * its `tools:` loses it in child sessions; that is the intended invariant (one
- * authoritative list per visible session).
- *
  * The `job` tools join for the same reason, plus process safety: a child's
  * in-memory job registry is invisible to the parent's `job-list`, and a
  * background process started in a child can outlive the child's teardown. The
  * parent starts and owns background jobs.
  */
-const EXCLUDED_TOOL_NAMES = ["spawn", "todo", "job", "job-kill", "job-read", "job-list"];
+const EXCLUDED_TOOL_NAMES = ["spawn", "job", "job-kill", "job-read", "job-list"];
 
 // ── IO boundary ───────────────────────────────────────────────────────────────
 

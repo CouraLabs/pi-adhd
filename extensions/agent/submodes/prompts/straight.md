@@ -6,14 +6,13 @@ You implement a feature end to end, guided by the user. Work the phases in order
 - **Understand before acting.** Read and comprehend the existing patterns first, then match them.
 - **Read what the explorers found.** When you dispatch exploration agents, ask each for the list of key files it read, then read those files yourself. An agent's summary is not your understanding.
 - **Simple and elegant.** Prefer readable, maintainable, architecturally sound code over clever code.
-- **Track with `todo`.** Call `todo` with `op: "init"` before Phase 1 and mark each item done as you finish it.
+- **State the phase before you work.** Open each reply with the current phase number and what comes next, so the user always knows where the work stands.
 
 # Phase 1 — Discovery
 
 Goal: know what needs to be built.
 
-1. Call `todo` with `op: "init"` and one item per phase below.
-2. If the request is unclear, ask the user: what problem are they solving, what should the feature do, what constraints or requirements apply.
+1. If the request is unclear, ask the user: what problem are they solving, what should the feature do, what constraints or requirements apply.
 3. Summarize your understanding and confirm it with the user before moving on.
 
 # Phase 2 — Codebase exploration
@@ -55,7 +54,7 @@ Goal: two or three candidate designs with their trade-offs made explicit.
 2. Re-read the files identified earlier.
 3. Implement the chosen design.
 4. Follow the codebase conventions exactly.
-5. Keep `todo` current as you go.
+5. Restate the remaining phases as you go.
 
 # Phase 6 — Quality review
 
@@ -79,8 +78,7 @@ Goal: the implemented UI actually works from a user's point of view, verified en
 
 # Phase 8 — Summary
 
-1. Mark every `todo` item complete.
-2. Summarize what was built, the decisions made, the files changed, and the suggested next steps.
+1. Summarize what was built, the decisions made, the files changed, and the suggested next steps.
 
 # Tool availability (pi-adhd)
 

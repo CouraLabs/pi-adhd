@@ -1,8 +1,10 @@
 /**
  * messages — a unified look for tool calls.
  *
- * Built-in tool calls drop their full background for a heavy left rule (`│`)
- * colored with the tool's semantic status color as a bright pastel. Rendering
+ * Tool calls render inline: a status-colored pick glyph (⛏) before the call —
+ * warning while the call is mere paperwork, accent while running, error or
+ * success once settled — with the tool name rewritten to PascalCase in the
+ * renderer's own style. Full backgrounds and left rules stay off. Rendering
  * only: no tool behavior or model context changes. Toggle it with
  * `/couralabs:toggle messages`.
  */
@@ -14,10 +16,11 @@ import { wrapRenderers } from "./renderers.ts";
 export default function (pi: ExtensionAPI) {
 	markExtensionLoaded("messages");
 
-	// Swap the built-in shell for a left rule, without touching tool behavior.
-	pi.registerToolRenderer((_, next) => {
+	// Frame every tool's calls inline, without touching tool behavior. The
+	// tool name travels with the renderers: the header rewrite is keyed on it.
+	pi.registerToolRenderer((toolName, next) => {
 		const renderers = next();
 		if (!renderers) return renderers;
-		return wrapRenderers(renderers);
+		return wrapRenderers(toolName, renderers);
 	});
 }

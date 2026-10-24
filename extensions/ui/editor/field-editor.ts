@@ -1,10 +1,13 @@
 /**
  * The pi-adhd prompt editor: a closed field-style box drawn with terminal box
  * characters around the built-in editor, with a `❯` marker on the first input
- * line, the working indicator embedded in the top border, and the working
- * directory + git state embedded in the bottom border. The box border color
- * follows the active agent mode (Pi is accented, Work keeps the default
- * border) instead of tracking the thinking level.
+ * line, and the working directory + git state embedded in the bottom border.
+ * The box border color follows the active agent mode (Pi is accented, Work
+ * keeps the default border) instead of tracking the thinking level.
+ *
+ * The box does not host pi's working indicator: the status line lives above
+ * the prompt field (see `./status.ts`), so this class passes no
+ * `embedWorkingStatus` option and lets pi draw its own top border row.
  */
 
 import {
@@ -28,8 +31,6 @@ import {
 	SEPARATOR,
 } from "../../../shared/glyphs.ts";
 import type { GitInfo } from "./git.ts";
-
-type StatusIndicatorLike = Parameters<CustomEditor["setWorkingStatusIndicator"]>[0];
 
 /** Hidden-line count a built-in editor border reports (` ↑ 3 more `); 0 when none. */
 function scrollCount(border: string | undefined): number {
@@ -61,22 +62,15 @@ export interface EditorLocationInfo {
 export type LocationProvider = () => EditorLocationInfo | undefined;
 
 export class FieldEditor extends CustomEditor {
-	private indicator: StatusIndicatorLike = undefined;
-
 	constructor(
 		tui: TUI,
 		theme: EditorTheme,
 		keybindings: KeybindingsManager,
 		private readonly getLocation: LocationProvider,
 	) {
-		super(tui, theme, keybindings, { paddingX: 0, embedWorkingStatus: true });
-		// Keep the embedded working indicator in step with the mode-colored box.
+		super(tui, theme, keybindings);
+		// Keep the box's mode-colored border; the working indicator lives above.
 		this.borderColor = (text) => this.paint(text);
-	}
-
-	setWorkingStatusIndicator(indicator: StatusIndicatorLike): void {
-		this.indicator = indicator;
-		super.setWorkingStatusIndicator(indicator);
 	}
 
 	/** Paint a border fragment with the active agent mode's border color. */
@@ -105,7 +99,6 @@ export class FieldEditor extends CustomEditor {
 
 		const info = this.getLocation();
 		const pad = " ".repeat(margin);
-		const status = this.indicator?.renderInBorder(Math.max(0, boxWidth - 8)) ?? "";
 		// The built-in editor embeds its scroll state in the borders this wrapper
 		// replaces; recover the counts so long multi-line input still says that
 		// lines are hidden above or below the box.
@@ -113,7 +106,7 @@ export class FieldEditor extends CustomEditor {
 		const hiddenBelow = scrollCount(lines[1 + visibleCount]);
 		const theme = info?.theme;
 		const dim = (text: string): string => theme ? theme.fg("dim", text) : text;
-		const topLabel = [status, hiddenAbove > 0 ? dim(`↑${hiddenAbove}`) : ""].filter(Boolean).join(" ");
+		const topLabel = hiddenAbove > 0 ? dim(`↑${hiddenAbove}`) : "";
 		const bottomLabel = [
 			this.locationSegment(),
 			hiddenBelow > 0 ? dim(`↓${hiddenBelow}`) : "",

@@ -20,6 +20,7 @@ import { createGlobalStore } from "./store.ts";
 /** Names of the pi-adhd extensions a consumer may check for. */
 export type ExtensionName =
 	| "ask-user"
+	| "commands"
 	| "editor"
 	| "footer"
 	| "goal"
@@ -31,7 +32,6 @@ export type ExtensionName =
 	| "submodes"
 	| "thinking"
 	| "timer"
-	| "todo"
 	| "web";
 
 const store = createGlobalStore<ReadonlySet<ExtensionName>>(

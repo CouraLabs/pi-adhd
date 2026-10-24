@@ -73,6 +73,10 @@ export interface UsageTheme {
  * `↑ 120k ↓ 8.4k ⭍ 87%` — fresh input, output, and the cache-hit rate, joined
  * by spaces. Returns "" when there is nothing to show.
  *
+ * Icon colors follow the semantic map: the input arrow is `success`, the
+ * output arrow is `accent` (the info blue — pi has no dedicated `info`
+ * token), and the cache glyph is `warning`.
+ *
  * `↑` counts fresh input only: pi-ai already reports `usage.input` as fresh
  * input — it subtracts cache reads and writes for providers that fold them
  * into a single prompt count — so nothing is subtracted again here. The
@@ -89,7 +93,7 @@ export function usageGroup(totals: UsageTotals, theme: UsageTheme): string {
 	}
 	const cacheTokens = totals.cacheRead + totals.cacheWrite;
 	if (cacheTokens > 0) {
-		parts.push(`${CACHE_GLYPH} ${theme.fg("thinkingText", `${totals.cacheHitRate.toFixed(2)}%`)}`);
+		parts.push(`${theme.fg("warning", CACHE_GLYPH)} ${theme.fg("thinkingText", `${totals.cacheHitRate.toFixed(2)}%`)}`);
 	}
 	return parts.join(" ");
 }

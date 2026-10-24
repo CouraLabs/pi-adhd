@@ -34,7 +34,8 @@ The plan is rendered fullscreen, line by line. The user reads it, may attach com
 
 Do not also write the plan out in your reply; the tool renders it. Do not write or edit any file while you are still the Plan agent.`;
 
-function formatComments(comments: PlanLineComment[]): string {
+/** Format line comments as a bullet list, one `- line N: text` per comment. */
+export function formatComments(comments: PlanLineComment[]): string {
 	if (comments.length === 0) return "";
 	return comments.map((comment) => `- line ${comment.line}: ${comment.text}`).join("\n");
 }

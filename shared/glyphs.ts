@@ -1,8 +1,8 @@
 /** Prompt chevron shared by the prompt editor and user messages. */
 export const PROMPT = "❯";
 
-/** Heavy left rule that replaces the built-in tool background. */
-export const RULE = "│";
+/** Status glyph before each tool call, colored with the call's status. */
+export const TOOL_PICK = "⛏";
 
 /** Ellipsis appended when a line is truncated. */
 export const ELLIPSIS = "…";
@@ -30,20 +30,10 @@ export const BOX_VERTICAL = "│";
 /** Monochrome Unicode cache glyph for the cache-hit indicator. */
 export const CACHE_GLYPH = "⭍";
 
-/** Filled cell of the context-window gauge (10% of the window at ten cells). */
-export const CONTEXT_FILLED = "■";
+// ── Context-window gauge ────────────────────────────────────────────────────
 
-/** Half-filled cell of the context-window gauge (5% of the window at ten cells). */
-export const CONTEXT_HALF = "◧";
-
-/** Empty cell of the context-window gauge. */
-export const CONTEXT_EMPTY = "□";
-
-/** Opening bracket of the context-window gauge. */
-export const CONTEXT_OPEN = "[";
-
-/** Closing bracket of the context-window gauge. */
-export const CONTEXT_CLOSE = "]";
+/** Shading ramp for the footer's context gauge: empty → light → heavy → full. */
+export const GAUGE_GLYPHS = ["░", "▒", "▓", "█"];
 
 /** Input (prompt) token marker. */
 export const INPUT = "↑";
@@ -56,7 +46,7 @@ export const OUTPUT = "↓";
 /** Pi agent-mode glyph. */
 export const MODE_PI = "π";
 /** Work agent-mode glyph. */
-export const MODE_WORK = "⛑";
+export const MODE_WORK = "⦵";
 /** Plan submode glyph. */
 export const SUBMODE_PLAN = "⚼";
 /** Grill submode glyph. */

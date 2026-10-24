@@ -30,7 +30,6 @@ import type { ExtensionAPI, ExtensionContext, ExtensionToolContext } from "@eare
 import { isChildSession } from "../../../shared/child-sessions.ts";
 import { isGoalActive, switchBlockedByGoalMessage } from "../../../shared/interlock.ts";
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
-import { TODO_UPKEEP_SECTION } from "../../../shared/prompt-sections.ts";
 import { offloadPrompt, readUserPrompt } from "../../../shared/user-prompts.ts";
 import {
 	GRILL_SECTION,
@@ -48,7 +47,7 @@ import {
 	type ActiveSubmode,
 	type Submode,
 } from "../../../shared/submodes.ts";
-import { createPlanWriteTool } from "./plan-write.ts";
+import { createPlanWriteTool, formatComments } from "./plan-write.ts";
 import type { PlanLineComment, PlanVerdict } from "./plan-review.ts";
 import { createSubmodeExitTool, type SubmodeExitMode } from "./submode-exit.ts";
 
@@ -79,7 +78,7 @@ const SUBMODE_ROLE: Record<ActiveSubmode, string> = {
 const SUBMODE_HANDOFF: Record<ActiveSubmode, string> = {
 	plan: "Submit the finished plan with `plan-write`; leave or switch with `submode-exit`.",
 	grill: "Ask questions with `ask`; leave or switch with `submode-exit`.",
-	straight: "Track the phases with `todo`; leave with `submode-exit` when the feature is done.",
+	straight: "Work the phases to a finished feature; leave with `submode-exit` when the user has the result.",
 };
 
 /** The `submode-exit` result sentence for each switch target. */
@@ -112,6 +111,18 @@ const SUBMODE_PROMPTS: Record<ActiveSubmode, { section: string; file: string; pa
 	plan: { section: PLAN_SECTION, file: "plan.md", packaged: packagedPlanPrompt },
 	grill: { section: GRILL_SECTION, file: "grill.md", packaged: packagedGrillPrompt },
 	straight: { section: STRAIGHT_SECTION, file: "straight.md", packaged: packagedStraightPrompt },
+};
+
+/**
+ * Append the reviewer's line comments to an approved plan, so both approval
+ * paths (implement now, implement after compaction) carry them into the run
+ * that implements the plan. A reject delivers comments through the tool result
+ * instead, so it never calls this.
+ */
+const planWithComments = (plan: PendingPlan): string => {
+	const comments = formatComments(plan.comments);
+	if (!comments) return plan.markdown;
+	return `${plan.markdown.trimEnd()}\n\n## Reviewer comments\n\n${comments}\n`;
 };
 
 interface PendingPlan {
@@ -231,13 +242,13 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 		ctx.ui.notify(SUBMODE_NOTICE.none, "info");
 
 		if (plan && plan.verdict === "approve-compact") {
-			pendingCompactPlan = plan.markdown;
+			pendingCompactPlan = planWithComments(plan);
 			return "Submode exited. The session will be compacted, then the approved plan is sent as the next prompt.";
 		}
 		if (plan && plan.verdict === "approve") {
 			// Start the coder run after this one settles, so the normal prompt and full
 			// toolset apply; a same-run follow-up would still carry the Plan prompt.
-			pendingHandoff = { kind: "plan", markdown: plan.markdown };
+			pendingHandoff = { kind: "plan", markdown: planWithComments(plan) };
 			return "Submode exited. The approved plan starts the next run; implementation begins there.";
 		}
 		return "Submode exited. Back to the normal coder agent.";
@@ -288,7 +299,7 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 	/**
 	 * The tool policy for the run, emitted as the last section of the system prompt.
 	 * The main mode may replace the preamble with prose naming tools this submode
-	 * forbids (`work.md` names `todo`, `edit`, and `write`), so the policy states the
+	 * forbids (`work.md` names `edit` and `write`), so the policy states the
 	 * allowed set and every forbidden name outright.
 	 */
 	const toolPolicy = (submode: ActiveSubmode): string => {
@@ -326,11 +337,6 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 		const allowed = allowedTools(submode);
 		pi.setActiveTools(allowed);
 		event.systemPromptOptions.selectedTools = allowed;
-
-		// The todo extension writes its upkeep section whenever `todo` is
-		// callable. Either handler may run first, so drop the section here too
-		// when this submode excludes `todo`: the prompt must match the policy.
-		if (!allowed.includes("todo")) delete sections[TODO_UPKEEP_SECTION];
 
 		const entry = SUBMODE_PROMPTS[submode];
 		sections[entry.section] = `${submodeDirective(submode)}\n\n${readUserPrompt("submodes", entry.file, entry.packaged)}`;

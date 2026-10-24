@@ -1,47 +1,62 @@
 /**
- * Wraps the built-in tool renderers so each call/result is drawn behind a
- * status-colored left rule instead of a full background.
+ * Wraps the built-in tool renderers so each call is framed inline: a
+ * status-colored pick glyph, the tool name in PascalCase, and no left rule or
+ * background box.
  */
 
-import type { Theme, ToolRenderers } from "@earendil-works/pi-coding-agent";
-import { type Color, colorToOklch, oklchColor } from "@earendil-works/pi-tui";
-import { BorderedTool } from "./bordered-tool.ts";
+import type { Theme, ThemeColor, ToolRenderers } from "@earendil-works/pi-coding-agent";
+import { type Color } from "@earendil-works/pi-tui";
+import { ToolFrame, pascalCase } from "./tool-frame.ts";
 
 /** Tool render context type, derived because the package does not re-export it. */
 export type ToolRenderContext = Parameters<NonNullable<ToolRenderers["renderCall"]>>[2];
 
+/** Lifecycle of one tool row, driving the status glyph's color. */
+export type ToolStatus = "called" | "running" | "error" | "finished";
+
 /**
- * The rule is drawn with the status's semantic color instead of the theme's
- * `tool*Bg` token: those tokens are often neutral fills (Gruvbox's success
- * background is a warm gray), which left the rule looking gray rather than
- * green. The semantic color is pushed to a bright pastel so it reads on its own
- * — high lightness, capped chroma, hue preserved — with a lower target on light
- * themes so it keeps contrast against the page.
+ * Status → semantic color token.
+ *
+ * Running maps to `accent` because pi has no `info` token: the accent is the
+ * info blue in every pi-adhd theme, so in-progress reads as informational
+ * while warning/error/success use their own semantic slots.
  */
-const PASTEL_DARK = { lightness: 0.86, chroma: 0.1 } as const;
-const PASTEL_LIGHT = { lightness: 0.72, chroma: 0.14 } as const;
+const STATUS_TOKEN: Record<ToolStatus, ThemeColor> = {
+	called: "warning",
+	running: "accent",
+	error: "error",
+	finished: "success",
+};
 
-/** Brighten a color to a pastel of the same hue, tuned for the theme's appearance. */
-function pastel(color: Color, appearance: Theme["appearance"]): Color {
-	const { c, h } = colorToOklch(color);
-	const target = appearance === "light" ? PASTEL_LIGHT : PASTEL_DARK;
-	return oklchColor(target.lightness, Math.min(c, target.chroma), h);
+/**
+ * The call header's status: `called` while only the streamed arguments exist,
+ * `running` while executing, and `finished`/`error` once a final result exists.
+ */
+export function callStatus(context: ToolRenderContext): ToolStatus {
+	if (!context.isPartial) return context.isError ? "error" : "finished";
+	return context.executionStarted ? "running" : "called";
 }
 
-/** Pick the tool's semantic status color, rendered as a bright pastel for the left rule. */
-export function statusPaint(theme: Theme, context: ToolRenderContext): (text: string) => string {
-	const color = context.isError
-		? theme.colors.error
-		: context.isPartial
-			? theme.colors.warning
-			: theme.colors.success;
-	const rule = pastel(color, theme.appearance);
-	return (text) => theme.style(text, { fg: rule });
+/** Result-side status: streaming results run; final ones settle into success/error. */
+export function resultStatus(options: { isPartial: boolean }, context: ToolRenderContext): ToolStatus {
+	return options.isPartial || context.isPartial ? "running" : context.isError ? "error" : "finished";
+}
+
+/** The status's semantic color as a Color value from the theme. */
+function statusColor(theme: Theme, status: ToolStatus): Color {
+	return theme.colors[STATUS_TOKEN[status]];
+}
+
+/** Paint the status icon in the status's semantic color. */
+function statusPaint(theme: Theme, status: ToolStatus): (text: string) => string {
+	const color = statusColor(theme, status);
+	return (text) => theme.style(text, { fg: color });
 }
 
 /**
- * The `edit` renderer paints its own background box; strip it so the left rule shows instead.
- * Duck-typed so it works even when the host and extension resolve different copies of pi-tui.
+ * The `edit` renderer paints its own background box; strip it so calls render
+ * flat like every other tool. Duck-typed so it works even when the host and
+ * extension resolve different copies of pi-tui.
  */
 function neutralise(component: unknown): void {
 	if (!component || typeof component !== "object") return;
@@ -53,45 +68,39 @@ function neutralise(component: unknown): void {
 	box.setPaddingX?.(0);
 }
 
-function wrapperFor(context: ToolRenderContext): BorderedTool {
-	return context.lastComponent instanceof BorderedTool ? context.lastComponent : new BorderedTool();
+function frameFor(context: ToolRenderContext): ToolFrame {
+	return context.lastComponent instanceof ToolFrame ? context.lastComponent : new ToolFrame();
 }
 
-export function wrapRenderers(renderers: ToolRenderers): ToolRenderers {
+/**
+ * Wrap a tool's renderers, seeding the frame with the PascalCase tool name so
+ * the header line can be rewritten in place.
+ */
+export function wrapRenderers(toolName: string, renderers: ToolRenderers): ToolRenderers {
 	const originalCall = renderers.renderCall;
 	const originalResult = renderers.renderResult;
+	const title = pascalCase(toolName);
 
 	const renderCall: ToolRenderers["renderCall"] = originalCall
 		? (args, theme, context) => {
-				const wrapper = wrapperFor(context);
-				const inner = originalCall(args, theme, { ...context, lastComponent: wrapper.inner });
+				const frame = frameFor(context);
+				const inner = originalCall(args, theme, { ...context, lastComponent: frame.inner });
 				neutralise(inner);
 				neutralise(context.state?.callComponent);
-				wrapper.set(
-					inner,
-					statusPaint(theme, context),
-					context.outputPad,
-					(text) => theme.style(text, { bold: true }),
-					true,
-				);
-				return wrapper;
+				frame.set(inner, statusPaint(theme, callStatus(context)), title);
+				return frame;
 			}
 		: undefined;
 
 	const renderResult: ToolRenderers["renderResult"] = originalResult
 		? (result, options, theme, context) => {
-				const wrapper = wrapperFor(context);
-				const inner = originalResult(result, options, theme, { ...context, lastComponent: wrapper.inner });
+				const frame = frameFor(context);
+				const inner = originalResult(result, options, theme, { ...context, lastComponent: frame.inner });
 				neutralise(inner);
 				neutralise(context.state?.callComponent);
-				wrapper.set(
-					inner,
-					statusPaint(theme, context),
-					context.outputPad,
-					(text) => theme.style(text, { bold: true }),
-					false,
-				);
-				return wrapper;
+				// Result bodies render plain — the call header above carries the icon.
+				frame.set(inner, undefined, title);
+				return frame;
 			}
 		: undefined;
 

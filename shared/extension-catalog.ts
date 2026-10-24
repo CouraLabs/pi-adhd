@@ -34,13 +34,13 @@ export const EXTENSION_CATALOG: readonly ExtensionCatalogEntry[] = [
 	{ name: "thinking", description: "compact animated thinking preview" },
 	{ name: "modes", description: "Pi/Work agent modes" },
 	{ name: "submodes", description: "Plan/Grill/Straight submodes" },
+	{ name: "commands", description: "/cmd:<name> prompt commands from .agents + .claude" },
 	{ name: "ask-user", aliases: ["askUser", "ask"], description: "ask_user tool" },
 	{ name: "goal", description: "persistent goal loop" },
 	{ name: "job", description: "background terminal jobs" },
 	{ name: "pomodoro", description: "pomodoro work/break sessions" },
 	{ name: "spawn", description: "spawn tool and sub-agents" },
 	{ name: "timer", description: "/timer bell countdown" },
-	{ name: "todo", description: "phased todo tool" },
 	{ name: "web", description: "web fetch and search tools" },
 ];
 

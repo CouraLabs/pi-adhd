@@ -3,7 +3,7 @@
  *
  *   - Work replaces pi's default system prompt with the pi-adhd Work rules
  *     (see `prompts/work.md`), turning the agent into an orchestrator that
- *     delegates to spawned agents and tracks work with the todo tool.
+ *     delegates to spawned agents.
  *   - Pi leaves pi's default system prompt untouched.
  *
  * Switch modes with `/mode [pi|work]`. The footer shows the active mode and the

@@ -9,8 +9,6 @@
  * toggle, the way `shared/extension-catalog.ts` is for extensions.
  */
 
-import { loadSettings, updateSettings } from "./settings.ts";
-
 /** One non-extension toggle shown by `/couralabs:toggle`. */
 export interface FeatureToggleEntry {
 	/** Stable identifier, accepted as the `/couralabs:toggle` argument. */
@@ -25,16 +23,9 @@ export interface FeatureToggleEntry {
 	readonly setEnabled: (enabled: boolean) => void;
 }
 
-/** Every feature toggle, in dialog order. */
-export const FEATURE_TOGGLES: readonly FeatureToggleEntry[] = [
-	{
-		id: "loading-phrases",
-		label: "Loading Phrases",
-		description: "witty loading phrases instead of plain \"Working...\" in the editor",
-		isEnabled: () => loadSettings().editor.loadingPhrases,
-		setEnabled: (enabled) => updateSettings({ editor: { loadingPhrases: enabled } }),
-	},
-];
+/** Every feature toggle, in dialog order. Currently none — the mechanism
+ *  remains for future settings-backed switches. */
+export const FEATURE_TOGGLES: readonly FeatureToggleEntry[] = [];
 
 /** Resolve operator input (id, case-insensitive) to a feature toggle. */
 export function resolveFeatureToggle(input: string): FeatureToggleEntry | undefined {

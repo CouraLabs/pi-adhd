@@ -18,6 +18,14 @@ import { dirname, join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { DEFAULT_EXTENSION_NAMES } from "./extension-catalog.ts";
 
+/** Default tool-name → gerund map for the working status; extend via `editor.toolVerbs`. */
+export const DEFAULT_TOOL_VERBS: Readonly<Record<string, string>> = {
+	read: "Reading",
+	write: "Writing",
+	edit: "Editing",
+	bash: "Running",
+};
+
 /** Prompt-inheritance strategy a child session adopts for a provider. */
 export type PromptInheritance = "full" | "portable";
 
@@ -25,8 +33,11 @@ export type PromptInheritance = "full" | "portable";
 export interface EditorConfig {
 	/** When true the footer shows the full working directory; otherwise only its last folder. */
 	fullCwd: boolean;
-	/** When true the working indicator shows a random loading phrase; otherwise plain "Working...". */
-	loadingPhrases: boolean;
+	/**
+	 * Tool-name → gerund shown in the working status while that tool executes
+	 * (e.g. `read: "Reading"`). Unmapped tools fall back to "Tooling".
+	 */
+	toolVerbs: Record<string, string>;
 }
 
 /**
@@ -110,7 +121,7 @@ export interface CouralabsSettings {
 /** A partial update; each provided leaf overrides the stored value. */
 export interface SettingsPatch {
 	extensions?: string[];
-	editor?: { fullCwd?: boolean; loadingPhrases?: boolean };
+	editor?: { fullCwd?: boolean; toolVerbs?: Record<string, string> };
 	thinking?: Partial<ThinkingConfig>;
 	spawn?: Partial<SpawnConfig>;
 	timer?: Partial<TimerConfig>;
@@ -123,7 +134,10 @@ export interface SettingsPatch {
 
 export const DEFAULT_SETTINGS: CouralabsSettings = {
 	extensions: [...DEFAULT_EXTENSION_NAMES],
-	editor: { fullCwd: false, loadingPhrases: true },
+	editor: {
+		fullCwd: false,
+		toolVerbs: { ...DEFAULT_TOOL_VERBS },
+	},
 	thinking: {
 		useSummaryTitlesAsThinkingTitle: true,
 		previewLines: 5,

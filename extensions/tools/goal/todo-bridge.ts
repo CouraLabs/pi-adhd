@@ -12,6 +12,11 @@
  *   - session entries (`todo-phases` full snapshots, pi-todo's documented
  *     entry type) restore the phases on session_start
  *
+ * pi-adhd itself no longer ships a todo tool, so this bridge is idle in the
+ * default install: `buildTodoContext`/`todoProgress` stay undefined-safe and
+ * render nothing until a pi-todo-protocol emitter (for example the external
+ * pi-todo package) is loaded alongside.
+ *
  * The rendered block is byte-identical to omp's goal-todo-context.md output:
  * phase names and task contents are XML-escaped with control characters
  * flattened (omp #sanitizeGoalTodoText).
@@ -20,7 +25,6 @@
 import { readFileSync } from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { isFinishedTodoList } from "../todo/state.ts";
 import { escapeXmlText, renderTemplate } from "./template.ts";
 
 const goalTodoContextPrompt = readFileSync(
@@ -69,6 +73,17 @@ function isTodoPhase(value: unknown): value is TodoPhase {
 		const t = task as Record<string, unknown>;
 		return typeof t.content === "string" && isTodoStatus(t.status);
 	});
+}
+
+/** A settled task: completed or deliberately abandoned (pi-todo's semantics). */
+function isClosedTodo(task: TodoItem): boolean {
+	return task.status === "completed" || task.status === "abandoned";
+}
+
+/** A list is finished when it has tasks and every one is closed. */
+function isFinishedTodoList(phases: TodoPhase[]): boolean {
+	const tasks = phases.flatMap((phase) => phase.tasks);
+	return tasks.length > 0 && tasks.every(isClosedTodo);
 }
 
 /**

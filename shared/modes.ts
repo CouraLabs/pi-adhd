@@ -39,7 +39,7 @@ export const AGENT_MODE_LABEL: Record<AgentMode, string> = {
 /** One-sentence explanation of what a mode does, shown when it becomes active. */
 export const MODE_NOTICE: Record<AgentMode, string> = {
 	pi: `${AGENT_MODE_LABEL.pi}. pi's default system prompt is in effect — no pi-adhd rules are added, so the agent answers in its own voice with pi's built-in guidance and the full toolset.`,
-	work: `${AGENT_MODE_LABEL.work}. The pi-adhd Work rules replace the default system prompt: the agent orchestrates, delegating exploration and implementation to spawned agents, asks before assuming, and tracks progress with the todo tool.`,
+	work: `${AGENT_MODE_LABEL.work}. The pi-adhd Work rules replace the default system prompt: the agent orchestrates, delegating exploration and implementation to spawned agents, asks before assuming.`,
 };
 
 const store = createGlobalStore<AgentMode>(Symbol.for("@couralabs/pi-adhd/agent-mode"), DEFAULT_AGENT_MODE);

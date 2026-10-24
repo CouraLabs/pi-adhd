@@ -10,6 +10,9 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { TUI } from "@earendil-works/pi-tui";
+
+/** Shape of `ctx.getContextUsage()`, as rendered by `renderFooter`. */
+type ContextUsage = ReturnType<ExtensionContext["getContextUsage"]>;
 import { getFooterSections, subscribeFooterSections } from "../../../shared/footer-sections.ts";
 import { isExtensionLoaded, markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import { getAgentMode, subscribeAgentMode } from "../../../shared/modes.ts";
@@ -24,6 +27,8 @@ export default function (pi: ExtensionAPI) {
 	let tui: TUI | undefined;
 
 	let usageCache: { key: string; value: UsageTotals } | undefined;
+	/** Context tokens from the most recent valid assistant reply; undefined before the first one. */
+	let lastRealContextTokens: number | undefined;
 	let unsubscribeMode: (() => void) | undefined;
 	let unsubscribeSubmode: (() => void) | undefined;
 	let unsubscribeSections: (() => void) | undefined;
@@ -72,6 +77,28 @@ export default function (pi: ExtensionAPI) {
 	 */
 	const spawnCost = (): number => usageTotals().subagentCost;
 
+	/**
+	 * Context gauge with the mid-turn jitter smoothed out.
+	 *
+	 * pi core alternates between two measurements for `getContextUsage()`: the
+	 * last assistant's real token usage, and a chars/4 estimate for messages
+	 * after it. The two disagree enough that the gauge visibly rises and falls
+	 * within a single turn even though the real context only grows. Hold the
+	 * last real reading while pi is in its estimate phase; pass through pi's
+	 * "unknown after compaction" state (null tokens) untouched so the gauge
+	 * shows ?/ until the next real reply re-anchors it.
+	 */
+	const contextUsageNow = (): ContextUsage | undefined => {
+		const live = ctx?.getContextUsage();
+		if (!live || live.tokens === null || live.percent === null) return live;
+		if (lastRealContextTokens === undefined) return live;
+		return {
+			...live,
+			tokens: lastRealContextTokens,
+			percent: (lastRealContextTokens / live.contextWindow) * 100,
+		};
+	};
+
 	const installFooter = (context: ExtensionContext) => {
 		if (context.mode !== "tui") return;
 		context.ui.setFooter((footerTui, theme, footerData) => {
@@ -98,7 +125,7 @@ export default function (pi: ExtensionAPI) {
 							mode: isExtensionLoaded("modes") ? getAgentMode() : undefined,
 							submode: isExtensionLoaded("submodes") ? getSubmode() : undefined,
 							thinkingLevel: pi.getThinkingLevel(),
-							contextUsage: ctx?.getContextUsage(),
+							contextUsage: contextUsageNow(),
 							tps,
 							usage: usageTotals(),
 							spawnCost: spawnCost(),
@@ -121,6 +148,7 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_start", (_event, context) => {
 		ctx = context;
 		usageCache = undefined;
+		lastRealContextTokens = undefined;
 		tps = undefined;
 		assistantStart = undefined;
 
@@ -148,31 +176,53 @@ export default function (pi: ExtensionAPI) {
 	pi.on("thinking_level_select", () => requestRender());
 	pi.on("session_info_changed", () => requestRender());
 
-	// Tokens/sec of the last assistant message, timed hybrid: prefer the
-	// message's own durationMs (measured on a monotonic clock), falling back to
-	// the wall clock armed when it started streaming for messages without one
-	// (legacy or deferred results). User and toolResult messages neither arm nor
-	// reset the clock, so a turn's tool loop keeps timing only its own assistant
-	// segments.
+	// A tree navigation rewrites the branch, so the held reading no longer
+	// describes the visible context; fall back to pi's live value until the
+	// next assistant reply re-anchors it.
+	pi.on("session_tree", () => {
+		lastRealContextTokens = undefined;
+		requestRender();
+	});
+
+	// Tokens/sec of the last assistant message, timed from three sources in
+	// trust order: the message's own durationMs (a monotonic span the SDK's
+	// AssistantMessageEventStream records on the final message it saw start),
+	// else the monotonic performance.now() span armed when streaming began
+	// (legacy messages without durationMs), else the message's timestamp —
+	// the provider-layer request start, covering messages that completed
+	// before a clock could be armed, and deferred results fetched without one.
+	// User and toolResult messages neither arm nor reset the clock, so a
+	// turn's tool loop keeps timing only its own assistant segments.
 	pi.on("message_start", (event) => {
 		if (event.message.role !== "assistant") return;
-		assistantStart = Date.now();
+		assistantStart = performance.now();
 	});
 	pi.on("message_end", (event) => {
 		if (event.message.role !== "assistant") return;
+		// Mirror pi core's validity rule — aborted/errored replies and zero usage
+		// don't count toward context, so they must not re-anchor the gauge either.
+		// The event fires before the message is persisted, so reading
+		// getContextUsage() here would still see the previous phase; take the
+		// total straight from the message's own usage instead.
+		const usage = event.message.usage;
+		const totalTokens = usage.totalTokens || usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
+		if (event.message.stopReason !== "aborted" && event.message.stopReason !== "error" && totalTokens > 0) {
+			lastRealContextTokens = totalTokens;
+		}
 		const started = assistantStart;
 		assistantStart = undefined;
 		const output = event.message.usage.output;
-		// The message's own duration is a monotonic span and the better source;
-		// the armed wall clock only stands in when it is absent (and can be
-		// skewed by suspend/resume).
+		// First two tiers share the monotonic clock family the SDK stamps
+		// durationMs with; only the last tier touches Date.now(), paired against
+		// the provider-layer request timestamp, so NTP steps or suspend/resume
+		// cannot inflate a rate measured on the primary clocks.
 		const durationMs = event.message.durationMs;
 		const seconds =
 			typeof durationMs === "number" && Number.isFinite(durationMs) && durationMs > 0
 				? durationMs / 1000
 				: started !== undefined
-					? (Date.now() - started) / 1000
-					: undefined;
+					? (performance.now() - started) / 1000
+					: (Date.now() - event.message.timestamp) / 1000;
 		// No elapsed source, a zero output, or a non-positive elapsed time (clock
 		// went backwards, messages too close to resolve) is no rate at all — keep
 		// the previous value rather than show a misleading 0 or Infinity.
