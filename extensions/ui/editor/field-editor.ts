@@ -16,7 +16,13 @@ import {
 	type Theme,
 } from "@earendil-works/pi-coding-agent";
 import type { EditorTheme, TUI } from "@earendil-works/pi-tui";
-import { getKeybindings, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import {
+	CURSOR_MARKER,
+	getKeybindings,
+	renderFakeCursor,
+	truncateToWidth,
+	visibleWidth,
+} from "@earendil-works/pi-tui";
 import { formatCwd } from "../../../shared/format.ts";
 import { agentModeBorderColor, getAgentMode } from "../../../shared/modes.ts";
 import {
@@ -69,6 +75,9 @@ export type StatusProvider = () => PromptStatus | undefined;
 const PLACEHOLDER_IDLE = "What are we going to build today?";
 /** Running-prompt placeholder; the queue keybinding resolves live. */
 const PLACEHOLDER_RUNNING = "Press {keys} to Queue or Enter to steer new request...";
+
+/** Grapheme segmenter for the placeholder's cursor cell. */
+const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 /** The queue follow-up keybinding, formatted like pi's own hints (option on macOS). */
 function queueKeyText(): string {
@@ -144,7 +153,7 @@ export class FieldEditor extends CustomEditor {
 		// first row; typing pushes it out with the real text.
 		const placeholder = this.placeholder();
 		if (placeholder && this.getText() === "" && content.length > 0) {
-			content[0] = dim(truncateToWidth(placeholder, contentWidth));
+			content[0] = this.placeholderRow(truncateToWidth(placeholder, contentWidth), dim);
 		}
 		const topLabel = hiddenAbove > 0 ? dim(`↑${hiddenAbove}`) : "";
 		const bottomLabel = [
@@ -166,6 +175,21 @@ export class FieldEditor extends CustomEditor {
 			out.push(pad + line + " ".repeat(Math.max(0, boxWidth - visibleWidth(line))) + pad);
 		}
 		return out;
+	}
+
+	/**
+	 * The placeholder row with the cursor kept: the first grapheme becomes a
+	 * fake cursor cell and a focused field emits the zero-width hardware cursor
+	 * marker before it, the way pi's `Input` renders placeholders. Swapping the
+	 * cursor-bearing first row for plain dim text drops the marker, and with it
+	 * the visible cursor.
+	 */
+	private placeholderRow(text: string, dim: (value: string) => string): string {
+		const graphemes = [...graphemeSegmenter.segment(text)];
+		const atCursor = graphemes[0]?.segment ?? " ";
+		const after = text.slice(atCursor.length);
+		const marker = this.focused ? CURSOR_MARKER : "";
+		return marker + renderFakeCursor(dim(atCursor)) + dim(after);
 	}
 
 	/**

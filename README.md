@@ -356,9 +356,11 @@ It is organized as `{ feature: { option: value } }`, plus a top-level `extension
     "thinking",
     "modes",
     "submodes",
+    "commands",
     "ask-user",
     "goal",
     "job",
+    "pomodoro",
     "spawn",
     "timer",
     "web"
@@ -627,6 +629,4 @@ The `pi` manifest in `package.json` loads `extensions/index.ts`, so add the fact
 - `@gotgenes/pi-packages` — https://github.com/gotgenes/pi-packages
 - `@fyeeme/pi-packages` — https://github.com/fyeeme/pi-packages
 
-## Next action
 
-Run `npx tsc --noEmit` from the repo root to confirm the rebrand type-checks.
