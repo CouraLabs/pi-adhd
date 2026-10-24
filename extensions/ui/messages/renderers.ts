@@ -54,6 +54,16 @@ function statusPaint(theme: Theme, status: ToolStatus): (text: string) => string
 }
 
 /**
+ * Restyle the rewritten tool-name token: default text color, bold.
+ * Applied only to the spliced token, so the rest of the header keeps the
+ * renderer's own styling — and a renderer not carrying the tool name verbatim
+ * (bash's `$` prompt) simply skips the restyle with its text untouched.
+ */
+function nameStyle(theme: Theme): (text: string) => string {
+	return (text) => theme.style(text, { fg: "text", bold: true });
+}
+
+/**
  * The `edit` renderer paints its own background box; strip it so calls render
  * flat like every other tool. Duck-typed so it works even when the host and
  * extension resolve different copies of pi-tui.
@@ -87,7 +97,7 @@ export function wrapRenderers(toolName: string, renderers: ToolRenderers): ToolR
 				const inner = originalCall(args, theme, { ...context, lastComponent: frame.inner });
 				neutralise(inner);
 				neutralise(context.state?.callComponent);
-				frame.set(inner, statusPaint(theme, callStatus(context)), title);
+				frame.set(inner, statusPaint(theme, callStatus(context)), title, nameStyle(theme));
 				return frame;
 			}
 		: undefined;
@@ -99,7 +109,7 @@ export function wrapRenderers(toolName: string, renderers: ToolRenderers): ToolR
 				neutralise(inner);
 				neutralise(context.state?.callComponent);
 				// Result bodies render plain — the call header above carries the icon.
-				frame.set(inner, undefined, title);
+				frame.set(inner, undefined, title, nameStyle(theme));
 				return frame;
 			}
 		: undefined;

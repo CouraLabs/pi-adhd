@@ -1,46 +1,97 @@
 import type { Component } from "@earendil-works/pi-tui";
+import { visibleWidth } from "@earendil-works/pi-tui";
 import { truncateToWidth } from "@earendil-works/pi-tui";
 import { TOOL_PICK } from "../../../shared/glyphs.ts";
+
+/** SGR escape sequence: `\x1b[0-9;…m`. */
+const SGR_PATTERN = /\x1b\[[0-9;]*m/g;
+/** OSC-8 hyperlink wrapper (open carrying the URL, or empty-payload terminator). */
+const OSC_LINK_PATTERN = /\x1b\]8;;[^\x1b]*\x1b\\/g;
+
+/** Strip SGR color codes and OSC-8 wrappers, keeping the link's display text. */
+function displayOf(line: string): string {
+	return line.replace(SGR_PATTERN, "").replace(OSC_LINK_PATTERN, "");
+}
 
 /**
  * Frames a tool component inline — no left rule, no indentation shift.
  *
- * In header mode the first rendered line gains the status-colored pick glyph,
- * and a tool-name token leading that line is rewritten to PascalCase in place:
- * the style runs wrapped around the token are kept, so the name inherits the
- * renderer's own color and weight. Renderers whose header leads with something
- * else — the shell prompt (`$`), a classification tag — get the icon only.
- * In plain mode, used for result bodies below the call header, lines pass
- * through unmodified.
+ * On the header row — the first row with visible content; Box-based renderers
+ * like `edit` lead with blank pad rows — a status-colored pick glyph rides the
+ * front and the tool-name token is rewritten to PascalCase in place. The two
+ * icon columns are paid for by shedding pad columns the inner row already
+ * carries; short headers just carry them in front. Renderers whose header
+ * leads with something else — the shell prompt (`$`), a classification tag —
+ * get the icon only.
  *
- * The icon and its space are reserved by rendering the inner at the reduced
- * width; the header is truncated as a final guard, since pi-tui treats an
- * overlong line as fatal.
+ * In plain mode (`paint` undefined) — result bodies under the call header —
+ * rows pass through unmodified. Never mutating: the inner caches its rendered
+ * array between frames, so only a copied array leaves this component.
  */
+/** Columns the icon prefix spends on the header row (`<glyph> `). */
+const ICON_WIDTH = 2;
+
 export class ToolFrame implements Component {
 	inner: Component | undefined;
 	/** Paint for the status icon; `undefined` switches the frame to plain mode. */
 	private paint: ((text: string) => string) | undefined;
+	/** Restyler for the spliced tool-name token; the splice keeps pi's styling when absent. */
+	private namePaint: ((text: string) => string) | undefined;
 	private name = "";
 
-	set(inner: Component, paint: ((text: string) => string) | undefined, name: string): void {
+	set(
+		inner: Component,
+		paint: ((text: string) => string) | undefined,
+		name: string,
+		namePaint?: (text: string) => string,
+	): void {
 		this.inner = inner;
 		this.paint = paint;
 		this.name = name;
+		this.namePaint = namePaint;
 	}
 
 	render(width: number): string[] {
-		const lines = this.inner?.render(width - this.prefixWidth) ?? [];
-		// Never mutate: inner components cache their rendered arrays and reuse them.
-		if (!this.paint || lines.length === 0 || !lines[0].trim()) return lines;
-		const line = lines[0];
-		const indent = leadingIndent(line);
-		const icon = `${this.paint(TOOL_PICK)}${indent || " "}`;
-		return [truncateToWidth(icon + spliceName(line, this.name), width), ...lines.slice(1)];
-	}
-
-	private get prefixWidth(): number {
-		return this.paint ? 2 : 0;
+		// Below two columns the icon prefix cannot fit without an over-wide line.
+		if (width <= 1) return [];
+		const lines = this.inner?.render(width) ?? [];
+		if (lines.length === 0) return lines;
+		// Copied so the header splice below never mutates the inner's cached array.
+		const rows = [...lines];
+		if (!this.paint) return rows;
+		const head = lines.findIndex((line) => line.trim() !== "");
+		if (head < 0) return rows;
+		// The original row keeps every escape (splice + colors below work on it);
+		// the display twin — OSC-8 wrappers and SGR codes stripped, only plain
+		// text left — exists for measurement, because width utils count those
+		// invisible bytes as cells and would score linked headers ~30 wide.
+		const original = lines[head];
+		const visual = displayOf(original).replace(SGR_PATTERN, "");
+		const leadCount = /^ +/.exec(visual)?.[0].length ?? 0;
+		const icon = this.paint(TOOL_PICK);
+		const budget = width - ICON_WIDTH;
+		let framed: string;
+		if (leadCount > 0) {
+			// Lead pad cells (Box renderers) free the room; the icon and a
+			// separator go where the pad was, the splice rewrites the name.
+			const freed = Math.min(leadCount, ICON_WIDTH);
+			let body = spliceName(trimLead(original), this.name, this.namePaint);
+			// Make up any remaining columns from the row's own trailing pad.
+			body = shedTrailingPad(body, ICON_WIDTH - freed);
+			framed = `${icon} ${body}`;
+		} else {
+			let body = spliceName(trimLead(original), this.name, this.namePaint);
+			// No lead pad: shed the full icon cost from the row's trailing pad.
+			body = shedTrailingPad(body, ICON_WIDTH);
+			if (visibleWidth(visual) + ICON_WIDTH > width) {
+				// Over-wide without enough pad: cut so icon + separator fit
+				// (rare: only rows whose content itself exceeds the budget).
+				body = truncateToWidth(body, budget);
+			}
+			framed = `${icon} ${body}`;
+		}
+		rows[head] = framed;
+		return rows;
 	}
 
 	invalidate(): void {
@@ -49,22 +100,21 @@ export class ToolFrame implements Component {
 }
 
 /**
- * Rewrite a tool-name token at the start of a line to PascalCase.
+ * Rewrite a tool-name token at the start of a line to PascalCase, restyled by
+ * `namePaint` when given. The restyle wraps only the name token; the tail of
+ * the run (`read skill`) and everything after keep the renderer's own styling.
  *
- * Line shape: `[indent][open codes][plain][close codes][rest]`. The plain run
- * may be exactly the name (`read`) or start with it and continue inside the
- * same style run (`read skill`). Nothing is rewritten when the run's first
- * word is not the tool name (`$ npm test`, `[skill] file`) or when the match
- * runs into an identifier boundary (`read` vs `readme`). Separators inside the
- * token are ignored, so a renderer's own PascalCase output (`JobKill`) still
- * matches the `job-kill` name and is left as it already is.
+ * Line shape: `[open codes][plain][close codes][rest]`. The plain run may be
+ * exactly the name (`read`) or start with it and continue inside the same
+ * style run (`read skill`). Nothing is rewritten when the run's first word is
+ * not the tool name (`$ npm test`, `[skill] file`) or when the match runs
+ * into an identifier boundary (`read` vs `readme`). Separators are ignored
+ * when matching, so a renderer's own PascalCase output (`JobKill`) still
+ * matches the `job-kill` name and is left already correct.
  */
-function spliceName(line: string, name: string): string {
-	let index = 0;
-	while (line[index] === " ") index++;
-	const indent = line.slice(0, index);
-	const openEnd = escapeEndAfter(line, index);
-	const open = line.slice(index, openEnd);
+function spliceName(line: string, name: string, namePaint?: (text: string) => string): string {
+	const openEnd = escapeEndAfter(line, 0);
+	const open = line.slice(0, openEnd);
 
 	const plainEnd = plainEndFrom(line, openEnd);
 	const plain = line.slice(openEnd, plainEnd);
@@ -75,8 +125,39 @@ function spliceName(line: string, name: string): string {
 	const close = line.slice(plainEnd, closeEnd);
 	const tail = plain.slice(word.length);
 	const rest = line.slice(closeEnd);
-	const replacement = tail ? `${pascalCase(name)}${tail}` : pascalCase(name);
-	return `${open}${replacement}${close}${rest}`;
+	const title = pascalCase(name);
+	// A tail that starts a real word (`read skill`) belongs to the renderer's
+	// original run, so the restyle wraps only the plain token; a bare separator
+	// (a space before a differently-run rest) still gets the restyle.
+	const hasContinuation = /^[ \t]*\S/.test(tail);
+	const styled = namePaint && !hasContinuation ? namePaint(title) : title;
+	return `${open}${styled}${tail}${close}${rest}`;
+}
+
+/** Cut `count` visible columns of plain trailing pad spaces off the end. */
+function shedTrailingPad(line: string, count: number): string {
+	let end = line.length;
+	for (let cut = 0; cut < count && end > 0 && line[end - 1] === " "; cut++) end--;
+	return line.slice(0, end);
+}
+
+/** Drop leading pad cells, re-anchoring the escape sequences that ran around them. */
+function trimLead(line: string): string {
+	let open = "";
+	let index = 0;
+	for (;;) {
+		if (line[index] === " ") {
+			index++;
+			continue;
+		}
+		const escape = escapeAt(line, index);
+		if (escape) {
+			open += escape;
+			index += escape.length;
+			continue;
+		}
+		return open + line.slice(index);
+	}
 }
 
 /** First run of identifier characters (the tool-name token). */
@@ -99,18 +180,22 @@ function plainEndFrom(line: string, position: number): number {
 /** End of the run of escape sequences starting at `position`. */
 function escapeEndAfter(line: string, position: number): number {
 	let end = position;
-	while (line.startsWith("\x1b[", end)) end += escapeAt(line, end).length;
+	while (end < line.length) {
+		const escape = escapeAt(line, end);
+		if (!escape) break;
+		end += escape.length;
+	}
 	return end;
 }
 
-/** The escape sequence at `position` (caller must have checked the prefix), or "" when none. */
+/** The escape sequence at `position` — an SGR color code or an OSC-8 wrapper — or "" when none. */
 function escapeAt(line: string, position: number): string {
-	return /^\x1b\[[0-9;]*m/.exec(line.slice(position))?.[0] ?? "";
-}
-
-/** Indentation spaces at the start of a line; consumed by the icon prefix. */
-function leadingIndent(line: string): string {
-	return /^ */.exec(line)?.[0] ?? "";
+	if (!line.startsWith("\x1b", position)) return "";
+	const sgr = /^\x1b\[[0-9;]*m/.exec(line.slice(position));
+	if (sgr) return sgr[0];
+	// The OSC-8 hyperlink carries the URL between `\x1b]8;;` and the ST terminator.
+	const osc = /^\x1b\]8;;[^\x1b]*\x1b\\/.exec(line.slice(position));
+	return osc?.[0] ?? "";
 }
 
 /**
