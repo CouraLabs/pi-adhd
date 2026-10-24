@@ -16,7 +16,7 @@ import {
 	type Theme,
 } from "@earendil-works/pi-coding-agent";
 import type { EditorTheme, TUI } from "@earendil-works/pi-tui";
-import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { getKeybindings, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { formatCwd } from "../../../shared/format.ts";
 import { agentModeBorderColor, getAgentMode } from "../../../shared/modes.ts";
 import {
@@ -61,16 +61,50 @@ export interface EditorLocationInfo {
 
 export type LocationProvider = () => EditorLocationInfo | undefined;
 
+/** The agent state the placeholder adapts to. */
+export type PromptStatus = "idle" | "running";
+export type StatusProvider = () => PromptStatus | undefined;
+
+/** Idle-prompt placeholder, shown while the field is empty. */
+const PLACEHOLDER_IDLE = "What are we going to build today?";
+/** Running-prompt placeholder; the queue keybinding resolves live. */
+const PLACEHOLDER_RUNNING = "Press {keys} to Queue or Enter to steer new request...";
+
+/** The queue follow-up keybinding, formatted like pi's own hints (option on macOS). */
+function queueKeyText(): string {
+	const keys = getKeybindings().getKeys("app.message.followUp");
+	if (keys.length === 0) return "the queue key";
+	return keys
+		.map((key) =>
+			key
+				.split("+")
+				.map((part) => {
+					const display = process.platform === "darwin" && part.toLowerCase() === "alt" ? "option" : part;
+					return display.charAt(0).toUpperCase() + display.slice(1);
+				})
+				.join("+"),
+		)
+		.join(" / ");
+}
+
 export class FieldEditor extends CustomEditor {
 	constructor(
 		tui: TUI,
 		theme: EditorTheme,
 		keybindings: KeybindingsManager,
 		private readonly getLocation: LocationProvider,
+		private readonly getStatus?: StatusProvider,
 	) {
 		super(tui, theme, keybindings);
 		// Keep the box's mode-colored border; the working indicator lives above.
 		this.borderColor = (text) => this.paint(text);
+	}
+
+	/** The status-adaptive placeholder, shown while the field is empty. */
+	private placeholder(): string | undefined {
+		const status = this.getStatus?.();
+		if (!status) return undefined;
+		return status === "running" ? PLACEHOLDER_RUNNING.replace("{keys}", queueKeyText()) : PLACEHOLDER_IDLE;
 	}
 
 	/** Paint a border fragment with the active agent mode's border color. */
@@ -106,6 +140,12 @@ export class FieldEditor extends CustomEditor {
 		const hiddenBelow = scrollCount(lines[1 + visibleCount]);
 		const theme = info?.theme;
 		const dim = (text: string): string => theme ? theme.fg("dim", text) : text;
+		// An empty field shows the status-adaptive placeholder instead of a blank
+		// first row; typing pushes it out with the real text.
+		const placeholder = this.placeholder();
+		if (placeholder && this.getText() === "" && content.length > 0) {
+			content[0] = dim(truncateToWidth(placeholder, contentWidth));
+		}
 		const topLabel = hiddenAbove > 0 ? dim(`↑${hiddenAbove}`) : "";
 		const bottomLabel = [
 			this.locationSegment(),

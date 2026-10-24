@@ -162,7 +162,7 @@ Running `/cmd:promote` sends the body (frontmatter stripped) to the conversation
 Wraps the prompt editor in a closed field drawn with terminal box characters (`╭ ╮ ╰ ╯ │ ─`), inset by a one-column margin on each side, with a `❯` marker on the first input line; the working directory and git state are embedded in the bottom border, and the box recolors with the agent mode. The spinner animation (`🞗` → `🞘` → `🞙` → `🞚` → `🞛` → `🞜` → `🞛` → `🞚` → `🞙` → `🞘`, 100ms) no longer sits in the border, and pi's built-in working row is hidden: while the agent runs, a loading widget floats above the field as a persistent widget slot,
 
 ```
-🞘 Reading for 12s → ↓ 3400 → ⭍ 214.2 tok/s (esc)
+🞘 Reading for 12s ∙ ↓ 3400 ∙ ⭍ 214.2 tok/s (esc)
 
  ╭──────────────────────────────────────────────────────╮
  │ ❯ explain this codebase                              │
@@ -174,10 +174,10 @@ naming what is executing — `Prompting` on the round-trip before the first stre
 When the run settles, the widget does not vanish with pi's working row: it keeps the last turn's clock and output tokens on screen while the next prompt is typed —
 
 ```
-✓ Finished in 45s → ↓ 12300 → ⭍ 275.4 tok/s
+✓ Finished in 45s ∙ ↓ 12300 ∙ ⭍ 275.4 tok/s
 ```
 
-— until the next run overwrites the summary. Toggle the whole prompt field with `/couralabs:toggle editor`.
+— until the next run overwrites the summary. The empty prompt field shows a status-adaptive placeholder — `What are we going to build today?` while idle, `Press Alt+Enter to Queue or Enter to steer new request...` (the live queue keybinding) while the agent runs. Toggle the whole prompt field with `/couralabs:toggle editor`.
 
 The box border color follows the active agent mode (see [`modes`](#the-output-contract-modes)): the theme's `border` token in Work, the `accent` token in Pi, instead of tracking the thinking level. The bottom-border location segment shows the working directory followed by the git branch and the added/removed line counts from `git diff --numstat` (`+n` in success green, `-n` in error red). By default only the last folder of the working directory is shown; `/full-cwd` toggles the full path on and off (`/full-cwd on` / `/full-cwd off`), keeping the home directory itself rendered as `~` either way. Toggle the whole prompt field with `/couralabs:toggle editor`.
 
