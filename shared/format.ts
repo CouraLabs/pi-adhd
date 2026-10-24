@@ -1,5 +1,15 @@
 import { homedir } from "node:os";
 
+/** SGR escape sequence: `\x1b[0-9;…m`. */
+const SGR_PATTERN = /\x1b\[[0-9;]*m/g;
+/** OSC-8 hyperlink wrapper (open carrying the URL, or empty-payload terminator). */
+const OSC_LINK_PATTERN = /\x1b\]8;;[^\x1b]*\x1b\\/g;
+
+/** Strip SGR colors and OSC-8 wrappers, keeping the link's display text. */
+export function stripStyling(line: string): string {
+	return line.replace(SGR_PATTERN, "").replace(OSC_LINK_PATTERN, "");
+}
+
 /** Compact token counts shared by the footer gauge and usage segments. */
 export function formatTokens(count: number): string {
 	if (count < 1000) return `${count}`;

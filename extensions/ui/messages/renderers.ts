@@ -4,8 +4,9 @@
  * under the glyph down the body rows — no background box.
  */
 
-import type { Theme, ThemeColor, ToolRenderers } from "@earendil-works/pi-coding-agent";
+import { getLanguageFromPath, highlightCode, type Theme, type ThemeColor, type ToolRenderers } from "@earendil-works/pi-coding-agent";
 import { type Color } from "@earendil-works/pi-tui";
+import { stripStyling } from "../../../shared/format.ts";
 import { ToolFrame, pascalCase } from "./tool-frame.ts";
 
 /** Tool render context type, derived because the package does not re-export it. */
@@ -68,6 +69,74 @@ function ruleStyle(theme: Theme): (text: string) => string {
 	return (text) => theme.fg("dim", text);
 }
 
+/** Shell renderers lead their header with the raw command — highlight it in the shell's language. */
+const SHELL_LANG: Record<string, string> = { bash: "bash", powershell: "powershell" };
+
+/** Highlight runs per render frame while arguments stream; memoize per command. */
+const commandCache = new Map<string, string>();
+
+/**
+ * Rewrite a shell header's command in place with syntax colors, keeping the
+ * renderer's component identity — and with it pi's tool timer and component
+ * reuse — intact. Malformed arguments (no string `command`) leave pi's own
+ * header, invalid-arg glyph and all, untouched.
+ */
+function highlightShellCommand(component: unknown, args: unknown, theme: Theme, title: string, lang: string): void {
+	const typed = args as { command?: unknown; timeout?: unknown } | undefined;
+	if (typeof typed?.command !== "string") return;
+	const timeout = typeof typed.timeout === "number" ? ` (timeout ${typed.timeout}s)` : "";
+	const key = `${lang}\u0000${typed.command}`;
+	let colored = commandCache.get(key);
+	if (colored === undefined) {
+		colored = typed.command ? highlightCode(typed.command, lang).join("\n") : theme.fg("toolOutput", "...");
+		if (commandCache.size >= 200) commandCache.clear();
+		commandCache.set(key, colored);
+	}
+	(component as { setText?: (text: string) => void }).setText?.(
+		`${theme.fg("toolTitle", theme.bold(title))} ${colored}${theme.fg("muted", timeout)}`,
+	);
+}
+
+/** The diff rows' syntax colors ride the theme; the row memo invalidates on theme change. */
+const diffRowCache = new Map<string, string>();
+let diffRowCacheTheme: Theme | undefined;
+
+/**
+ * Restyle one rendered diff row with the file's syntax colors.
+ *
+ * pi's diff renderer paints whole lines (added green, removed red, context
+ * dim) and inverse-highlights intra-line changes; this replaces the line wash
+ * with real syntax colors while keeping the sign-and-line-number gutter in
+ * the renderer's semantic colors. Rows that do not parse as diff lines —
+ * elision markers, empty gutters — pass through untouched.
+ */
+function restyleDiffRow(row: string, lang: string, theme: Theme): string {
+	if (diffRowCacheTheme !== theme) {
+		diffRowCache.clear();
+		diffRowCacheTheme = theme;
+	}
+	const cached = diffRowCache.get(row);
+	if (cached !== undefined) return cached;
+	let styled = row;
+	const match = /^([+-]?)(\s*\d*)\s(.*)$/.exec(stripStyling(row));
+	const content = match?.[3] ?? "";
+	if (match && content.trim() !== "" && content.trim() !== "...") {
+		const sign = match[1];
+		const color = sign === "+" ? "toolDiffAdded" : sign === "-" ? "toolDiffRemoved" : "toolDiffContext";
+		styled = `${theme.fg(color, `${sign || " "}${match[2]}`)} ${highlightCode(content, lang)[0] ?? content}`;
+	}
+	if (diffRowCache.size >= 800) diffRowCache.clear();
+	diffRowCache.set(row, styled);
+	return styled;
+}
+
+/** The edit diff's language, from the edited file's extension; undefined when unknown. */
+function editLanguage(args: unknown): string | undefined {
+	const typed = args as { path?: unknown; file_path?: unknown } | undefined;
+	const path = typeof typed?.file_path === "string" ? typed.file_path : typeof typed?.path === "string" ? typed.path : undefined;
+	return path ? getLanguageFromPath(path) : undefined;
+}
+
 /**
  * The `edit` renderer paints its own background box; strip it so calls render
  * flat like every other tool. Duck-typed so it works even when the host and
@@ -95,14 +164,24 @@ export function wrapRenderers(toolName: string, renderers: ToolRenderers): ToolR
 	const originalCall = renderers.renderCall;
 	const originalResult = renderers.renderResult;
 	const title = pascalCase(toolName);
+	const shellLang = SHELL_LANG[toolName];
 
 	const renderCall: ToolRenderers["renderCall"] = originalCall
 		? (args, theme, context) => {
 				const frame = frameFor(context);
 				const inner = originalCall(args, theme, { ...context, lastComponent: frame.inner });
+				if (shellLang) highlightShellCommand(inner, args, theme, title, shellLang);
 				neutralise(inner);
 				neutralise(context.state?.callComponent);
-				frame.set(inner, statusPaint(theme, callStatus(context)), title, nameStyle(theme), ruleStyle(theme));
+				const lang = toolName === "edit" ? editLanguage(args) : undefined;
+				frame.set(
+					inner,
+					statusPaint(theme, callStatus(context)),
+					title,
+					nameStyle(theme),
+					ruleStyle(theme),
+					lang ? (row) => restyleDiffRow(row, lang, theme) : undefined,
+				);
 				return frame;
 			}
 		: undefined;
@@ -114,7 +193,15 @@ export function wrapRenderers(toolName: string, renderers: ToolRenderers): ToolR
 				neutralise(inner);
 				neutralise(context.state?.callComponent);
 				// Result bodies render plain — the call header above carries the icon.
-				frame.set(inner, undefined, title, nameStyle(theme), ruleStyle(theme));
+				const lang = toolName === "edit" ? editLanguage(context.args) : undefined;
+				frame.set(
+					inner,
+					undefined,
+					title,
+					nameStyle(theme),
+					ruleStyle(theme),
+					lang ? (row) => restyleDiffRow(row, lang, theme) : undefined,
+				);
 				return frame;
 			}
 		: undefined;

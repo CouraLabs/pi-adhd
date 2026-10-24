@@ -7,11 +7,11 @@
  * current LLM return, the live output-token estimate (streamed characters ÷ 4,
  * see `./status.ts`), and the live rate — tokens over streaming time only, so
  * the request round trip and the first-token wait never dilute it:
- * `🞘 Reading for 12s → TFT 1.8s → ↓3400 → ⭍ 214.2 tok/s (esc)`.
+ * `🞘 Reading for 12s → TFT 1.8s → ↓ 3400 → ⭍ 214.2 tok/s (esc)`.
  *
  * When the run settles the widget does not vanish (as pi's working row would) —
  * it keeps the last turn's clock and output tokens on screen while the next
- * prompt is typed: `✓ Finished in 45s → TFT 1.8s → ↓12300 → ⭍ 275.4 tok/s`. The next run
+ * prompt is typed: `✓ Finished in 45s → TFT 1.8s → ↓ 12300 → ⭍ 275.4 tok/s`. The next run
  * overwrites the summary the moment its tracker exists.
  *
  * Statelessness by construction: every render reads the tracker and the
@@ -95,32 +95,36 @@ export class LoadingWidget {
 		return SPINNER_FRAMES[this.frameIndex];
 	}
 
-	/** `🞘 Answering for 12s → TFT 1.8s → ↓3400 → ⭍ 214.2 tok/s (esc)` — the spinner
-	 *  rides the mode border; the arrow joins the segments dim. */
+	/** `🞘 Answering <muted>for</> 12s → TFT 1.8s → ↓ 3400 → ⭍ 214.2 tok/s (esc)` — the spinner
+	 *  rides the mode border, "for" rides muted, and the arrow joins the segments dim. */
 	private runningLine({ label, elapsed, tokens, tps, tftMs }: LoadingFigures & { label: string }): string {
 		const theme = this.theme;
 		const spinner = theme.fg(agentModeBorderColor(getAgentMode()), this.spinnerFrame());
 		const parts = [
-			`${spinner} ${theme.fg("accent", label)}${theme.fg("text", ` for ${elapsed}`)}`,
+			`${spinner} ${theme.fg("accent", label)}${theme.fg("muted", " for ")}${theme.fg("text", elapsed)}`,
 		];
 		if (tftMs !== undefined) parts.push(theme.fg("dim", `TFT ${formatTft(tftMs)}`));
-		parts.push(`${theme.fg("warning", "↓")}${theme.fg("muted", tokens)}`);
-		if (tps !== undefined) parts.push(theme.fg("dim", `${RATE_GLYPH} ${tps.toFixed(1)} tok/s`));
+		parts.push(`${theme.fg("text", "↓")} ${theme.fg("muted", tokens)}`);
+		if (tps !== undefined) {
+			parts.push(`${theme.fg("warning", RATE_GLYPH)}${theme.fg("dim", ` ${tps.toFixed(1)} tok/s`)}`);
+		}
 		return `${parts.join(theme.fg("dim", SEGMENT_ARROW))}${theme.fg("muted", ` ${ESCAPE_HINT}`)}`;
 	}
 
-	/** `✓ Finished in 45s → TFT 1.8s → ↓12300 → ⭍ 275.4 tok/s` — the last turn's
+	/** `✓ Finished <muted>in</> 45s → TFT 1.8s → ↓ 12300 → ⭍ 275.4 tok/s` — the last turn's
 	 *  figures, kept on screen; the TFT is the most recent return's wait. */
 	private settledLine(): string | undefined {
 		const settled = this.sources.settled();
 		if (!settled) return undefined;
 		const theme = this.theme;
 		const parts = [
-			`${theme.fg("success", TURN_DONE)}${theme.fg("text", ` Finished in ${settled.elapsed}`)}`,
+			`${theme.fg("success", `${TURN_DONE} Finished`)}${theme.fg("muted", " in ")}${theme.fg("text", settled.elapsed)}`,
 		];
 		if (settled.tftMs !== undefined) parts.push(theme.fg("dim", `TFT ${formatTft(settled.tftMs)}`));
-		parts.push(`${theme.fg("warning", "↓")}${theme.fg("muted", settled.tokens)}`);
-		if (settled.tps !== undefined) parts.push(theme.fg("dim", `${RATE_GLYPH} ${settled.tps.toFixed(1)} tok/s`));
+		parts.push(`${theme.fg("text", "↓")} ${theme.fg("muted", settled.tokens)}`);
+		if (settled.tps !== undefined) {
+			parts.push(`${theme.fg("warning", RATE_GLYPH)}${theme.fg("dim", ` ${settled.tps.toFixed(1)} tok/s`)}`);
+		}
 		return parts.join(theme.fg("dim", SEGMENT_ARROW));
 	}
 }

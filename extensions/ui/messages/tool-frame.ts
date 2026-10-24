@@ -1,5 +1,6 @@
 import type { Component } from "@earendil-works/pi-tui";
 import { truncateToWidth } from "@earendil-works/pi-tui";
+import { stripStyling } from "../../../shared/format.ts";
 import { TOOL_PICK } from "../../../shared/glyphs.ts";
 
 /**
@@ -14,9 +15,11 @@ import { TOOL_PICK } from "../../../shared/glyphs.ts";
  *   │ "name": "@couralabs/pi-adhd",
  *
  * Blank rows at either edge of the inner's render — Box renderers' padding
- * rows, a shell result's leading spacer — are trimmed, so the block starts at
- * the header and ends at its last visible row. Blank rows between content keep
- * their rule.
+ * rows, a shell result's leading spacer — are trimmed, and blank runs hugging
+ * the header or the final row collapse too (a renderer's Spacer between its
+ * header and body, its newline before a timer line), so the rule runs
+ * unbroken from the glyph down the last visible row. Deeper interior blanks
+ * are content and keep their rule.
  *
  * The header is the first remaining row. Renderers whose header leads with
  * their shell prompt instead of the tool name (`$ npm test`, `PS> npm test`)
@@ -47,6 +50,8 @@ export class ToolFrame implements Component {
 	private namePaint: ((text: string) => string) | undefined;
 	/** Paint for the dim rule below the icon. */
 	private rulePaint: ((text: string) => string) | undefined;
+	/** Optional per-row restyle (diff syntax colors); applied after the header row. */
+	private restyle: ((row: string) => string) | undefined;
 	private name = "";
 
 	set(
@@ -55,12 +60,14 @@ export class ToolFrame implements Component {
 		name: string,
 		namePaint?: (text: string) => string,
 		rulePaint?: (text: string) => string,
+		restyle?: (row: string) => string,
 	): void {
 		this.inner = inner;
 		this.paint = paint;
 		this.name = name;
 		this.namePaint = namePaint;
 		this.rulePaint = rulePaint;
+		this.restyle = restyle;
 	}
 
 	render(width: number): string[] {
@@ -68,11 +75,19 @@ export class ToolFrame implements Component {
 		// Below four columns neither the header (`margin + icon + body`) nor a
 		// content row fits; render nothing rather than an over-wide line.
 		if (contentWidth <= 0) return [];
-		const lines = trimBlankEdges(this.inner?.render(contentWidth) ?? []);
+		const lines = collapseEdgeGaps(trimBlankEdges(this.inner?.render(contentWidth) ?? []));
 		if (lines.length === 0) return lines;
+		// Restyle runs on the bare rows — the diff parser reads the renderer's own
+		// line shape, before any frame prefix lands. The header row keeps its
+		// renderer styling in paint mode; plain-mode rows restyle wholesale (the
+		// styler leaves non-diff rows untouched).
+		const shaped =
+			this.restyle && lines.length > 0
+				? lines.map((line, index) => (index === 0 && this.paint ? line : this.restyle!(line)))
+				: lines;
 		const rule = this.rulePaint ? this.rulePaint(RULE_GLYPH) : RULE_GLYPH;
 		// Copied so the header splice below never mutates the inner's cached array.
-		const rows = lines.map((line) => `${FRAME_MARGIN}${rule} ${line}`);
+		const rows = shaped.map((line) => `${FRAME_MARGIN}${rule} ${line}`);
 		if (!this.paint) return rows;
 		// The header is the first row; its body re-anchors after the icon, so the
 		// row's own lead pad goes and the name splice runs on the trimmed text.
@@ -92,13 +107,39 @@ export class ToolFrame implements Component {
 	}
 }
 
+/** A row carrying only invisible styling and whitespace renders as nothing. */
+function isBlankRow(line: string): boolean {
+	return stripStyling(line).trim() === "";
+}
+
 /** Drop blank rows at either edge; interior blanks keep their rule. */
 function trimBlankEdges(lines: string[]): string[] {
 	let start = 0;
 	let end = lines.length;
-	while (start < end && lines[start].trim() === "") start++;
-	while (end > start && lines[end - 1].trim() === "") end--;
+	while (start < end && isBlankRow(lines[start])) start++;
+	while (end > start && isBlankRow(lines[end - 1])) end--;
 	return lines.slice(start, end);
+}
+
+/**
+ * Drop the blank runs hugging the header and the final row — a renderer's
+ * Spacer between its header and its body, or its newline before a timer line,
+ * read as dead space under the frame's rule. Interior blank runs deeper in
+ * the body are content and survive.
+ */
+function collapseEdgeGaps(lines: string[]): string[] {
+	if (lines.length <= 2) return lines;
+	const last = lines.length - 1;
+	// First visible row after the header.
+	let first = 1;
+	while (first < last && isBlankRow(lines[first])) first++;
+	// Start of the visible run before the final row.
+	let tail = last - 1;
+	while (tail > first && isBlankRow(lines[tail])) tail--;
+	const out = [lines[0]];
+	for (let index = first; index <= tail; index++) out.push(lines[index]);
+	out.push(lines[last]);
+	return out;
 }
 
 /**

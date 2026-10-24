@@ -162,19 +162,19 @@ Running `/cmd:promote` sends the body (frontmatter stripped) to the conversation
 Wraps the prompt editor in a closed field drawn with terminal box characters (`╭ ╮ ╰ ╯ │ ─`), inset by a one-column margin on each side, with a `❯` marker on the first input line; the working directory and git state are embedded in the bottom border, and the box recolors with the agent mode. The spinner animation (`🞗` → `🞘` → `🞙` → `🞚` → `🞛` → `🞜` → `🞛` → `🞚` → `🞙` → `🞘`, 100ms) no longer sits in the border, and pi's built-in working row is hidden: while the agent runs, a loading widget floats above the field as a persistent widget slot,
 
 ```
-🞘 Reading for 12s → TFT 1.8s → ↓3400 → ⭍ 214.2 tok/s (esc)
+🞘 Reading for 12s → TFT 1.8s → ↓ 3400 → ⭍ 214.2 tok/s (esc)
 
  ╭──────────────────────────────────────────────────────╮
  │ ❯ explain this codebase                              │
  ╰──────── pi-adhd ∙ ⌥ main +12 -3 ─────────────────╯
 ```
 
-naming what is executing — `Prompting` on the round-trip before the first streamed token, `Thinking` while reasoning streams, `Answering` while reply text streams, and the executing tool's verb between them (`Reading`, `Writing`, `Editing`, `Running` for the shell; any unmapped tool shows the fallback `Tooling`). The verb map is configurable in `editor.toolVerbs` (e.g. `{"grep": "Grepping", "webfetch": "Fetching"}`); it is followed by the run clock (`for 12s`, `for 1m32s`, …), the time to first token (`TFT 1.8s` — grows while the current LLM return is still waiting, then freezes at arrival; the settled line keeps the last return's wait), the raw output-token estimate (`↓3400` — streamed characters ÷ 4, updated on every delta), and the live rate (`⭍ 214.2 tok/s` — estimate ÷ streaming time only: each LLM return's span starts at its first token, so the request round trip, the first-token wait, and the tool gaps between returns never dilute it), plus the `esc`-interrupt hint.
+naming what is executing — `Prompting` on the round-trip before the first streamed token, `Thinking` while reasoning streams, `Answering` while reply text streams, and the executing tool's verb between them (`Reading`, `Writing`, `Editing`, `Running` for the shell; any unmapped tool shows the fallback `Tooling`). The verb map is configurable in `editor.toolVerbs` (e.g. `{"grep": "Grepping", "webfetch": "Fetching"}`); it is followed by the run clock (`for 12s`, `for 1m32s`, …), the time to first token (`TFT 1.8s` — grows while the current LLM return is still waiting, then freezes at arrival; the settled line keeps the last return's wait), the raw output-token estimate (`↓ 3400` — streamed characters ÷ 4, updated on every delta), and the live rate (`⭍ 214.2 tok/s` — estimate ÷ streaming time only: each LLM return's span starts at its first token, so the request round trip, the first-token wait, and the tool gaps between returns never dilute it), plus the `esc`-interrupt hint.
 
 When the run settles, the widget does not vanish with pi's working row: it keeps the last turn's clock and output tokens on screen while the next prompt is typed —
 
 ```
-✓ Finished in 45s → TFT 1.8s → ↓12300 → ⭍ 275.4 tok/s
+✓ Finished in 45s → TFT 1.8s → ↓ 12300 → ⭍ 275.4 tok/s
 ```
 
 — until the next run overwrites the summary. Toggle the whole prompt field with `/couralabs:toggle editor`.
@@ -194,7 +194,7 @@ The stats line leads with any running countdowns: the plain timer that expires f
 
 ## Tool calls: `messages`
 
-Restyles tool calls to share the pi-adhd look. Each call renders as a tree hanging from a status-colored pick glyph (`⛏`): the tool name is rewritten to PascalCase in the renderer's own style (a shell renderer's `$`/`PS>` prompt stands in for the name and is rewritten too), and a dim rule runs below the glyph down every content row, so the call header and its result body hang from the same stem. Blank pad rows at either edge of a block — box renderers' padding, a shell result's leading spacer — are trimmed away. Toggle it with `/couralabs:toggle messages`.
+Restyles tool calls to share the pi-adhd look. Each call renders as a tree hanging from a status-colored pick glyph (`⛏`): the tool name is rewritten to PascalCase in the renderer's own style (a shell renderer's `$`/`PS>` prompt stands in for the name and is rewritten too), and a dim rule runs below the glyph down every content row, so the call header and its result body hang from the same stem. Blank pad rows at either edge of a block — box renderers' padding, a shell result's leading spacer, a newline before a timer line — are trimmed or collapsed, so the rule runs unbroken from the glyph to the last visible row. The bash command is syntax-highlighted in the header, and `edit` diffs are syntax-highlighted per line in the edited file's language (the sign-and-line-number gutter keeps the renderer's add/remove/context colors). Toggle it with `/couralabs:toggle messages`.
 
 ```
 ⛏ Read src/index.ts
@@ -204,7 +204,6 @@ Restyles tool calls to share the pi-adhd look. Each call renders as a tree hangi
 │ ... (5 earlier lines, ctrl+o to expand)
 │ Took 1.2s
 ```
-
 The glyph follows the tool's lifecycle in the theme's semantic colors — `warning` while the call is mere paperwork (arguments still arriving), `accent` (the theme's info blue) while it runs, then `error` or `success` once the result settles. Where a header leads with something else entirely — a classification tag — only the icon is added. Toggling affects tool calls rendered after the change; already rendered rows keep their current look until the transcript is rebuilt (for example by resuming or reloading the session).
 
 ## Clarifying questions: `ask-user`
