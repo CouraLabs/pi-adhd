@@ -119,13 +119,16 @@ function restyleDiffRow(row: string, lang: string, theme: Theme): string {
 	if (cached !== undefined) return cached;
 	let styled = row;
 	// The gutter round-trips verbatim — sign, pad, and number exactly as the
-	// renderer wrote them — so every row's code column stays aligned.
-	const match = /^([+-]?\s*\d*)\s(.*)$/.exec(stripStyling(row));
+	// renderer wrote them — so every row's code column stays aligned. The
+	// number is required and the separator is exactly one space (pi's format),
+	// so bare-number rows from empty source lines and elision markers fail the
+	// parse and pass through untouched instead of their digits styling as code.
+	const match = /^([+-]?\s*\d+)( .*)$/.exec(stripStyling(row));
 	const gutter = match?.[1] ?? "";
-	const content = match?.[2] ?? "";
-	if (match && gutter.trim() !== "" && content.trim() !== "" && content.trim() !== "...") {
+	const content = match ? match[2].slice(1) : "";
+	if (match && content.trim() !== "") {
 		const color = gutter.startsWith("+") ? "toolDiffAdded" : gutter.startsWith("-") ? "toolDiffRemoved" : "toolDiffContext";
-		styled = `${theme.fg(color, gutter)} ${highlightCode(content, lang)[0] ?? content}`;
+		styled = `${theme.fg(color, `${gutter} `)}${highlightCode(content, lang)[0] ?? content}`;
 	}
 	if (diffRowCache.size >= 800) diffRowCache.clear();
 	diffRowCache.set(row, styled);
