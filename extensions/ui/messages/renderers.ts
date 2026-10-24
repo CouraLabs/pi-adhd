@@ -118,12 +118,14 @@ function restyleDiffRow(row: string, lang: string, theme: Theme): string {
 	const cached = diffRowCache.get(row);
 	if (cached !== undefined) return cached;
 	let styled = row;
-	const match = /^([+-]?)(\s*\d*)\s(.*)$/.exec(stripStyling(row));
-	const content = match?.[3] ?? "";
-	if (match && content.trim() !== "" && content.trim() !== "...") {
-		const sign = match[1];
-		const color = sign === "+" ? "toolDiffAdded" : sign === "-" ? "toolDiffRemoved" : "toolDiffContext";
-		styled = `${theme.fg(color, `${sign || " "}${match[2]}`)} ${highlightCode(content, lang)[0] ?? content}`;
+	// The gutter round-trips verbatim — sign, pad, and number exactly as the
+	// renderer wrote them — so every row's code column stays aligned.
+	const match = /^([+-]?\s*\d*)\s(.*)$/.exec(stripStyling(row));
+	const gutter = match?.[1] ?? "";
+	const content = match?.[2] ?? "";
+	if (match && gutter.trim() !== "" && content.trim() !== "" && content.trim() !== "...") {
+		const color = gutter.startsWith("+") ? "toolDiffAdded" : gutter.startsWith("-") ? "toolDiffRemoved" : "toolDiffContext";
+		styled = `${theme.fg(color, gutter)} ${highlightCode(content, lang)[0] ?? content}`;
 	}
 	if (diffRowCache.size >= 800) diffRowCache.clear();
 	diffRowCache.set(row, styled);
