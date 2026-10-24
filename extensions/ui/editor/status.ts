@@ -29,8 +29,7 @@
  * trip and the first-token wait never dilute the rate. Between returns the
  * tool gap is excluded too: the rate is tokens over accumulated streaming
  * spans, live while a return streams and settled over completed spans once
- * it ends. TFT is that first-token wait, per return: it grows while the
- * current return is still waiting, then freezes at the arrival time.
+ * it ends.
  *
  * Formatting is the caller's job (`parts()`), so the tracker stays theme-free.
  */
@@ -85,8 +84,6 @@ export class WorkingStatusTracker {
 	private returnChars = 0;
 	/** Streaming spans completed by returns that already ended, in ms. */
 	private totalStreamMs = 0;
-	/** First-token wait of the most recently started return, in ms; 0 until one. */
-	private lastTftMs = 0;
 	/** Top-level executions in flight, as `toolCallId → label` pairs. */
 	private runningTools = new Map<string, string>();
 
@@ -100,7 +97,6 @@ export class WorkingStatusTracker {
 		this.startedAt = this.now();
 		this.streamedChars = 0;
 		this.totalStreamMs = 0;
-		this.lastTftMs = 0;
 		this.returnStartedAt = 0;
 		this.returnFirstDeltaAt = 0;
 		this.phase = "prompting";
@@ -130,10 +126,9 @@ export class WorkingStatusTracker {
 		else if (event.type === "toolcall_start" || event.type === "toolcall_delta") this.phase = "staging";
 	}
 
-	/** First token of the current return arrived: freeze its TFT. */
+	/** First token of the current return arrived: its streaming span starts here. */
 	private markFirstToken(): void {
 		this.returnFirstDeltaAt = this.now();
-		if (this.returnStartedAt > 0) this.lastTftMs = Math.max(0, this.returnFirstDeltaAt - this.returnStartedAt);
 	}
 
 	/** The return ended: bank its streaming span and close it out. */
@@ -193,14 +188,6 @@ export class WorkingStatusTracker {
 		return this.startedAt > 0 ? Math.max(0, this.now() - this.startedAt) : 0;
 	}
 
-	/** Time to first token, in ms, as the line shows it: the current return's
-	 *  wait while it is still open (growing until the token lands), then the
-	 *  most recent return's frozen wait. undefined before any return. */
-	get tftMs(): number | undefined {
-		if (this.returnStartedAt > 0 && this.returnFirstDeltaAt === 0) return Math.max(0, this.now() - this.returnStartedAt);
-		return this.lastTftMs > 0 ? this.lastTftMs : undefined;
-	}
-
 	/** The line's pieces, for callers that color segments individually.
 	 *  `tokens` is the raw estimate as digits — the widget draws it unformatted.
 	 *  `tps` is undefined until a positive streaming span and at least one
@@ -211,7 +198,6 @@ export class WorkingStatusTracker {
 		elapsedMs: number;
 		tokens: string;
 		tps: number | undefined;
-		tftMs: number | undefined;
 	} {
 		const elapsedMs = this.elapsedMs;
 		const tokens = this.tokens;
@@ -228,7 +214,6 @@ export class WorkingStatusTracker {
 			elapsedMs,
 			tokens: String(tokens),
 			tps,
-			tftMs: this.tftMs,
 		};
 	}
 }
