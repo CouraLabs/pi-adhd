@@ -1,7 +1,7 @@
 /**
  * Wraps the built-in tool renderers so each call is framed inline: a
- * status-colored pick glyph, the tool name in PascalCase, and no left rule or
- * background box.
+ * status-colored pick glyph, the tool name in PascalCase, and a dim rule
+ * under the glyph down the body rows — no background box.
  */
 
 import type { Theme, ThemeColor, ToolRenderers } from "@earendil-works/pi-coding-agent";
@@ -63,6 +63,11 @@ function nameStyle(theme: Theme): (text: string) => string {
 	return (text) => theme.style(text, { fg: "text", bold: true });
 }
 
+/** The dim rule below the icon, drawn down every content row. */
+function ruleStyle(theme: Theme): (text: string) => string {
+	return (text) => theme.fg("dim", text);
+}
+
 /**
  * The `edit` renderer paints its own background box; strip it so calls render
  * flat like every other tool. Duck-typed so it works even when the host and
@@ -97,7 +102,7 @@ export function wrapRenderers(toolName: string, renderers: ToolRenderers): ToolR
 				const inner = originalCall(args, theme, { ...context, lastComponent: frame.inner });
 				neutralise(inner);
 				neutralise(context.state?.callComponent);
-				frame.set(inner, statusPaint(theme, callStatus(context)), title, nameStyle(theme));
+				frame.set(inner, statusPaint(theme, callStatus(context)), title, nameStyle(theme), ruleStyle(theme));
 				return frame;
 			}
 		: undefined;
@@ -109,7 +114,7 @@ export function wrapRenderers(toolName: string, renderers: ToolRenderers): ToolR
 				neutralise(inner);
 				neutralise(context.state?.callComponent);
 				// Result bodies render plain — the call header above carries the icon.
-				frame.set(inner, undefined, title, nameStyle(theme));
+				frame.set(inner, undefined, title, nameStyle(theme), ruleStyle(theme));
 				return frame;
 			}
 		: undefined;
