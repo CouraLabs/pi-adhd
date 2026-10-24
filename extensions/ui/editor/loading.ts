@@ -121,7 +121,7 @@ export class LoadingWidget {
 		if (!settled) return undefined;
 		const theme = this.theme;
 		const parts = [
-			`${theme.fg("success", `${TURN_DONE} Finished`)}${theme.fg("muted", " in ")}${theme.fg("text", settled.elapsed)}`,
+			`${theme.fg("borderAccent", `${TURN_DONE} Finished`)}${theme.fg("muted", " in ")}${theme.fg("text", settled.elapsed)}`,
 		];
 		parts.push(`${theme.fg("text", "↓")} ${theme.fg("muted", settled.tokens)}`);
 		if (settled.tps !== undefined) {
