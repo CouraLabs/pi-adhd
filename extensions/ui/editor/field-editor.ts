@@ -5,8 +5,8 @@
  * The box border color follows the active agent mode (Pi is accented, Work
  * keeps the default border) instead of tracking the thinking level.
  *
- * The box does not host pi's working indicator: the status line lives above
- * the prompt field (see `./status.ts`), so this class passes no
+ * The box does not host pi's working indicator: the loading widget lives
+ * above the prompt field (see `./loading.ts`), so this class passes no
  * `embedWorkingStatus` option and lets pi draw its own top border row.
  */
 
@@ -43,7 +43,7 @@ function scrollCount(border: string | undefined): number {
 }
 
 /** Blank columns kept between the box and the terminal edges. */
-const BOX_MARGIN = 1;
+const BOX_MARGIN = 0;
 
 /** Fields the editor exposes at runtime but not through its public type. */
 interface EditorInternals {

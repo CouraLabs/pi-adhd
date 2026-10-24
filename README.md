@@ -159,17 +159,25 @@ Running `/cmd:promote` sends the body (frontmatter stripped) to the conversation
 
 ## Prompt field: `editor`
 
-Wraps the prompt editor in a closed field drawn with terminal box characters (`╭ ╮ ╰ ╯ │ ─`), inset by a one-column margin on each side, with a `❯` marker on the first input line; the working directory and git state are embedded in the bottom border, and the box recolors with the agent mode. The spinner animation (`🞗` → `🞘` → `🞙` → `🞚` → `🞛` → `🞜` → `🞛` → `🞚` → `🞙` → `🞘`, 100ms) no longer sits in the border: while the agent runs, a working-status line floats above the field,
+Wraps the prompt editor in a closed field drawn with terminal box characters (`╭ ╮ ╰ ╯ │ ─`), inset by a one-column margin on each side, with a `❯` marker on the first input line; the working directory and git state are embedded in the bottom border, and the box recolors with the agent mode. The spinner animation (`🞗` → `🞘` → `🞙` → `🞚` → `🞛` → `🞜` → `🞛` → `🞚` → `🞙` → `🞘`, 100ms) no longer sits in the border, and pi's built-in working row is hidden: while the agent runs, a loading widget floats above the field as a persistent widget slot,
 
 ```
-🞘 Reading 12s, ↓340 (esc)
+🞘 Reading 12s, ↓3.4k ∙ 214.2 tok/s (esc)
 
  ╭──────────────────────────────────────────────────────╮
  │ ❯ explain this codebase                              │
  ╰──────── pi-adhd ∙ ⌥ main +12 -3 ─────────────────╯
 ```
 
-naming what is executing — `Prompting` on the round-trip before the first streamed token, `Thinking` while reasoning streams, `Answering` while reply text streams, and the executing tool's verb between them (`Reading`, `Writing`, `Editing`, `Running` for the shell; any unmapped tool shows the fallback `Tooling`). The verb map is configurable in `editor.toolVerbs` (e.g. `{"grep": "Grepping", "webfetch": "Fetching"}`); it is followed by the run clock (`12s`, `1m32s`, …), the live received-token count (`↓340` — the same output tokens the footer reports), and the `esc`-interrupt hint. Toggle the whole prompt field with `/couralabs:toggle editor`.
+naming what is executing — `Prompting` on the round-trip before the first streamed token, `Thinking` while reasoning streams, `Answering` while reply text streams, and the executing tool's verb between them (`Reading`, `Writing`, `Editing`, `Running` for the shell; any unmapped tool shows the fallback `Tooling`). The verb map is configurable in `editor.toolVerbs` (e.g. `{"grep": "Grepping", "webfetch": "Fetching"}`); it is followed by the run clock (`12s`, `1m32s`, …), the live output-token estimate (`↓3.4k` — streamed characters ÷ 4, updated on every delta), and the live rate (estimate ÷ elapsed, `214.2 tok/s`), plus the `esc`-interrupt hint.
+
+When the run settles, the widget does not vanish with pi's working row: it keeps the last turn's clock and output tokens on screen while the next prompt is typed —
+
+```
+✓ 45s, ↓12.3k ∙ 275.4 tok/s
+```
+
+— until the next run overwrites the summary. Toggle the whole prompt field with `/couralabs:toggle editor`.
 
 The box border color follows the active agent mode (see [`modes`](#the-output-contract-modes)): the theme's `border` token in Work, the `accent` token in Pi, instead of tracking the thinking level. The bottom-border location segment shows the working directory followed by the git branch and the added/removed line counts from `git diff --numstat` (`+n` in success green, `-n` in error red). By default only the last folder of the working directory is shown; `/full-cwd` toggles the full path on and off (`/full-cwd on` / `/full-cwd off`), keeping the home directory itself rendered as `~` either way. Toggle the whole prompt field with `/couralabs:toggle editor`.
 
@@ -477,8 +485,9 @@ pi-adhd/
 │   │   │   ├── index.ts         # extension factory: git timers + event wiring
 │   │   │   ├── field-editor.ts  # the boxed prompt editor component
 │   │   │   ├── git.ts           # branch + `git diff --numstat` parser
-│   │   │   ├── status.ts        # working-status tracker: phase, run clock, received tokens
-│   │   │   └── spinner.ts       # working-indicator animation frames
+│   │   │   ├── status.ts        # working-status tracker: phase, run clock, streamed-char token estimate
+│   │   │   ├── loading.ts       # loading widget above the editor: spinner, tokens, live tok/s
+│   │   │   └── spinner.ts       # loading-widget animation frames
 │   │   ├── footer/
 │   │   │   ├── index.ts         # extension factory: usage cache + event wiring
 │   │   │   └── render.ts        # pure footer rendering

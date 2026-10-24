@@ -5,11 +5,14 @@
  * characters, with a `❯` marker on the first input line. The working
  * directory + git state live in the bottom border; the box border follows the
  * active agent mode rather than the thinking level. While the agent runs, a
- * working-status line floats above the box (pi's `statusContainer`) and names
- * the current phase — Prompting, Thinking, Answering, or the executing
- * tool's verb ("Reading", "Writing", …) — followed by a running clock, the
- * live received-token count, and the interrupt hint:
- * `🞘 Reading 12s, ↓3.4k (esc)`.
+ * loading widget floats above the box (pi's `aboveEditor` widget slot, in
+ * place of the built-in working row) and names the current phase — Prompting,
+ * Thinking, Answering, or the executing tool's verb ("Reading", "Writing", …)
+ * — followed by a running clock, the live output-token estimate (streamed
+ * characters ÷ 4, see `./status.ts`), the live tokens/sec rate, and the
+ * interrupt hint: `🞘 Reading 12s, ↓3.4k · 214.2 tok/s (esc)`. When the run
+ * settles the widget keeps the last turn's clock and output tokens on screen
+ * while the next prompt is typed: `✓ 45s, ↓12.3k · 275.4 tok/s`.
  *
  * Toggle it with `/couralabs:toggle editor`.
  */
@@ -18,17 +21,18 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import type { TUI } from "@earendil-works/pi-tui";
 import { loadSettings, updateSettings } from "../../../shared/settings.ts";
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
-import { agentModeBorderColor, getAgentMode, subscribeAgentMode } from "../../../shared/modes.ts";
+import { subscribeAgentMode } from "../../../shared/modes.ts";
 import { FieldEditor, type LocationProvider } from "./field-editor.ts";
 import { emptyGit, parseNumstat, type GitInfo } from "./git.ts";
-import { SPINNER_FRAMES, SPINNER_INTERVAL_MS } from "./spinner.ts";
+import { SPINNER_INTERVAL_MS } from "./spinner.ts";
+import { LoadingWidget, type LoadingFigures } from "./loading.ts";
 import { WorkingStatusTracker } from "./status.ts";
 
 const GIT_REFRESH_INTERVAL_MS = 10_000;
 const GIT_DEBOUNCE_MS = 350;
 
-/** Clock tick for the working-status line's run-time figure. */
-const STATUS_TICK_MS = 1000;
+/** Widget slot key for the loading widget above the editor. */
+const LOADING_WIDGET_KEY = "couralabs:editor/loading";
 
 export default function (pi: ExtensionAPI) {
 	markExtensionLoaded("editor");
@@ -39,9 +43,10 @@ export default function (pi: ExtensionAPI) {
 	let unsubscribeMode: (() => void) | undefined;
 	/** The live run's tracker; undefined while the agent is idle. */
 	let tracker: WorkingStatusTracker | undefined;
-	/** Last status text pushed to the working indicator; dedupes setWorkingMessage calls. */
-	let lastStatusText = "";
-	let statusTick: ReturnType<typeof setInterval> | undefined;
+	/** The last settled run's figures; stays on the widget until the next run. */
+	let settled: LoadingFigures | undefined;
+	/** Spinner/refresh tick while a run is live; the widget animates on it. */
+	let widgetTick: ReturnType<typeof setInterval> | undefined;
 
 	let gitTimer: ReturnType<typeof setTimeout> | undefined;
 	let gitInterval: ReturnType<typeof setInterval> | undefined;
@@ -49,31 +54,38 @@ export default function (pi: ExtensionAPI) {
 	const requestRender = () => tui?.requestRender();
 	const isTui = () => ctx?.mode === "tui";
 
-	/** Push the current status text when it changed; safe while detached.
-	 *  The received-token span rides the info color (accent), the rest muted. */
-	const pushStatus = (): void => {
-		if (!ctx || !tracker || ctx.mode !== "tui") return;
-		const parts = tracker.parts();
-		const theme = ctx.ui.theme;
-		const text =
-			theme.fg("muted", `${parts.label} ${parts.elapsed}, `) +
-			theme.fg("accent", `↓${parts.tokens}`) +
-			theme.fg("muted", " (esc)");
-		if (text === lastStatusText) return;
-		lastStatusText = text;
-		ctx.ui.setWorkingMessage(text);
+	/** Where the widget reads its numbers each frame: the live tracker, then
+	 *  the settled summary. Kept as functions so every render sees the
+	 *  current state without re-mounting the widget. */
+	const loadingSources = () => ({
+		running: () => (tracker ? tracker.parts() : undefined),
+		settled: () => settled,
+	});
+
+	const startWidgetTick = (): void => {
+		stopWidgetTick();
+		widgetTick = setInterval(requestRender, SPINNER_INTERVAL_MS);
 	};
 
-	const startStatusClock = (): void => {
-		stopStatusClock();
-		statusTick = setInterval(pushStatus, STATUS_TICK_MS);
-	};
-
-	const stopStatusClock = (): void => {
-		if (statusTick) {
-			clearInterval(statusTick);
-			statusTick = undefined;
+	const stopWidgetTick = (): void => {
+		if (widgetTick) {
+			clearInterval(widgetTick);
+			widgetTick = undefined;
 		}
+	};
+
+	/** Hide pi's built-in working row and mount the loading widget above the editor. */
+	const installLoadingWidget = (context: ExtensionContext) => {
+		if (context.mode !== "tui") return;
+		context.ui.setWorkingVisible(false);
+		context.ui.setWidget(
+			LOADING_WIDGET_KEY,
+			(widgetTui, theme) => {
+				tui = widgetTui;
+				return new LoadingWidget(theme, loadingSources());
+			},
+			{ placement: "aboveEditor" },
+		);
 	};
 
 	const refreshGit = async () => {
@@ -122,24 +134,12 @@ export default function (pi: ExtensionAPI) {
 		return { cwd: c.cwd, git, theme: c.ui.theme, fullCwd };
 	};
 
-	/** Install the dot spinner, colored to match the editor's mode-colored border. */
-	const applyWorkingIndicator = (context: ExtensionContext) => {
-		if (context.mode !== "tui") return;
-		const border = agentModeBorderColor(getAgentMode());
-		const color = (text: string) => context.ui.theme.fg(border, text);
-		context.ui.setWorkingIndicator({
-			frames: SPINNER_FRAMES.map((frame) => color(frame)),
-			intervalMs: SPINNER_INTERVAL_MS,
-		});
-	};
-
 	const installEditor = (context: ExtensionContext) => {
 		if (context.mode !== "tui") return;
 		context.ui.setEditorComponent((editorTui, theme, keybindings) => {
 			tui = editorTui;
 			return new FieldEditor(editorTui, theme, keybindings, locationProvider);
 		});
-		applyWorkingIndicator(context);
 	};
 
 	pi.registerCommand("full-cwd", {
@@ -166,75 +166,77 @@ export default function (pi: ExtensionAPI) {
 		git = emptyGit();
 		stopGitTimers();
 		tracker = undefined;
-		lastStatusText = "";
-		stopStatusClock();
+		settled = undefined;
+		stopWidgetTick();
 
-		// Recolor the box border (and spinner) when the agent mode changes.
+		// Re-render when /mode switches the agent mode (the editor border and
+		// the loading spinner both read it live off the frame).
 		unsubscribeMode?.();
-		unsubscribeMode = subscribeAgentMode(() => {
-			requestRender();
-			if (ctx) applyWorkingIndicator(ctx);
-		});
+		unsubscribeMode = subscribeAgentMode(() => requestRender());
 
 		if (context.mode !== "tui") return;
 		installEditor(context);
+		installLoadingWidget(context);
 		void refreshGit();
 		gitInterval = setInterval(() => void refreshGit(), GIT_REFRESH_INTERVAL_MS);
 	});
 
-	// A run began: spin up a fresh tracker and the status clock.
-	pi.on("agent_start", (event, context) => {
+	// A run began: spin up a fresh tracker and the widget's animation tick.
+	pi.on("agent_start", (event) => {
 		if (!ctx || ctx.mode !== "tui") return;
 		tracker = new WorkingStatusTracker(loadSettings().editor.toolVerbs);
 		tracker.onAgentStart(event);
-		pushStatus();
-		startStatusClock();
-		applyWorkingIndicator(context);
+		settled = undefined;
+		startWidgetTick();
+		requestRender();
 	});
 
-	// Streaming deltas move the phase and grow the received-token figure.
+	// Streaming deltas move the phase and grow the token estimate.
 	pi.on("message_update", (event) => {
 		tracker?.onMessageUpdate(event);
-		pushStatus();
+		requestRender();
 	});
 
 	// Tool executions rename the line to the tool's verb.
 	pi.on("tool_execution_start", (event) => {
 		tracker?.onToolExecutionStart(event);
-		pushStatus();
+		requestRender();
 	});
 	pi.on("tool_execution_end", (event) => {
 		tracker?.onToolExecutionEnd(event);
-		pushStatus();
+		requestRender();
 		scheduleGitRefresh();
 	});
 
-	// The run settled: drop the tracker and the clock until the next run.
+	// The run settled: freeze the tracker's final figures into the widget's
+	// settled summary — they stay on screen until the next run replaces them.
 	pi.on("agent_end", (event) => {
-		tracker?.onAgentEnd(event);
-		pushStatus();
-		stopStatusClock();
+		if (!tracker) return;
+		settled = tracker.parts();
+		tracker.onAgentEnd(event);
 		tracker = undefined;
+		stopWidgetTick();
+		requestRender();
 	});
 
 	pi.on("agent_settled", () => {
-		stopStatusClock();
+		stopWidgetTick();
 		tracker = undefined;
 		requestRender();
 	});
 	pi.on("turn_end", () => requestRender());
 	pi.on("model_select", () => requestRender());
-	pi.on("thinking_level_select", () => {
-		if (ctx) applyWorkingIndicator(ctx);
-	});
+	pi.on("thinking_level_select", () => requestRender());
 	pi.on("session_info_changed", () => requestRender());
 
 	pi.on("session_shutdown", () => {
 		stopGitTimers();
-		stopStatusClock();
+		stopWidgetTick();
 		unsubscribeMode?.();
 		unsubscribeMode = undefined;
+		if (ctx?.mode === "tui") ctx.ui.setWidget(LOADING_WIDGET_KEY, undefined);
 		tracker = undefined;
+		settled = undefined;
 		ctx = undefined;
 		tui = undefined;
 	});

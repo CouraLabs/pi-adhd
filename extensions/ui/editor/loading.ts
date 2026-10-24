@@ -1,0 +1,114 @@
+/**
+ * loading — the agent-run widget that floats above the editor.
+ *
+ * Replaces pi's built-in working row (hidden with `setWorkingVisible(false)`)
+ * with a persistent widget. While the agent runs it animates the dot spinner
+ * and names the current phase with a run clock, the live output-token estimate
+ * (streamed characters ÷ 4, see `./status.ts`), the live rate (estimate ÷
+ * elapsed), and the interrupt hint: `🞘 Reading 12s, ↓3.4k · 214.2 tok/s (esc)`.
+ *
+ * When the run settles the widget does not vanish with pi's working row would —
+ * it keeps the last turn's clock and output tokens on screen while the next
+ * prompt is typed: `✓ 45s, ↓12.3k · 275.4 tok/s`. The next run overwrites the
+ * summary the moment its tracker exists.
+ *
+ * Statelessness by construction: every render reads the tracker and the
+ * settled summary afresh, so events, ticks, mode recolors, and theme swaps all
+ * flow through the same path — the extension only ever requests frames. The
+ * one piece of internal state is the spinner's wall-clock frame advance, so
+ * extra renders between ticks never skip frames.
+ */
+
+import type { Theme } from "@earendil-works/pi-coding-agent";
+import { truncateToWidth } from "@earendil-works/pi-tui";
+import { padWidgetLines } from "../../../shared/format.ts";
+import { TURN_DONE } from "../../../shared/glyphs.ts";
+import { agentModeBorderColor, getAgentMode } from "../../../shared/modes.ts";
+import { SPINNER_FRAMES, SPINNER_INTERVAL_MS } from "./spinner.ts";
+
+/** The numbers one loading line draws. */
+export interface LoadingFigures {
+	/** Formatted run clock ("12s", "1m 30s"). */
+	elapsed: string;
+	/** Formatted live output-token estimate ("3.4k"). */
+	tokens: string;
+	/** Tokens per second over the elapsed span; undefined with nothing to divide. */
+	tps: number | undefined;
+}
+
+/** What the widget needs each frame; the extension owns the sources. */
+export interface LoadingWidgetSources {
+	/** The live run's figures, labeled by phase; undefined while idle. */
+	running(): (LoadingFigures & { label: string }) | undefined;
+	/** The last settled run's figures; persists until the next run starts. */
+	settled(): LoadingFigures | undefined;
+}
+
+/** Hint appended to the running line. */
+const ESCAPE_HINT = "(esc)";
+
+export class LoadingWidget {
+	private readonly theme: Theme;
+	private readonly sources: LoadingWidgetSources;
+	private frameIndex = 0;
+	private lastAdvance: number;
+
+	constructor(theme: Theme, sources: LoadingWidgetSources) {
+		this.theme = theme;
+		this.sources = sources;
+		this.lastAdvance = Date.now();
+	}
+
+	render(width: number): string[] {
+		if (width <= 0) return [];
+		const theme = this.theme;
+		const running = this.sources.running();
+		const line = running ? this.runningLine(running) : this.settledLine();
+		if (line === undefined) return [];
+		return padWidgetLines([truncateToWidth(line, width, theme.fg("dim", "…"))]);
+	}
+
+	invalidate(): void {
+		// Everything is recomputed per render; nothing cached to drop.
+	}
+
+	/** The spinner frame, advanced at most once per spinner interval. */
+	private spinnerFrame(): string {
+		const now = Date.now();
+		if (now - this.lastAdvance >= SPINNER_INTERVAL_MS) {
+			this.lastAdvance = now;
+			this.frameIndex = (this.frameIndex + 1) % SPINNER_FRAMES.length;
+		}
+		return SPINNER_FRAMES[this.frameIndex];
+	}
+
+	/** `🞘 Reading 12s, ↓3.4k · 214.2 tok/s (esc)` — spinner rides the mode border. */
+	private runningLine({ label, elapsed, tokens, tps }: LoadingFigures & { label: string }): string {
+		const theme = this.theme;
+		const spinner = theme.fg(agentModeBorderColor(getAgentMode()), this.spinnerFrame());
+		const rate = tps !== undefined ? `${theme.fg("dim", " ∙ ")}${theme.fg("dim", `${tps.toFixed(1)} tok/s`)}` : "";
+		return (
+			`${spinner} ${theme.fg("accent", label)}` +
+			theme.fg("text", ` ${elapsed}, `) +
+			theme.fg("warning", "↓") +
+			theme.fg("muted", tokens) +
+			rate +
+			theme.fg("muted", ` ${ESCAPE_HINT}`)
+		);
+	}
+
+	/** `✓ 45s, ↓12.3k · 275.4 tok/s` — the last turn's figures, kept on screen. */
+	private settledLine(): string | undefined {
+		const settled = this.sources.settled();
+		if (!settled) return undefined;
+		const theme = this.theme;
+		const rate = settled.tps !== undefined ? `${theme.fg("dim", " ∙ ")}${theme.fg("dim", `${settled.tps.toFixed(1)} tok/s`)}` : "";
+		return (
+			theme.fg("success", TURN_DONE) +
+			theme.fg("text", ` ${settled.elapsed}, `) +
+			theme.fg("warning", "↓") +
+			theme.fg("muted", settled.tokens) +
+			rate
+		);
+	}
+}

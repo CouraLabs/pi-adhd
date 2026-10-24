@@ -2,7 +2,10 @@
 export const PROMPT = "❯";
 
 /** Status glyph before each tool call, colored with the call's status. */
-export const TOOL_PICK = "⛏";
+export const TOOL_PICK = "⯁";
+
+/** Glyph for a settled agent run in the loading widget above the editor. */
+export const TURN_DONE = "✓";
 
 /** Ellipsis appended when a line is truncated. */
 export const ELLIPSIS = "…";
@@ -75,11 +78,11 @@ export const POMODORO_BREAK = "☕";
 /** Thinking-level markers for the footer, keyed by pi's model thinking level. */
 export const THINKING_LEVELS = {
 	off: "",
-	minimal: "▻",
-	low: "►",
-	medium: "▶▻",
-	high: "▶▶",
-	xhigh: "▶▶▷",
-	max: "▶▶▶",
-	pro: "⋙⋙⋙",
+	minimal: "∙",
+	low: "○",
+	medium: "◔",
+	high: "◑",
+	xhigh: "◕",
+	max: "●",
+	pro: "⛬",
 } as const;

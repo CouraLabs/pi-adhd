@@ -1,6 +1,6 @@
 /**
  * Working-status tracker — what the agent is doing right now, as one short
- * label with a run clock and the live received-token count.
+ * label with a run clock, the live output-token estimate, and the live rate.
  *
  * Phases, in the order a run hits them:
  *
@@ -15,7 +15,15 @@
  * `read`, for example) do not re-label the line — the parent tool already
  * owns it.
  *
- * Formatting is the caller's job (`text()`), so the tracker stays theme-free.
+ * Output tokens are a live streaming estimate, not the provider's usage
+ * figure: every streamed delta character (text, thinking, and tool-call
+ * JSON) accumulates into a character counter, and the token count is that
+ * counter divided by four — the same chars/4 approximation pi uses for its
+ * context gauge. It moves on every delta even where the provider does not
+ * stream usage. The rate divides the estimate by the elapsed run time, so it
+ * is a run average, not a per-second instantaneous rate.
+ *
+ * Formatting is the caller's job (`parts()`), so the tracker stays theme-free.
  */
 
 import type {
@@ -42,12 +50,13 @@ const PHASE_LABELS = {
 /** Phases of one agent run, and the labels that display them. */
 export type WorkingPhase = "prompting" | "thinking" | "staging" | "tooling" | "answering";
 
-/** Escape hint appended to the composed status text. */
-const ESCAPE_HINT = "(esc)";
+/** Characters per estimated token — the context gauge's approximation. */
+const CHARS_PER_TOKEN = 4;
 
 /**
- * Track one agent run: phase, start time, received tokens, and the in-flight
- * top-level tools. Feed it pi's events; call `text()` for the status line.
+ * Track one agent run: phase, start time, streamed characters, and the
+ * in-flight top-level tools. Feed it pi's events; call `parts()` for the
+ * numbers the loading widget draws.
  */
 export class WorkingStatusTracker {
 	/** Tool-name → gerund, seeded from settings (`editor.toolVerbs`). */
@@ -56,7 +65,8 @@ export class WorkingStatusTracker {
 	private readonly now: () => number;
 	private phase: WorkingPhase = "prompting";
 	private startedAt = 0;
-	private receivedTokens = 0;
+	/** Characters streamed so far this run, across every delta kind. */
+	private streamedChars = 0;
 	/** Top-level executions in flight, as `toolCallId → label` pairs. */
 	private runningTools = new Map<string, string>();
 
@@ -65,24 +75,26 @@ export class WorkingStatusTracker {
 		this.now = now;
 	}
 
-	/** The agent loop started; reset the run clock and the receive counter. */
+	/** The agent loop started; reset the run clock and the character counter. */
 	onAgentStart(_event: AgentStartEvent): void {
 		this.startedAt = this.now();
-		this.receivedTokens = 0;
+		this.streamedChars = 0;
 		this.phase = "prompting";
 	}
 
-	/** Derive the phase and the live token count from one streaming update. */
-	onMessageUpdate({ message, assistantMessageEvent }: MessageUpdateEvent): void {
-		// SAFETY: only assistant messages stream usage; the union narrows on `in`.
-		if ("usage" in message) {
-			const streamed = message.usage?.output;
-			if (streamed !== undefined) this.receivedTokens = Math.max(this.receivedTokens, streamed);
+	/** Derive the phase and grow the streamed-character counter from one update. */
+	onMessageUpdate({ assistantMessageEvent }: MessageUpdateEvent): void {
+		const event = assistantMessageEvent;
+		if (!event) return;
+		// Every streamed delta is output the model produced: prose, thinking,
+		// and tool-call JSON alike. Count their characters; the token estimate
+		// divides by four below.
+		if (event.type === "text_delta" || event.type === "thinking_delta" || event.type === "toolcall_delta") {
+			this.streamedChars += event.delta.length;
 		}
-		const type = assistantMessageEvent?.type;
-		if (type === "thinking_delta") this.phase = "thinking";
-		else if (type === "text_delta") this.phase = "answering";
-		else if (type === "toolcall_start" || type === "toolcall_delta") this.phase = "staging";
+		if (event.type === "thinking_delta") this.phase = "thinking";
+		else if (event.type === "text_delta") this.phase = "answering";
+		else if (event.type === "toolcall_start" || event.type === "toolcall_delta") this.phase = "staging";
 	}
 
 	/** A tool began executing: top-level tools take over the label. */
@@ -117,15 +129,36 @@ export class WorkingStatusTracker {
 		return this.phase === "tooling" ? (this.runningTools.values().next().value ?? FALLBACK_VERB) : PHASE_LABELS[this.phase];
 	}
 
-	/** The line's pieces, for callers that color segments individually. */
-	parts(now = this.now()): { label: string; elapsed: string; tokens: string } {
-		const elapsed = this.startedAt > 0 ? formatCountdown(now - this.startedAt) : "0s";
-		return { label: this.label, elapsed, tokens: formatTokens(this.receivedTokens) };
+	/** Live output-token estimate: streamed characters divided by four. */
+	get tokens(): number {
+		return Math.floor(this.streamedChars / CHARS_PER_TOKEN);
 	}
 
-	/** Whole status line: `Reading 12s, ↓3.4k (esc)`. */
-	text(now = this.now()): string {
-		const { label, elapsed, tokens } = this.parts(now);
-		return `${label} ${elapsed}, ↓${tokens} ${ESCAPE_HINT}`;
+	/** Elapsed run milliseconds; 0 before the run started. */
+	get elapsedMs(): number {
+		return this.startedAt > 0 ? Math.max(0, this.now() - this.startedAt) : 0;
+	}
+
+	/** The line's pieces, for callers that color segments individually.
+	 *  `tps` is undefined until both a positive elapsed time and at least one
+	 *  streamed character exist — no rate without something to divide. */
+	parts(now = this.now()): {
+		label: string;
+		elapsed: string;
+		elapsedMs: number;
+		tokens: string;
+		tps: number | undefined;
+	} {
+		const elapsedMs = this.elapsedMs;
+		const tokens = this.tokens;
+		const seconds = elapsedMs / 1000;
+		const tps = seconds > 0 && tokens > 0 ? tokens / seconds : undefined;
+		return {
+			label: this.label,
+			elapsed: formatCountdown(elapsedMs),
+			elapsedMs,
+			tokens: formatTokens(tokens),
+			tps,
+		};
 	}
 }
