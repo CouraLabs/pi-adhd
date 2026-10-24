@@ -59,6 +59,22 @@ const PHASE_LABELS = {
 /** Phases of one agent run, and the labels that display them. */
 export type WorkingPhase = "prompting" | "thinking" | "staging" | "tooling" | "answering";
 
+/**
+ * Phase groups the loading widget colors by: waiting on the model, a tool
+ * executing, or output streaming. Staging groups with tooling — its label
+ * reads "Tooling" too.
+ */
+export type WorkingTone = "prompting" | "tooling" | "streaming";
+
+/** Phase → tone, the widget's coloring key. */
+const TONE_FOR_PHASE: Record<WorkingPhase, WorkingTone> = {
+	prompting: "prompting",
+	thinking: "streaming",
+	staging: "tooling",
+	tooling: "tooling",
+	answering: "streaming",
+};
+
 /** Characters per estimated token — the context gauge's approximation. */
 const CHARS_PER_TOKEN = 4;
 
@@ -190,10 +206,13 @@ export class WorkingStatusTracker {
 
 	/** The line's pieces, for callers that color segments individually.
 	 *  `tokens` is the raw estimate as digits — the widget draws it unformatted.
+	 *  `tone` groups the phase for coloring: waiting on the model (`prompting`),
+	 *  a tool executing (`tooling`), or output streaming (`streaming`).
 	 *  `tps` is undefined until a positive streaming span and at least one
 	 *  streamed character exist — no rate without something to divide. */
 	parts(now = this.now()): {
 		label: string;
+		tone: WorkingTone;
 		elapsed: string;
 		elapsedMs: number;
 		tokens: string;
@@ -210,6 +229,7 @@ export class WorkingStatusTracker {
 		const tps = seconds > 0 && tokens > 0 ? tokens / seconds : undefined;
 		return {
 			label: this.label,
+			tone: TONE_FOR_PHASE[this.phase],
 			elapsed: formatCountdown(elapsedMs),
 			elapsedMs,
 			tokens: String(tokens),

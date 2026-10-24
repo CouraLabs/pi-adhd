@@ -21,11 +21,12 @@
  * extra renders between ticks never skip frames.
  */
 
-import type { Theme } from "@earendil-works/pi-coding-agent";
+import type { Theme, ThemeColor } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth } from "@earendil-works/pi-tui";
 import { padWidgetLines } from "../../../shared/format.ts";
 import { RATE_GLYPH, TURN_DONE } from "../../../shared/glyphs.ts";
 import { agentModeBorderColor, getAgentMode } from "../../../shared/modes.ts";
+import type { WorkingTone } from "./status.ts";
 import { SPINNER_FRAMES, SPINNER_INTERVAL_MS } from "./spinner.ts";
 
 /** The numbers one loading line draws. */
@@ -41,7 +42,7 @@ export interface LoadingFigures {
 /** What the widget needs each frame; the extension owns the sources. */
 export interface LoadingWidgetSources {
 	/** The live run's figures, labeled by phase; undefined while idle. */
-	running(): (LoadingFigures & { label: string }) | undefined;
+	running(): (LoadingFigures & { label: string; tone: WorkingTone }) | undefined;
 	/** The last settled run's figures; persists until the next run starts. */
 	settled(): LoadingFigures | undefined;
 }
@@ -51,6 +52,16 @@ const ESCAPE_HINT = "(esc)";
 
 /** Separator between the loading line's segments. */
 const SEGMENT_ARROW = " → ";
+
+/**
+ * Phase tone → semantic color token: `warning` while waiting on the model's
+ * round trip, `accent` while a tool executes, `success` while output streams.
+ */
+const TONE_TOKEN: Record<WorkingTone, ThemeColor> = {
+	prompting: "warning",
+	tooling: "accent",
+	streaming: "success",
+};
 
 export class LoadingWidget {
 	private readonly theme: Theme;
@@ -88,12 +99,13 @@ export class LoadingWidget {
 	}
 
 	/** `🞘 Answering <muted>for</> 12s → ↓ 3400 → ⭍ 214.2 tok/s (esc)` — the spinner
-	 *  rides the mode border, "for" rides muted, and the arrow joins the segments dim. */
-	private runningLine({ label, elapsed, tokens, tps }: LoadingFigures & { label: string }): string {
+	 *  rides the mode border, the label rides its phase's semantic color, "for"
+	 *  rides muted, and the arrow joins the segments dim. */
+	private runningLine({ label, tone, elapsed, tokens, tps }: LoadingFigures & { label: string; tone: WorkingTone }): string {
 		const theme = this.theme;
 		const spinner = theme.fg(agentModeBorderColor(getAgentMode()), this.spinnerFrame());
 		const parts = [
-			`${spinner} ${theme.fg("accent", label)}${theme.fg("muted", " for ")}${theme.fg("text", elapsed)}`,
+			`${spinner} ${theme.fg(TONE_TOKEN[tone], label)}${theme.fg("muted", " for ")}${theme.fg("text", elapsed)}`,
 		];
 		parts.push(`${theme.fg("text", "↓")} ${theme.fg("muted", tokens)}`);
 		if (tps !== undefined) {
