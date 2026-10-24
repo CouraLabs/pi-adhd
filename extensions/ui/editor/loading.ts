@@ -3,14 +3,16 @@
  *
  * Replaces pi's built-in working row (hidden with `setWorkingVisible(false)`)
  * with a persistent widget. While the agent runs it animates the dot spinner
- * and names the current phase with a run clock, the live output-token estimate
- * (streamed characters ÷ 4, see `./status.ts`), the live rate (estimate ÷
- * elapsed), and the interrupt hint: `🞘 Reading 12s, ↓3.4k · 214.2 tok/s (esc)`.
+ * and names the current phase with a run clock, the time to first token of the
+ * current LLM return, the live output-token estimate (streamed characters ÷ 4,
+ * see `./status.ts`), and the live rate — tokens over streaming time only, so
+ * the request round trip and the first-token wait never dilute it:
+ * `🞘 Reading for 12s → TFT 1.8s → ↓3400 → ⭍ 214.2 tok/s (esc)`.
  *
- * When the run settles the widget does not vanish with pi's working row would —
+ * When the run settles the widget does not vanish (as pi's working row would) —
  * it keeps the last turn's clock and output tokens on screen while the next
- * prompt is typed: `✓ 45s, ↓12.3k · 275.4 tok/s`. The next run overwrites the
- * summary the moment its tracker exists.
+ * prompt is typed: `✓ Finished in 45s → TFT 1.8s → ↓12300 → ⭍ 275.4 tok/s`. The next run
+ * overwrites the summary the moment its tracker exists.
  *
  * Statelessness by construction: every render reads the tracker and the
  * settled summary afresh, so events, ticks, mode recolors, and theme swaps all
@@ -22,18 +24,21 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth } from "@earendil-works/pi-tui";
 import { padWidgetLines } from "../../../shared/format.ts";
-import { TURN_DONE } from "../../../shared/glyphs.ts";
+import { RATE_GLYPH, TURN_DONE } from "../../../shared/glyphs.ts";
 import { agentModeBorderColor, getAgentMode } from "../../../shared/modes.ts";
+import { formatCountdown } from "../../../shared/timers.ts";
 import { SPINNER_FRAMES, SPINNER_INTERVAL_MS } from "./spinner.ts";
 
 /** The numbers one loading line draws. */
 export interface LoadingFigures {
 	/** Formatted run clock ("12s", "1m 30s"). */
 	elapsed: string;
-	/** Formatted live output-token estimate ("3.4k"). */
+	/** Live output-token estimate, raw digits ("3400"). */
 	tokens: string;
-	/** Tokens per second over the elapsed span; undefined with nothing to divide. */
+	/** Tokens per second over streaming time only; undefined with nothing to divide. */
 	tps: number | undefined;
+	/** Time to first token of the current (or most recent) LLM return, in ms. */
+	tftMs: number | undefined;
 }
 
 /** What the widget needs each frame; the extension owns the sources. */
@@ -46,6 +51,14 @@ export interface LoadingWidgetSources {
 
 /** Hint appended to the running line. */
 const ESCAPE_HINT = "(esc)";
+
+/** Separator between the loading line's segments. */
+const SEGMENT_ARROW = " → ";
+
+/** TFT keeps sub-second precision where it matters, whole units beyond 10s. */
+function formatTft(ms: number): string {
+	return ms < 10_000 ? `${(ms / 1000).toFixed(1)}s` : formatCountdown(ms);
+}
 
 export class LoadingWidget {
 	private readonly theme: Theme;
@@ -82,33 +95,32 @@ export class LoadingWidget {
 		return SPINNER_FRAMES[this.frameIndex];
 	}
 
-	/** `🞘 Reading 12s, ↓3.4k · 214.2 tok/s (esc)` — spinner rides the mode border. */
-	private runningLine({ label, elapsed, tokens, tps }: LoadingFigures & { label: string }): string {
+	/** `🞘 Answering for 12s → TFT 1.8s → ↓3400 → ⭍ 214.2 tok/s (esc)` — the spinner
+	 *  rides the mode border; the arrow joins the segments dim. */
+	private runningLine({ label, elapsed, tokens, tps, tftMs }: LoadingFigures & { label: string }): string {
 		const theme = this.theme;
 		const spinner = theme.fg(agentModeBorderColor(getAgentMode()), this.spinnerFrame());
-		const rate = tps !== undefined ? `${theme.fg("dim", " ∙ ")}${theme.fg("dim", `${tps.toFixed(1)} tok/s`)}` : "";
-		return (
-			`${spinner} ${theme.fg("accent", label)}` +
-			theme.fg("text", ` ${elapsed}, `) +
-			theme.fg("warning", "↓") +
-			theme.fg("muted", tokens) +
-			rate +
-			theme.fg("muted", ` ${ESCAPE_HINT}`)
-		);
+		const parts = [
+			`${spinner} ${theme.fg("accent", label)}${theme.fg("text", ` for ${elapsed}`)}`,
+		];
+		if (tftMs !== undefined) parts.push(theme.fg("dim", `TFT ${formatTft(tftMs)}`));
+		parts.push(`${theme.fg("warning", "↓")}${theme.fg("muted", tokens)}`);
+		if (tps !== undefined) parts.push(theme.fg("dim", `${RATE_GLYPH} ${tps.toFixed(1)} tok/s`));
+		return `${parts.join(theme.fg("dim", SEGMENT_ARROW))}${theme.fg("muted", ` ${ESCAPE_HINT}`)}`;
 	}
 
-	/** `✓ 45s, ↓12.3k · 275.4 tok/s` — the last turn's figures, kept on screen. */
+	/** `✓ Finished in 45s → TFT 1.8s → ↓12300 → ⭍ 275.4 tok/s` — the last turn's
+	 *  figures, kept on screen; the TFT is the most recent return's wait. */
 	private settledLine(): string | undefined {
 		const settled = this.sources.settled();
 		if (!settled) return undefined;
 		const theme = this.theme;
-		const rate = settled.tps !== undefined ? `${theme.fg("dim", " ∙ ")}${theme.fg("dim", `${settled.tps.toFixed(1)} tok/s`)}` : "";
-		return (
-			theme.fg("success", TURN_DONE) +
-			theme.fg("text", ` ${settled.elapsed}, `) +
-			theme.fg("warning", "↓") +
-			theme.fg("muted", settled.tokens) +
-			rate
-		);
+		const parts = [
+			`${theme.fg("success", TURN_DONE)}${theme.fg("text", ` Finished in ${settled.elapsed}`)}`,
+		];
+		if (settled.tftMs !== undefined) parts.push(theme.fg("dim", `TFT ${formatTft(settled.tftMs)}`));
+		parts.push(`${theme.fg("warning", "↓")}${theme.fg("muted", settled.tokens)}`);
+		if (settled.tps !== undefined) parts.push(theme.fg("dim", `${RATE_GLYPH} ${settled.tps.toFixed(1)} tok/s`));
+		return parts.join(theme.fg("dim", SEGMENT_ARROW));
 	}
 }

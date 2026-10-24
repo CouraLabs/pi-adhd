@@ -10,9 +10,9 @@
  * Thinking, Answering, or the executing tool's verb ("Reading", "Writing", …)
  * — followed by a running clock, the live output-token estimate (streamed
  * characters ÷ 4, see `./status.ts`), the live tokens/sec rate, and the
- * interrupt hint: `🞘 Reading 12s, ↓3.4k · 214.2 tok/s (esc)`. When the run
+ * interrupt hint: `🞘 Reading for 12s → TFT 1.8s → ↓3400 → ⭍ 214.2 tok/s (esc)`. When the run
  * settles the widget keeps the last turn's clock and output tokens on screen
- * while the next prompt is typed: `✓ 45s, ↓12.3k · 275.4 tok/s`.
+ * while the next prompt is typed: `✓ Finished in 45s → TFT 1.8s → ↓12300 → ⭍ 275.4 tok/s`.
  *
  * Toggle it with `/couralabs:toggle editor`.
  */
@@ -191,9 +191,22 @@ export default function (pi: ExtensionAPI) {
 		requestRender();
 	});
 
+	// An assistant return opened: its request is on the wire; the wait clock
+	// (TFT) starts and the rate's streaming span starts at the first token.
+	pi.on("message_start", (event) => {
+		tracker?.onMessageStart(event);
+		requestRender();
+	});
+
 	// Streaming deltas move the phase and grow the token estimate.
 	pi.on("message_update", (event) => {
 		tracker?.onMessageUpdate(event);
+		requestRender();
+	});
+
+	// The return closed: its streaming span is banked into the rate.
+	pi.on("message_end", (event) => {
+		tracker?.onMessageEnd(event);
 		requestRender();
 	});
 

@@ -9,6 +9,7 @@ import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-c
 import { mixColors, truncateToWidth } from "@earendil-works/pi-tui";
 import { formatTokens } from "../../../shared/format.ts";
 import {
+	CONTEXT_GLYPH,
 	ELLIPSIS,
 	GAUGE_GLYPHS,
 	POMODORO_BREAK,
@@ -38,8 +39,6 @@ export interface FooterState {
 	model: ModelInfo | undefined;
 	thinkingLevel: ThinkingLevel;
 	contextUsage: ContextUsage | undefined;
-	/** Generation rate of the most recently completed assistant message, in tokens/sec; undefined until one completes. */
-	tps?: number;
 	usage: UsageTotals;
 	/** Cumulative cost of the session's spawn runs, shown parenthesized after the session cost. */
 	spawnCost: number;
@@ -167,15 +166,11 @@ export function renderFooter(state: FooterState, width: number, theme: Theme): s
 	if (contextUsage && contextUsage.percent !== null && contextWindow) {
 		const percent = contextUsage.percent;
 		const label = `${formatTokens(contextUsage.tokens ?? 0)}/${formatTokens(contextWindow)}`;
-		parts.push(`${theme.fg("dim", `${Math.round(percent)}%`)} ${contextBar(theme, percent)} ${contextColor(theme, percent, label)}`);
+		const gaugeColor = mixColors(theme.colors.success, theme.colors.error, Math.max(0, Math.min(100, percent)) / 100);
+		const icon = theme.style(CONTEXT_GLYPH, { fg: gaugeColor });
+		parts.push(`${icon} ${theme.fg("dim", `${Math.round(percent)}%`)} ${contextBar(theme, percent)} ${contextColor(theme, percent, label)}`);
 	} else if (contextWindow) {
 		parts.push(theme.fg("dim", `ctx ?/${formatTokens(contextWindow)}`));
-	}
-
-	// Defensive: the index side only ever stores a finite positive rate, but a
-	// nonsense value must not render even if one slips through.
-	if (state.tps !== undefined && Number.isFinite(state.tps) && state.tps > 0) {
-		parts.push(theme.fg("dim", `${state.tps.toFixed(1)} tok/s`));
 	}
 
 	const totals = state.usage;

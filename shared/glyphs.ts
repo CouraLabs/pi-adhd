@@ -31,12 +31,18 @@ export const BOX_VERTICAL = "│";
 // ── Status icons ────────────────────────────────────────────────────────────
 
 /** Monochrome Unicode cache glyph for the cache-hit indicator. */
-export const CACHE_GLYPH = "⭍";
+export const CACHE_GLYPH = "⮏";
+
+/** Glyph for the tokens-per-second rate on the loading widget — the former cache glyph, freed when the cache moved to `⮏`. */
+export const RATE_GLYPH = "⭍";
 
 // ── Context-window gauge ────────────────────────────────────────────────────
 
 /** Shading ramp for the footer's context gauge: empty → light → heavy → full. */
 export const GAUGE_GLYPHS = ["░", "▒", "▓", "█"];
+
+/** Context-usage icon, drawn before the percentage in the gauge's color. */
+export const CONTEXT_GLYPH = "⛁";
 
 /** Input (prompt) token marker. */
 export const INPUT = "↑";

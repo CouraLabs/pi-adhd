@@ -1,6 +1,7 @@
 /**
  * Working-status tracker — what the agent is doing right now, as one short
- * label with a run clock, the live output-token estimate, and the live rate.
+ * label with a run clock, the live output-token estimate, the live rate, and
+ * the time to first token.
  *
  * Phases, in the order a run hits them:
  *
@@ -20,8 +21,16 @@
  * JSON) accumulates into a character counter, and the token count is that
  * counter divided by four — the same chars/4 approximation pi uses for its
  * context gauge. It moves on every delta even where the provider does not
- * stream usage. The rate divides the estimate by the elapsed run time, so it
- * is a run average, not a per-second instantaneous rate.
+ * stream usage.
+ *
+ * The rate divides tokens by streaming time only. Each LLM return (one
+ * assistant message) opens at `message_start` — the request sent — and its
+ * span starts when the return's first token arrives, so the request round
+ * trip and the first-token wait never dilute the rate. Between returns the
+ * tool gap is excluded too: the rate is tokens over accumulated streaming
+ * spans, live while a return streams and settled over completed spans once
+ * it ends. TFT is that first-token wait, per return: it grows while the
+ * current return is still waiting, then freezes at the arrival time.
  *
  * Formatting is the caller's job (`parts()`), so the tracker stays theme-free.
  */
@@ -29,11 +38,12 @@
 import type {
 	AgentEndEvent,
 	AgentStartEvent,
+	MessageEndEvent,
+	MessageStartEvent,
 	MessageUpdateEvent,
 	ToolExecutionEndEvent,
 	ToolExecutionStartEvent,
 } from "@earendil-works/pi-coding-agent";
-import { formatTokens } from "../../../shared/format.ts";
 import { formatCountdown } from "../../../shared/timers.ts";
 
 /** Fallback gerund when a tool name is not in the verb map. */
@@ -54,9 +64,9 @@ export type WorkingPhase = "prompting" | "thinking" | "staging" | "tooling" | "a
 const CHARS_PER_TOKEN = 4;
 
 /**
- * Track one agent run: phase, start time, streamed characters, and the
- * in-flight top-level tools. Feed it pi's events; call `parts()` for the
- * numbers the loading widget draws.
+ * Track one agent run: phase, start time, streamed characters, streaming
+ * spans, and the in-flight top-level tools. Feed it pi's events; call
+ * `parts()` for the numbers the loading widget draws.
  */
 export class WorkingStatusTracker {
 	/** Tool-name → gerund, seeded from settings (`editor.toolVerbs`). */
@@ -65,8 +75,18 @@ export class WorkingStatusTracker {
 	private readonly now: () => number;
 	private phase: WorkingPhase = "prompting";
 	private startedAt = 0;
-	/** Characters streamed so far this run, across every delta kind. */
+	/** Characters streamed so far this run, across every delta kind and return. */
 	private streamedChars = 0;
+	/** Request-sent time of the LLM return currently streaming; 0 when none is. */
+	private returnStartedAt = 0;
+	/** First-token arrival of the current return; 0 while it is still waiting. */
+	private returnFirstDeltaAt = 0;
+	/** Characters streamed by the return currently open, across delta kinds. */
+	private returnChars = 0;
+	/** Streaming spans completed by returns that already ended, in ms. */
+	private totalStreamMs = 0;
+	/** First-token wait of the most recently started return, in ms; 0 until one. */
+	private lastTftMs = 0;
 	/** Top-level executions in flight, as `toolCallId → label` pairs. */
 	private runningTools = new Map<string, string>();
 
@@ -75,11 +95,22 @@ export class WorkingStatusTracker {
 		this.now = now;
 	}
 
-	/** The agent loop started; reset the run clock and the character counter. */
+	/** The agent loop started; reset the run clock and the counters. */
 	onAgentStart(_event: AgentStartEvent): void {
 		this.startedAt = this.now();
 		this.streamedChars = 0;
+		this.totalStreamMs = 0;
+		this.lastTftMs = 0;
+		this.returnStartedAt = 0;
+		this.returnFirstDeltaAt = 0;
 		this.phase = "prompting";
+	}
+
+	/** An LLM return began: its request is on the wire, the wait clock starts. */
+	onMessageStart(event: MessageStartEvent): void {
+		if (event.message.role !== "assistant") return;
+		this.returnStartedAt = this.now();
+		this.returnFirstDeltaAt = 0;
 	}
 
 	/** Derive the phase and grow the streamed-character counter from one update. */
@@ -90,11 +121,33 @@ export class WorkingStatusTracker {
 		// and tool-call JSON alike. Count their characters; the token estimate
 		// divides by four below.
 		if (event.type === "text_delta" || event.type === "thinking_delta" || event.type === "toolcall_delta") {
+			if (this.returnFirstDeltaAt === 0) this.markFirstToken();
+			this.returnChars += event.delta.length;
 			this.streamedChars += event.delta.length;
 		}
 		if (event.type === "thinking_delta") this.phase = "thinking";
 		else if (event.type === "text_delta") this.phase = "answering";
 		else if (event.type === "toolcall_start" || event.type === "toolcall_delta") this.phase = "staging";
+	}
+
+	/** First token of the current return arrived: freeze its TFT. */
+	private markFirstToken(): void {
+		this.returnFirstDeltaAt = this.now();
+		if (this.returnStartedAt > 0) this.lastTftMs = Math.max(0, this.returnFirstDeltaAt - this.returnStartedAt);
+	}
+
+	/** The return ended: bank its streaming span and close it out. */
+	onMessageEnd(event: MessageEndEvent): void {
+		if (event.message.role !== "assistant") return;
+		this.closeReturn();
+	}
+
+	/** Bank the open return's streaming span; safe with no return open. */
+	private closeReturn(): void {
+		if (this.returnFirstDeltaAt > 0) this.totalStreamMs += Math.max(0, this.now() - this.returnFirstDeltaAt);
+		this.returnStartedAt = 0;
+		this.returnFirstDeltaAt = 0;
+		this.returnChars = 0;
 	}
 
 	/** A tool began executing: top-level tools take over the label. */
@@ -112,8 +165,9 @@ export class WorkingStatusTracker {
 		if (this.runningTools.size === 0) this.phase = "prompting";
 	}
 
-	/** The agent loop ended; the label drops back to prompting for the next run. */
+	/** The agent loop ended: close any still-open return and reset the labels. */
 	onAgentEnd(_event: AgentEndEvent): void {
+		this.closeReturn();
 		this.runningTools.clear();
 		this.phase = "prompting";
 	}
@@ -139,8 +193,17 @@ export class WorkingStatusTracker {
 		return this.startedAt > 0 ? Math.max(0, this.now() - this.startedAt) : 0;
 	}
 
+	/** Time to first token, in ms, as the line shows it: the current return's
+	 *  wait while it is still open (growing until the token lands), then the
+	 *  most recent return's frozen wait. undefined before any return. */
+	get tftMs(): number | undefined {
+		if (this.returnStartedAt > 0 && this.returnFirstDeltaAt === 0) return Math.max(0, this.now() - this.returnStartedAt);
+		return this.lastTftMs > 0 ? this.lastTftMs : undefined;
+	}
+
 	/** The line's pieces, for callers that color segments individually.
-	 *  `tps` is undefined until both a positive elapsed time and at least one
+	 *  `tokens` is the raw estimate as digits — the widget draws it unformatted.
+	 *  `tps` is undefined until a positive streaming span and at least one
 	 *  streamed character exist — no rate without something to divide. */
 	parts(now = this.now()): {
 		label: string;
@@ -148,17 +211,24 @@ export class WorkingStatusTracker {
 		elapsedMs: number;
 		tokens: string;
 		tps: number | undefined;
+		tftMs: number | undefined;
 	} {
 		const elapsedMs = this.elapsedMs;
 		const tokens = this.tokens;
-		const seconds = elapsedMs / 1000;
+		// Streaming time only: completed spans plus the open return's span since
+		// its first token — request time, first-token waits, and tool gaps stay
+		// out of the divisor.
+		const streamingMs =
+			this.totalStreamMs + (this.returnFirstDeltaAt > 0 ? Math.max(0, now - this.returnFirstDeltaAt) : 0);
+		const seconds = streamingMs / 1000;
 		const tps = seconds > 0 && tokens > 0 ? tokens / seconds : undefined;
 		return {
 			label: this.label,
 			elapsed: formatCountdown(elapsedMs),
 			elapsedMs,
-			tokens: formatTokens(tokens),
+			tokens: String(tokens),
 			tps,
+			tftMs: this.tftMs,
 		};
 	}
 }

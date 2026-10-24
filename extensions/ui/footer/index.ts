@@ -34,10 +34,6 @@ export default function (pi: ExtensionAPI) {
 	let unsubscribeSections: (() => void) | undefined;
 	let unsubscribeTimers: (() => void) | undefined;
 	let timerTick: NodeJS.Timeout | undefined;
-	/** When the in-flight assistant message started streaming; undefined when none is. */
-	let assistantStart: number | undefined;
-	/** Tokens/sec of the most recently completed assistant message; undefined until one completes. */
-	let tps: number | undefined;
 
 	const requestRender = () => tui?.requestRender();
 
@@ -126,7 +122,6 @@ export default function (pi: ExtensionAPI) {
 							submode: isExtensionLoaded("submodes") ? getSubmode() : undefined,
 							thinkingLevel: pi.getThinkingLevel(),
 							contextUsage: contextUsageNow(),
-							tps,
 							usage: usageTotals(),
 							spawnCost: spawnCost(),
 							timers: getTimers(),
@@ -149,8 +144,6 @@ export default function (pi: ExtensionAPI) {
 		ctx = context;
 		usageCache = undefined;
 		lastRealContextTokens = undefined;
-		tps = undefined;
-		assistantStart = undefined;
 
 		// Re-render when /mode switches the agent mode or /plan / /grill the submode.
 		unsubscribeMode?.();
@@ -184,50 +177,18 @@ export default function (pi: ExtensionAPI) {
 		requestRender();
 	});
 
-	// Tokens/sec of the last assistant message, timed from three sources in
-	// trust order: the message's own durationMs (a monotonic span the SDK's
-	// AssistantMessageEventStream records on the final message it saw start),
-	// else the monotonic performance.now() span armed when streaming began
-	// (legacy messages without durationMs), else the message's timestamp —
-	// the provider-layer request start, covering messages that completed
-	// before a clock could be armed, and deferred results fetched without one.
-	// User and toolResult messages neither arm nor reset the clock, so a
-	// turn's tool loop keeps timing only its own assistant segments.
-	pi.on("message_start", (event) => {
-		if (event.message.role !== "assistant") return;
-		assistantStart = performance.now();
-	});
+	// Mirror pi core's validity rule — aborted/errored replies and zero usage
+	// don't count toward context, so they must not re-anchor the gauge either.
+	// The event fires before the message is persisted, so reading
+	// getContextUsage() here would still see the previous phase; take the
+	// total straight from the message's own usage instead.
 	pi.on("message_end", (event) => {
 		if (event.message.role !== "assistant") return;
-		// Mirror pi core's validity rule — aborted/errored replies and zero usage
-		// don't count toward context, so they must not re-anchor the gauge either.
-		// The event fires before the message is persisted, so reading
-		// getContextUsage() here would still see the previous phase; take the
-		// total straight from the message's own usage instead.
 		const usage = event.message.usage;
 		const totalTokens = usage.totalTokens || usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
 		if (event.message.stopReason !== "aborted" && event.message.stopReason !== "error" && totalTokens > 0) {
 			lastRealContextTokens = totalTokens;
 		}
-		const started = assistantStart;
-		assistantStart = undefined;
-		const output = event.message.usage.output;
-		// First two tiers share the monotonic clock family the SDK stamps
-		// durationMs with; only the last tier touches Date.now(), paired against
-		// the provider-layer request timestamp, so NTP steps or suspend/resume
-		// cannot inflate a rate measured on the primary clocks.
-		const durationMs = event.message.durationMs;
-		const seconds =
-			typeof durationMs === "number" && Number.isFinite(durationMs) && durationMs > 0
-				? durationMs / 1000
-				: started !== undefined
-					? (performance.now() - started) / 1000
-					: (Date.now() - event.message.timestamp) / 1000;
-		// No elapsed source, a zero output, or a non-positive elapsed time (clock
-		// went backwards, messages too close to resolve) is no rate at all — keep
-		// the previous value rather than show a misleading 0 or Infinity.
-		if (seconds === undefined || !(output > 0) || seconds <= 0) return;
-		tps = output / seconds;
 		requestRender();
 	});
 

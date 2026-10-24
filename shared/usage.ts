@@ -70,7 +70,7 @@ export interface UsageTheme {
 
 /**
  * The usage group the footer and the spawn renderers share:
- * `↑ 120k ↓ 8.4k ⭍ 87%` — fresh input, output, and the cache-hit rate, joined
+ * `↑ 120k ↓ 8.4k ⮏ 87%` — fresh input, output, and the cache-hit rate, joined
  * by spaces. Returns "" when there is nothing to show.
  *
  * Icon colors follow the semantic map: the input arrow is `success`, the

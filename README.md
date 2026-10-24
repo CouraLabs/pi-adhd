@@ -38,7 +38,7 @@ Fourteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`
 | Shape the reply | `modes` | `/mode [pi\|work]`: swaps the system prompt, footer label, and editor border |
 | Shape the reply | `submodes` | `/plan` `/grill` `/straight`: read-only or guided working modes layered on top of the main mode |
 | Run your workflows | `commands` | `/cmd:<name>`: saved prompts from `.agents/commands` and `.claude/commands` |
-| See progress | `footer` | One-line themed status bar: countdowns, mode, model, thinking, context, tokens/sec, cost |
+| See progress | `footer` | One-line themed status bar: countdowns, mode, model, thinking, context, usage, cost |
 | See progress | `thinking` | Compact animated reasoning preview |
 | Drive the loop | `goal` | Persistent autonomous objective with budgets and continuation turns |
 | Drive the loop | `spawn` | In-process subagents that run foreground and return inline |
@@ -162,19 +162,19 @@ Running `/cmd:promote` sends the body (frontmatter stripped) to the conversation
 Wraps the prompt editor in a closed field drawn with terminal box characters (`╭ ╮ ╰ ╯ │ ─`), inset by a one-column margin on each side, with a `❯` marker on the first input line; the working directory and git state are embedded in the bottom border, and the box recolors with the agent mode. The spinner animation (`🞗` → `🞘` → `🞙` → `🞚` → `🞛` → `🞜` → `🞛` → `🞚` → `🞙` → `🞘`, 100ms) no longer sits in the border, and pi's built-in working row is hidden: while the agent runs, a loading widget floats above the field as a persistent widget slot,
 
 ```
-🞘 Reading 12s, ↓3.4k ∙ 214.2 tok/s (esc)
+🞘 Reading for 12s → TFT 1.8s → ↓3400 → ⭍ 214.2 tok/s (esc)
 
  ╭──────────────────────────────────────────────────────╮
  │ ❯ explain this codebase                              │
  ╰──────── pi-adhd ∙ ⌥ main +12 -3 ─────────────────╯
 ```
 
-naming what is executing — `Prompting` on the round-trip before the first streamed token, `Thinking` while reasoning streams, `Answering` while reply text streams, and the executing tool's verb between them (`Reading`, `Writing`, `Editing`, `Running` for the shell; any unmapped tool shows the fallback `Tooling`). The verb map is configurable in `editor.toolVerbs` (e.g. `{"grep": "Grepping", "webfetch": "Fetching"}`); it is followed by the run clock (`12s`, `1m32s`, …), the live output-token estimate (`↓3.4k` — streamed characters ÷ 4, updated on every delta), and the live rate (estimate ÷ elapsed, `214.2 tok/s`), plus the `esc`-interrupt hint.
+naming what is executing — `Prompting` on the round-trip before the first streamed token, `Thinking` while reasoning streams, `Answering` while reply text streams, and the executing tool's verb between them (`Reading`, `Writing`, `Editing`, `Running` for the shell; any unmapped tool shows the fallback `Tooling`). The verb map is configurable in `editor.toolVerbs` (e.g. `{"grep": "Grepping", "webfetch": "Fetching"}`); it is followed by the run clock (`for 12s`, `for 1m32s`, …), the time to first token (`TFT 1.8s` — grows while the current LLM return is still waiting, then freezes at arrival; the settled line keeps the last return's wait), the raw output-token estimate (`↓3400` — streamed characters ÷ 4, updated on every delta), and the live rate (`⭍ 214.2 tok/s` — estimate ÷ streaming time only: each LLM return's span starts at its first token, so the request round trip, the first-token wait, and the tool gaps between returns never dilute it), plus the `esc`-interrupt hint.
 
 When the run settles, the widget does not vanish with pi's working row: it keeps the last turn's clock and output tokens on screen while the next prompt is typed —
 
 ```
-✓ 45s, ↓12.3k ∙ 275.4 tok/s
+✓ Finished in 45s → TFT 1.8s → ↓12300 → ⭍ 275.4 tok/s
 ```
 
 — until the next run overwrites the summary. Toggle the whole prompt field with `/couralabs:toggle editor`.
@@ -186,7 +186,7 @@ The box border color follows the active agent mode (see [`modes`](#the-output-co
 Replaces the built-in footer with a compact, theme-aware status bar. Toggle it with `/couralabs:toggle footer`.
 
 ```
-  ⏱ 1h20m30s ∙ 🍅 Work 1/4 12m30s ∙ ⦵ Work ∙ ⧉Plan ∙ anthropic/claude-sonnet-4 ∙ ▶▶ high ∙ ███▒░ 124k/200k (62%) ∙ ↑ 120k ∙ ↓ 8.4k ∙ ⭍ 87% ∙ $0.842
+  ⏱ 1h20m30s ∙ 🍅 Work 1/4 12m30s ∙ ⦵ Work ∙ ⧉Plan ∙ anthropic/claude-sonnet-4 ∙ ▶▶ high ∙ ⛁ ███▒░ 124k/200k (62%) ∙ ↑ 120k ∙ ↓ 8.4k ∙ ⮏ 87% ∙ $0.842
   🎯 Goal 1.2M/2M · 4/10 tasks
 ```
 
@@ -194,15 +194,18 @@ The stats line leads with any running countdowns: the plain timer that expires f
 
 ## Tool calls: `messages`
 
-Restyles tool calls to share the pi-adhd look. Each call renders inline, headed by a status-colored pick glyph (`⛏`) and the tool name rewritten to PascalCase in the renderer's own style; the intermediate result bodies below pass through untouched. Toggle it with `/couralabs:toggle messages`.
+Restyles tool calls to share the pi-adhd look. Each call renders as a tree hanging from a status-colored pick glyph (`⛏`): the tool name is rewritten to PascalCase in the renderer's own style (a shell renderer's `$`/`PS>` prompt stands in for the name and is rewritten too), and a dim rule runs below the glyph down every content row, so the call header and its result body hang from the same stem. Blank pad rows at either edge of a block — box renderers' padding, a shell result's leading spacer — are trimmed away. Toggle it with `/couralabs:toggle messages`.
 
 ```
 ⛏ Read src/index.ts
+│ ...
 
 ⛏ Bash npm test
+│ ... (5 earlier lines, ctrl+o to expand)
+│ Took 1.2s
 ```
 
-The glyph follows the tool's lifecycle in the theme's semantic colors — `warning` while the call is mere paperwork (arguments still arriving), `accent` (the theme's info blue) while it runs, then `error` or `success` once the result settles. Where a header leads with its own emblem instead of the tool name — the shell prompt (`$`), a classification tag — only the icon is added. Toggling affects tool calls rendered after the change; already rendered rows keep their current look until the transcript is rebuilt (for example by resuming or reloading the session).
+The glyph follows the tool's lifecycle in the theme's semantic colors — `warning` while the call is mere paperwork (arguments still arriving), `accent` (the theme's info blue) while it runs, then `error` or `success` once the result settles. Where a header leads with something else entirely — a classification tag — only the icon is added. Toggling affects tool calls rendered after the change; already rendered rows keep their current look until the transcript is rebuilt (for example by resuming or reloading the session).
 
 ## Clarifying questions: `ask-user`
 
@@ -485,7 +488,7 @@ pi-adhd/
 │   │   │   ├── index.ts         # extension factory: git timers + event wiring
 │   │   │   ├── field-editor.ts  # the boxed prompt editor component
 │   │   │   ├── git.ts           # branch + `git diff --numstat` parser
-│   │   │   ├── status.ts        # working-status tracker: phase, run clock, streamed-char token estimate
+│   │   │   ├── status.ts        # working-status tracker: phase, run clock, token estimate, tft + streaming-time rate
 │   │   │   ├── loading.ts       # loading widget above the editor: spinner, tokens, live tok/s
 │   │   │   └── spinner.ts       # loading-widget animation frames
 │   │   ├── footer/
@@ -494,7 +497,7 @@ pi-adhd/
 │   │   ├── messages/
 │   │   │   ├── index.ts         # extension factory: renderer wiring
 │   │   │   ├── renderers.ts     # status detection + color mapping + wrapping
-│   │   │   └── tool-frame.ts    # inline frame: pick glyph + PascalCase name
+│   │   │   └── tool-frame.ts    # inline frame: pick glyph + PascalCase name + dim rule
 │   │   └── thinking/
 │   │       ├── index.ts         # extension factory: component patch + event wiring
 │   │       ├── config.ts        # thinking config backed by couralabs/settings.json
