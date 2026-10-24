@@ -7,11 +7,11 @@
  * current LLM return, the live output-token estimate (streamed characters ÷ 4,
  * see `./status.ts`), and the live rate — tokens over streaming time only, so
  * the request round trip and the first-token wait never dilute it:
- * `🞘 Reading for 12s → ↓ 3400 → ⭍ 214.2 tok/s (esc)`.
+ * `🞘 Reading for 12s ∙ ↓ 3400 ∙ ⭍ 214.2 tok/s (esc)`.
  *
  * When the run settles the widget does not vanish (as pi's working row would) —
  * it keeps the last turn's clock and output tokens on screen while the next
- * prompt is typed: `✓ Finished in 45s → ↓ 12300 → ⭍ 275.4 tok/s`. The next run
+ * prompt is typed: `✓ Finished in 45s ∙ ↓ 12300 ∙ ⭍ 275.4 tok/s`. The next run
  * overwrites the summary the moment its tracker exists.
  *
  * Statelessness by construction: every render reads the tracker and the
@@ -24,8 +24,7 @@
 import type { Theme, ThemeColor } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth } from "@earendil-works/pi-tui";
 import { padWidgetLines } from "../../../shared/format.ts";
-import { RATE_GLYPH, TURN_DONE } from "../../../shared/glyphs.ts";
-import { agentModeBorderColor, getAgentMode } from "../../../shared/modes.ts";
+import { RATE_GLYPH, SEPARATOR, TURN_DONE } from "../../../shared/glyphs.ts";
 import type { WorkingTone } from "./status.ts";
 import { SPINNER_FRAMES, SPINNER_INTERVAL_MS } from "./spinner.ts";
 
@@ -50,15 +49,14 @@ export interface LoadingWidgetSources {
 /** Hint appended to the running line. */
 const ESCAPE_HINT = "(esc)";
 
-/** Separator between the loading line's segments. */
-const SEGMENT_ARROW = " → ";
+
 
 /**
- * Phase tone → semantic color token: `warning` while waiting on the model's
- * round trip, `accent` while a tool executes, `success` while output streams.
+ * Phase tone → semantic color token: `accent` while the model's round trip
+ * waits or a tool executes, `success` while output streams.
  */
 const TONE_TOKEN: Record<WorkingTone, ThemeColor> = {
-	prompting: "warning",
+	prompting: "accent",
 	tooling: "accent",
 	streaming: "success",
 };
@@ -98,12 +96,12 @@ export class LoadingWidget {
 		return SPINNER_FRAMES[this.frameIndex];
 	}
 
-	/** `🞘 Answering <muted>for</> 12s → ↓ 3400 → ⭍ 214.2 tok/s (esc)` — the spinner
-	 *  rides the mode border, the label rides its phase's semantic color, "for"
-	 *  rides muted, and the arrow joins the segments dim. */
+	/** `🞘 Answering <muted>for</> 12s ∙ ↓ 3400 ∙ ⭍ 214.2 tok/s (esc)` — the spinner
+	 *  rides the default foreground, the label rides its phase's semantic color,
+	 *  "for" rides muted, and the separator joins the segments dim. */
 	private runningLine({ label, tone, elapsed, tokens, tps }: LoadingFigures & { label: string; tone: WorkingTone }): string {
 		const theme = this.theme;
-		const spinner = theme.fg(agentModeBorderColor(getAgentMode()), this.spinnerFrame());
+		const spinner = this.spinnerFrame();
 		const parts = [
 			`${spinner} ${theme.fg(TONE_TOKEN[tone], label)}${theme.fg("muted", " for ")}${theme.fg("text", elapsed)}`,
 		];
@@ -111,22 +109,22 @@ export class LoadingWidget {
 		if (tps !== undefined) {
 			parts.push(`${theme.fg("warning", RATE_GLYPH)}${theme.fg("dim", ` ${tps.toFixed(1)} tok/s`)}`);
 		}
-		return `${parts.join(theme.fg("dim", SEGMENT_ARROW))}${theme.fg("muted", ` ${ESCAPE_HINT}`)}`;
+		return `${parts.join(theme.fg("dim", SEPARATOR))}${theme.fg("muted", ` ${ESCAPE_HINT}`)}`;
 	}
 
-	/** `✓ Finished <muted>in</> 45s → ↓ 12300 → ⭍ 275.4 tok/s` — the last turn's figures,
+	/** `✓ Finished <muted>in</> 45s ∙ ↓ 12300 ∙ ⭍ 275.4 tok/s` — the last turn's figures,
 	 *  kept on screen. */
 	private settledLine(): string | undefined {
 		const settled = this.sources.settled();
 		if (!settled) return undefined;
 		const theme = this.theme;
 		const parts = [
-			`${theme.fg("borderAccent", `${TURN_DONE} Finished`)}${theme.fg("muted", " in ")}${theme.fg("text", settled.elapsed)}`,
+			`${theme.fg("success", `${TURN_DONE} Finished`)}${theme.fg("muted", " in ")}${theme.fg("text", settled.elapsed)}`,
 		];
 		parts.push(`${theme.fg("text", "↓")} ${theme.fg("muted", settled.tokens)}`);
 		if (settled.tps !== undefined) {
 			parts.push(`${theme.fg("warning", RATE_GLYPH)}${theme.fg("dim", ` ${settled.tps.toFixed(1)} tok/s`)}`);
 		}
-		return parts.join(theme.fg("dim", SEGMENT_ARROW));
+		return parts.join(theme.fg("dim", SEPARATOR));
 	}
 }

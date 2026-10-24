@@ -5,7 +5,7 @@
  */
 
 import { getLanguageFromPath, highlightCode, type Theme, type ThemeColor, type ToolRenderers } from "@earendil-works/pi-coding-agent";
-import { type Color } from "@earendil-works/pi-tui";
+import { mixColors, type Color } from "@earendil-works/pi-tui";
 import { stripStyling } from "../../../shared/format.ts";
 import { ToolFrame, pascalCase } from "./tool-frame.ts";
 
@@ -127,8 +127,16 @@ function restyleDiffRow(row: string, lang: string, theme: Theme): string {
 	const gutter = match?.[1] ?? "";
 	const content = match ? match[2].slice(1) : "";
 	if (match && content.trim() !== "") {
-		const color = gutter.startsWith("+") ? "toolDiffAdded" : gutter.startsWith("-") ? "toolDiffRemoved" : "toolDiffContext";
-		styled = `${theme.fg(color, `${gutter} `)}${highlightCode(content, lang)[0] ?? content}`;
+		const sign = gutter.startsWith("+") ? "toolDiffAdded" : gutter.startsWith("-") ? "toolDiffRemoved" : undefined;
+		if (sign) {
+			// Terminals have no alpha: the wash blends the row's own diff color
+			// toward the theme's panel background, reading as a transparent tint
+			// over the transcript.
+			const wash = mixColors(theme.colors["toolPendingBg"], theme.colors[sign], 0.2);
+			styled = `${theme.style(theme.fg(sign, `${gutter} `), { bg: wash })}${theme.style(highlightCode(content, lang)[0] ?? content, { bg: wash })}`;
+		} else {
+			styled = `${theme.fg("toolDiffContext", `${gutter} `)}${highlightCode(content, lang)[0] ?? content}`;
+		}
 	}
 	if (diffRowCache.size >= 800) diffRowCache.clear();
 	diffRowCache.set(row, styled);
