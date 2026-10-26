@@ -18,7 +18,7 @@ import {
 	THINKING_LEVELS,
 	TIMER_GLYPH,
 } from "../../../shared/glyphs.ts";
-import { AGENT_MODE_LABEL, agentModeColor, type AgentMode } from "../../../shared/modes.ts";
+import { agentModeColor, agentModeLabel, type AgentMode } from "../../../shared/modes.ts";
 import { SUBMODE_LABEL, submodeColor, type Submode } from "../../../shared/submodes.ts";
 import { earliestTimer, formatCountdown, remainingMs, type ActiveTimer } from "../../../shared/timers.ts";
 import { usageCost, usageGroup, type UsageTotals } from "../../../shared/usage.ts";
@@ -147,7 +147,7 @@ export function renderFooter(state: FooterState, width: number, theme: Theme): s
 			? theme.fg(submodeColor(state.submode), SUBMODE_LABEL[state.submode])
 			: undefined;
 	if (state.mode) {
-		const modeLabel = theme.fg(agentModeColor(state.mode), AGENT_MODE_LABEL[state.mode]);
+		const modeLabel = theme.fg(agentModeColor(state.mode), agentModeLabel(state.mode));
 		parts.push(submodeLabel ? `${modeLabel}${theme.fg("dim", `${SEPARATOR}`)}${submodeLabel}` : modeLabel);
 	} else if (submodeLabel) {
 		parts.push(submodeLabel);

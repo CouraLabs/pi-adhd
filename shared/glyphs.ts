@@ -56,6 +56,8 @@ export const OUTPUT = "↓";
 export const MODE_PI = "π";
 /** Work agent-mode glyph. */
 export const MODE_WORK = "⦵";
+/** Glyph for user-defined agent modes (any `~/.pi/couralabs/prompts/modes/<name>.md`). */
+export const MODE_CUSTOM = "◈";
 /** Plan submode glyph. */
 export const SUBMODE_PLAN = "⚼";
 /** Grill submode glyph. */
