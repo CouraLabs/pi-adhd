@@ -35,7 +35,7 @@ Fourteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`
 
 | Job | Extension | What it adds |
 |---|---|---|
-| Shape the reply | `modes` | `/mode [pi\|work]`: swaps the system prompt, footer label, and editor border |
+| Shape the reply | `modes` | `/mode`: cycles modes alphabetically, `/mode <name>` picks one; swaps the system prompt, footer label, and editor border |
 | Shape the reply | `submodes` | `/plan` `/grill` `/straight`: read-only or guided working modes layered on top of the main mode |
 | Run your workflows | `commands` | `/cmd:<name>`: saved prompts from `.agents/commands` and `.claude/commands` |
 | See progress | `footer` | One-line themed status bar: countdowns, mode, model, thinking, context, usage, cost |
@@ -54,7 +54,7 @@ Fourteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`
 
 | Command | Does |
 |---|---|
-| `/mode [pi\|work]` | Switch the system prompt and agent voice |
+| `/mode [name]` | Switch the system prompt and agent voice; bare `/mode` cycles alphabetically |
 | `/submode [plan\|grill\|straight\|none]` | Enter or leave a submode |
 | `/plan` `/grill` `/straight` | Toggle one submode |
 | `/couralabs:toggle [name]` | Open a list to toggle extensions and feature toggles, or flip one by name |
@@ -74,10 +74,11 @@ Fourteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`
 
 ## The output contract: `modes`
 
-Two agent modes, switched with `/mode [pi|work]`:
+One built-in mode plus any number of user modes, all switched with `/mode`:
 
 - **⦵ Work** (default) replaces pi's default system prompt with the pi-adhd [Work rules](extensions/agent/modes/prompts/work.md). The rules are the ADHD contract: lead with the next action, number multi-step tasks, restate state every turn, cap lists, no preamble or closers. Work mode also makes the agent an orchestrator — delegate to `spawn` to keep the parent context small, use `ask` before inferring anything unknown.
 - **π Pi** leaves pi's default system prompt (or a user `SYSTEM.md`) untouched.
+- **◈ Any user mode** — every `<name>.md` in `~/.pi/couralabs/prompts/modes/` is a mode that replaces pi's default system prompt with the file's content. Bare `/mode` cycles through all of them (pi included) in alphabetical order; `/mode <name>` switches directly and an unknown name reports the available ones.
 
 The replacement uses pi's `customPrompt` slot, the same mechanism as `SYSTEM.md`, so tool declarations still reach the model while the default preamble is swapped. The active mode shows first in the footer (`π Pi` in the accent color, `⦵ Work` in the default foreground), the prompt field recolors its border (accent for Pi, default border for Work), and the choice is recorded in the session and restored when that session is resumed. Modes are session-scoped: two pi instances (or two sessions in one process) each carry their own mode, and switching in one never changes another.
 
@@ -179,7 +180,7 @@ When the run settles, the widget does not vanish with pi's working row: it keeps
 
 — until the next run overwrites the summary. The empty prompt field shows a status-adaptive placeholder — `What are we going to build today?` while idle, `Press Alt+Enter to Queue or Enter to steer new request...` (the live queue keybinding) while the agent runs. Toggle the whole prompt field with `/couralabs:toggle editor`.
 
-The box border color follows the active agent mode (see [`modes`](#the-output-contract-modes)): the theme's `border` token in Work, the `accent` token in Pi, instead of tracking the thinking level. The bottom-border location segment shows the working directory followed by the git branch and the added/removed line counts from `git diff --numstat` (`+n` in success green, `-n` in error red). By default only the last folder of the working directory is shown; `/full-cwd` toggles the full path on and off (`/full-cwd on` / `/full-cwd off`), keeping the home directory itself rendered as `~` either way. Toggle the whole prompt field with `/couralabs:toggle editor`.
+The box border color follows the active agent mode (see [`modes`](#the-output-contract-modes)): the theme's `border` token in Work, the `accent` token in Pi, and the `borderAccent` token in user modes, instead of tracking the thinking level. The bottom-border location segment shows the working directory followed by the git branch and the added/removed line counts from `git diff --numstat` (`+n` in success green, `-n` in error red). By default only the last folder of the working directory is shown; `/full-cwd` toggles the full path on and off (`/full-cwd on` / `/full-cwd off`), keeping the home directory itself rendered as `~` either way. Toggle the whole prompt field with `/couralabs:toggle editor`.
 
 ## Status bar: `footer`
 

@@ -1,16 +1,20 @@
 /**
- * modes — two agent modes for pi: Work (default) and Pi.
+ * modes — pi's built-in mode plus user-defined agent modes.
  *
- *   - Work replaces pi's default system prompt with the pi-adhd Work rules
- *     (see `prompts/work.md`), turning the agent into an orchestrator that
- *     delegates to spawned agents.
  *   - Pi leaves pi's default system prompt untouched.
+ *   - Every other mode is a `<name>.md` file in
+ *     `~/.pi/couralabs/prompts/modes/`; activating it replaces pi's default
+ *     system prompt with that file's content. The packaged Work rules are
+ *     offloaded there as `work.md`, so Work is an ordinary user mode.
  *
- * Switch modes with `/mode [pi|work]`. The footer shows the active mode and the
- * prompt field recolors its border. The mode is session-scoped: every switch is
- * snapshotted into a `mode-state` session entry and restored from the current
- * branch on session start, so two pi instances (or two sessions in one process)
- * never share a mode and a value cannot leak through the shared settings file.
+ * `/mode` cycles through all modes in alphabetical order (pi sorts in with
+ * the file names), `/mode <name>` switches to a named mode, and an unknown
+ * name reports the available ones. The footer shows the active mode and the
+ * prompt field recolors its border. The mode is session-scoped: every switch
+ * is snapshotted into a `mode-state` session entry and restored from the
+ * current branch on session start, so two pi instances (or two sessions in
+ * one process) never share a mode and a value cannot leak through the shared
+ * settings file.
  */
 
 import { readFileSync } from "node:fs";
@@ -20,12 +24,16 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { isChildSession } from "../../../shared/child-sessions.ts";
 import { isGoalActive, switchBlockedByGoalMessage } from "../../../shared/interlock.ts";
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
-import { offloadPrompt, readUserPrompt } from "../../../shared/user-prompts.ts";
+import { offloadPrompt } from "../../../shared/user-prompts.ts";
 import {
 	DEFAULT_AGENT_MODE,
-	MODE_NOTICE,
+	PI_MODE,
 	MODE_STATE_ENTRY_TYPE,
 	getAgentMode,
+	listAgentModes,
+	modeNotice,
+	nextAgentMode,
+	readModePrompt,
 	restoreModeFromEntries,
 	setAgentMode,
 	type AgentMode,
@@ -65,7 +73,9 @@ export default function (pi: ExtensionAPI) {
 	 *  default. Called on session start and tree navigation. */
 	const restoreMode = (ctx: ExtensionContext): void => {
 		const restored = restoreModeFromEntries(ctx.sessionManager.getBranch());
-		setAgentMode(restored ?? DEFAULT_AGENT_MODE);
+		// A snapshot can name a mode whose file has since been deleted; it then
+		// falls back to the default rather than activating a promptless mode.
+		setAgentMode(restored !== undefined && listAgentModes().includes(restored) ? restored : DEFAULT_AGENT_MODE);
 	};
 
 	pi.on("session_start", (_event, ctx) => {
@@ -80,29 +90,36 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	// Work mode swaps in the pi-adhd Work rules; Pi mode leaves the default
-	// prompt (or a user SYSTEM.md) in place. `customPrompt` replaces pi's
-	// default system prompt, matching how SYSTEM.md is applied. Read fresh each
-	// run so edits to the user prompt file apply without a reload.
+	// prompt (or a user SYSTEM.md) in place, as does a user mode whose file
+	// vanished mid-session. `customPrompt` replaces pi's default system prompt,
+	// matching how SYSTEM.md is applied. Read fresh each run so edits to the
+	// mode file apply without a reload.
 	pi.on("before_agent_start", (event) => {
 		if (childSession) return;
-		if (getAgentMode() === "work") {
-			event.systemPromptOptions.customPrompt = readUserPrompt("modes", "work.md", packagedWorkPrompt);
-		}
+		const mode = getAgentMode();
+		if (mode === PI_MODE) return;
+		const prompt = readModePrompt(mode);
+		if (prompt !== undefined) event.systemPromptOptions.customPrompt = prompt;
 	});
 
 	pi.registerCommand("mode", {
-		description: "Switch agent mode (usage: /mode [pi|work])",
+		description: "Switch agent mode (/mode cycles, /mode <name> selects)",
 		handler: async (args, ctx) => {
-			const arg = args.trim().toLowerCase();
-			const previous = getAgentMode();
+			const arg = args.trim();
+			const modes = listAgentModes();
+			const current = getAgentMode();
 			let next: AgentMode;
-			if (arg === "pi" || arg === "work") {
-				next = arg;
-			} else if (arg === "") {
-				next = getAgentMode() === "work" ? "pi" : "work";
+			if (arg === "") {
+				// Cycle to the next mode in alphabetical order, wrapping around; an
+				// unknown current mode falls back to the first entry.
+				next = nextAgentMode(current, modes);
 			} else {
-				ctx.ui.notify("Usage: /mode [pi|work]", "warning");
-				return;
+				const match = modes.find((mode) => mode.toLowerCase() === arg.toLowerCase());
+				if (match === undefined) {
+					ctx.ui.notify(`Unknown mode '${arg}'. Available: ${modes.join(", ")}`, "warning");
+					return;
+				}
+				next = match;
 			}
 			if (!applyMode(next)) {
 				ctx.ui.notify(switchBlockedByGoalMessage(), "warning");
@@ -111,8 +128,8 @@ export default function (pi: ExtensionAPI) {
 			// A restore on session_start is not a change, and a no-op switch (the
 			// requested mode is already active) changes nothing — only announce an
 			// actual transition.
-			if (getAgentMode() === previous) return;
-			ctx.ui.notify(MODE_NOTICE[next], "info");
+			if (getAgentMode() === current) return;
+			ctx.ui.notify(modeNotice(next), "info");
 		},
 	});
 }
