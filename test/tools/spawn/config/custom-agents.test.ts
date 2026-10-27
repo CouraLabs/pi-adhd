@@ -149,6 +149,23 @@ describe("loadAgentDefinitions", () => {
 		expect(load().get("disabled")).toMatchObject({ enabled: false });
 	});
 
+	it("prefers display_name over name and falls back to name only", () => {
+		writeProjectAgent("named-a", "name: Pretty A\ndisplay_name: Shiny A\n");
+		writeProjectAgent("named-b", "name: Pretty B\n");
+		writeProjectAgent("named-c", "display_name: Shiny C\n");
+
+		const agents = load();
+		expect(agents.get("named-a")?.displayName).toBe("Shiny A");
+		expect(agents.get("named-b")?.displayName).toBe("Pretty B");
+		expect(agents.get("named-c")?.displayName).toBe("Shiny C");
+	});
+
+	it("leaves displayName undefined when neither display_name nor name is set", () => {
+		writeProjectAgent("plain-name", "");
+
+		expect(load().get("plain-name")?.displayName).toBeUndefined();
+	});
+
 	it("falls back the description to the filename", () => {
 		writeProjectAgent("no-description", "");
 

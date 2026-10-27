@@ -48,7 +48,7 @@ function loadFromDir(dir: string, agents: Map<string, AgentConfig>, source: "pro
 
 		agents.set(name, {
 			name,
-			displayName: str(fm.display_name),
+			displayName: str(fm.display_name) ?? str(fm.name),
 			description: str(fm.description) ?? name,
 			...toolSelection(fm.tools, filePath),
 			model: str(fm.model),

@@ -257,6 +257,7 @@ You are an expert code reviewer specializing in modern software development...
 |---|---|
 | `description` | When to pick the agent, shown in the spawn tool's catalogue (falls back to the filename) |
 | `display_name` | Human-readable name used by the UI |
+| `name` | Human-readable name used by the UI; lower priority than `display_name` |
 | `tools` | Which tools the agent gets — see below |
 | `model` | `inherit` (the parent session's model — also the fallback when the field is omitted), `default` (Pi's configured default model; an explicit error when that model is unavailable), or a concrete model (`provider/model-id` or a fuzzy name like `haiku`) |
 | `thinking` | Thinking level for the agent's model |
