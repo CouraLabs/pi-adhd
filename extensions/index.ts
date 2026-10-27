@@ -10,7 +10,7 @@
  * reloads the set.
  *
  * Load order is deliberate and matches the previous manifest glob order:
- *   ui → agent → tools
+ *   ui → agent → tools → providers
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -22,18 +22,21 @@ import editor from "./ui/editor/index.ts";
 import footer from "./ui/footer/index.ts";
 import messages from "./ui/messages/index.ts";
 import thinking from "./ui/thinking/index.ts";
+import sessionTitle from "./ui/session-title/index.ts";
 
 import commands from "./agent/commands/index.ts";
 import modes from "./agent/modes/index.ts";
 import submodes from "./agent/submodes/index.ts";
 
 import askUser from "./tools/ask-user/index.ts";
-import goal from "./tools/goal/index.ts";
 import job from "./tools/job/index.ts";
 import pomodoro from "./tools/pomodoro/index.ts";
 import spawn from "./tools/spawn/index.ts";
 import timer from "./tools/timer/index.ts";
 import web from "./tools/web/index.ts";
+
+import { withClaudeCommandRedirects } from "./providers/claude/commands.ts";
+import claude from "./providers/claude/index.ts";
 
 export default function piAdhd(pi: ExtensionAPI): void {
 	// Reflect the settings the operator just saved, not a previous load's marks.
@@ -50,18 +53,22 @@ export default function piAdhd(pi: ExtensionAPI): void {
 	if (enabled.has("footer")) footer(pi);
 	if (enabled.has("messages")) messages(pi);
 	if (enabled.has("thinking")) thinking(pi);
+if (enabled.has("session-title")) sessionTitle(pi);
 
 	// Agent behavior: Pi/Work mode + Plan/Grill/Straight submodes + prompt commands.
 	if (enabled.has("modes")) modes(pi);
 	if (enabled.has("submodes")) submodes(pi);
 	if (enabled.has("commands")) commands(pi);
 
-	// Tools: ask, goal, job, pomodoro, spawn, timer, web.
+	// Tools: ask, job, pomodoro, spawn, timer, web.
 	if (enabled.has("ask-user")) askUser(pi);
-	if (enabled.has("goal")) goal(pi);
-	if (enabled.has("job")) job(pi);
+	const toolsApi = enabled.has("claude") ? withClaudeCommandRedirects(pi) : pi;
+	if (enabled.has("job")) job(toolsApi);
 	if (enabled.has("pomodoro")) pomodoro(pi);
-	if (enabled.has("spawn")) spawn(pi);
+	if (enabled.has("spawn")) spawn(toolsApi);
 	if (enabled.has("timer")) timer(pi);
 	if (enabled.has("web")) web(pi);
+
+	// Providers: Claude Agent SDK.
+	if (enabled.has("claude")) claude(pi);
 }

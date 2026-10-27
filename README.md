@@ -31,7 +31,7 @@ About 2 minutes.
 
 ## What you get
 
-Fourteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`, which opens a list where Enter flips the highlighted extension; the same list carries the feature toggles (settings-backed options such as Loading Phrases).
+Fifteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`, which opens a list where Enter flips the highlighted extension; the same list carries the feature toggles (settings-backed options such as Loading Phrases).
 
 | Job | Extension | What it adds |
 |---|---|---|
@@ -40,7 +40,6 @@ Fourteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`
 | Run your workflows | `commands` | `/cmd:<name>`: saved prompts from `.agents/commands` and `.claude/commands` |
 | See progress | `footer` | One-line themed status bar: countdowns, mode, model, thinking, context, usage, cost |
 | See progress | `thinking` | Compact animated reasoning preview |
-| Drive the loop | `goal` | Persistent autonomous objective with budgets and continuation turns |
 | Drive the loop | `spawn` | In-process subagents that run foreground and return inline |
 | Run in background | `job` | `job` / `job-kill` / `job-read` / `job-list`: background shell commands kept in memory |
 | Pace yourself | `timer` | `/timer 25m`: multiple named countdowns, shown live in the footer |
@@ -49,6 +48,8 @@ Fourteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`
 | Input & output | `editor` | Closed prompt box with `❯` marker and cwd + git location |
 | Input & output | `messages` | Left status rule on tool calls |
 | Reach the web | `web` | `webfetch` / `websearch`: provider-neutral fetch and search |
+| Use Claude | `claude` | `claude/*` models backed by the Claude Agent SDK, with a forced Claude mode and pi-rendered SDK tools |
+| Name sessions | `session-title` | Names each session from its last user prompt; `/couralabs:session-title` picks the model |
 
 ## Quick reference: every command
 
@@ -58,8 +59,8 @@ Fourteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`
 | `/submode [plan\|grill\|straight\|none]` | Enter or leave a submode |
 | `/plan` `/grill` `/straight` | Toggle one submode |
 | `/couralabs:toggle [name]` | Open a list to toggle extensions and feature toggles, or flip one by name |
+| `/couralabs:session-title` | Show session-title state and pick the model that names sessions |
 | `/full-cwd [on\|off]` | Show the full working directory or only its last folder |
-| `/goal` `/guided-goal` | Toggle goal mode; have the agent interview you first |
 | `/spawn:settings` `/spawn:sessions` `/spawn:model` | Tune limits, open a transcript, set agent defaults |
 | `/web` | Pick web fetch and search providers |
 | `/job <name> <command...>` | Start a background job |
@@ -163,7 +164,7 @@ Running `/cmd:promote` sends the body (frontmatter stripped) to the conversation
 Wraps the prompt editor in a closed field drawn with terminal box characters (`╭ ╮ ╰ ╯ │ ─`), inset by a one-column margin on each side, with a `❯` marker on the first input line; the working directory and git state are embedded in the bottom border, and the box recolors with the agent mode. The spinner animation (`🞗` → `🞘` → `🞙` → `🞚` → `🞛` → `🞜` → `🞛` → `🞚` → `🞙` → `🞘`, 100ms) no longer sits in the border, and pi's built-in working row is hidden: while the agent runs, a loading widget floats above the field as a persistent widget slot,
 
 ```
-🞘 Reading for 12s ∙ ↓ 3400 ∙ ⭍ 214.2 tok/s (esc)
+🞘 Reading for 12s ∙ ↓ 3400 ∙ ⭍ 214.2 tok/s ∙ Fix login redirect (esc)
 
  ╭──────────────────────────────────────────────────────╮
  │ ❯ explain this codebase                              │
@@ -175,7 +176,7 @@ naming what is executing — `Prompting` on the round-trip before the first stre
 When the run settles, the widget does not vanish with pi's working row: it keeps the last turn's clock and output tokens on screen while the next prompt is typed —
 
 ```
-✓ Finished in 45s ∙ ↓ 12300 ∙ ⭍ 275.4 tok/s
+✓ Finished in 45s ∙ ↓ 12300 ∙ ⭍ 275.4 tok/s ∙ Fix login redirect
 ```
 
 — until the next run overwrites the summary. The empty prompt field shows a status-adaptive placeholder — `What are we going to build today?` while idle, `Press Alt+Enter to Queue or Enter to steer new request...` (the live queue keybinding) while the agent runs. Toggle the whole prompt field with `/couralabs:toggle editor`.
@@ -188,10 +189,9 @@ Replaces the built-in footer with a compact, theme-aware status bar. Toggle it w
 
 ```
   ⏱ 1h20m30s ∙ 🍅 Work 1/4 12m30s ∙ ⦵ Work ∙ ⧉Plan ∙ anthropic/claude-sonnet-4 ∙ ▶▶ high ∙ ⛁ ███▒░ 124k/200k (62%) ∙ ↑ 120k ∙ ↓ 8.4k ∙ ⮏ 87% ∙ $0.842
-  🎯 Goal 1.2M/2M · 4/10 tasks
 ```
 
-The stats line leads with any running countdowns: the plain timer that expires first (`⏱ 1h20m30s`) and the current pomodoro phase (`🍅 Work 1/4 12m30s`, or `☕ Break 4m`), each ticking down live. They are drawn before the active agent mode (see [`modes`](#the-output-contract-modes)) and, when one is active, the submode (see [`submodes`](#working-modes-submodes)), which precede the current provider/model, thinking level (colored along pi's thinking-level gradient), the context-window gauge, and cumulative input/output/cache/price usage. Statuses published by other extensions via `ctx.ui.setStatus()` (such as the `goal` loop) render on a separate line below. Extensions can also register a section that the footer draws last, below the statuses. Everything adapts to the active theme and degrades gracefully on narrow terminals.
+The stats line leads with any running countdowns: the plain timer that expires first (`⏱ 1h20m30s`) and the current pomodoro phase (`🍅 Work 1/4 12m30s`, or `☕ Break 4m`), each ticking down live. They are drawn before the active agent mode (see [`modes`](#the-output-contract-modes)) and, when one is active, the submode (see [`submodes`](#working-modes-submodes)), which precede the current provider/model, thinking level (colored along pi's thinking-level gradient), the context-window gauge, and cumulative input/output/cache/price usage. Statuses published by other extensions via `ctx.ui.setStatus()` render on a separate line below. Extensions can also register a section that the footer draws last, below the statuses. Everything adapts to the active theme and degrades gracefully on narrow terminals.
 
 ## Tool calls: `messages`
 
@@ -210,14 +210,6 @@ The glyph follows the tool's lifecycle in the theme's semantic colors — `warni
 ## Clarifying questions: `ask-user`
 
 Adds the `ask` tool: the model can surface clarifying questions with selectable options. Multi-question calls render as a tabbed dialog with a Submit review page; each option can carry a markdown/code preview, single-select uses radio markers and `multi` uses checkboxes, and an inline `Other` field provides free-form input. An inactivity countdown (`timeoutSeconds`) auto-picks the recommended option, and cancelling aborts the turn. Print/JSON hosts cannot prompt, so the tool is stripped from the active set there. Answers persist in the tool result `details`.
-
-## Autonomous loop: `goal`
-
-Persistent autonomous objective loop. The `goal` tool exposes `create`/`get`/`complete`/`impossible`/`resume`/`drop`; `/goal` toggles goal mode and `/guided-goal` has the agent interview you first. While a goal is active the runtime injects goal context on every request, accounts token and time budget (budget-limit steering once per goal), and schedules continuation turns until a verified `complete`. Interrupting pauses the goal rather than completing it. Emits `goal_updated` for other extensions and attaches live task progress when a pi-todo-protocol emitter is loaded. Progress shows in the footer via `ctx.ui.setStatus("goal", …)`.
-
-### Interlocks
-
-Goal mode and the submodes are mutually exclusive. A goal refuses to arm while Plan, Grill, or Straight is active — `/goal`, `/guided-goal`, and the `goal` tool all refuse — and while a goal is armed `/mode`, `/submode`, `/plan`, `/grill`, and `/straight` all refuse to switch, showing the reason as a warning. A goal saved in the session is left unarmed rather than dropped when the interlock blocks a restore; after the submode exits, `/goal resume` arms it.
 
 ## Reasoning preview: `thinking`
 
@@ -338,6 +330,28 @@ Each row cycles through presets with Enter/Space; the last row starts the sessio
 
 Every phase is a normal countdown in the same registry as `/timer`, so the footer shows it exactly the same way (`🍅 Work 1/4 12m30s`, `☕ Break 4m`). When a work phase ends the next break is scheduled automatically — a short break between rounds and a long break after the last one — and the session ends when the long break completes. Each boundary rings the bell and pushes an OS notification (`Work 1/4 finished — break time.`). `/pomodoro stop` cancels early; the pending phase is also cancelled on `session_shutdown`. The pomodoro shares the `timer.osNotification` switch.
 
+## Claude provider: `claude`
+
+Registers a `claude` provider with `claude-opus-5-5`, `claude-sonnet-5-5`, and `claude-haiku-5-5` (200k context), plus a 1M-context variant of each with a `[1m]` suffix (e.g. `claude-sonnet-5-5[1m]`, listed as "Claude Sonnet 5.5 (1M)"). Pick one with `/model`. Subagent aliases (`sonnet`, `opus`, `haiku`) use the 200k models. The Claude Agent SDK runs the agent loop, system prompt, and tools; pi renders every tool call and keeps the transcript, so you can switch to a non-Claude model at any time.
+
+- **Claude mode.** Selecting a `claude/*` model forces the Claude mode and disables `/mode pi` and `/mode work`. Plan, Grill, and Straight submodes keep working, with tool names mapped to the SDK's (`read` is `Read`, `find` is `Glob`, and so on). Switching to another model restores the previous mode and pi's tools.
+- **Tool ownership.** SDK built-ins (`Read`, `Write`, `Edit`, `Bash`, `Grep`, `Glob`, `WebFetch`, `WebSearch`, `Agent`, `AskUserQuestion`, `TaskStop`, `Skill`) run in the SDK and show up as mirror tools in pi's renderers. `codemode`, `plan-write`, and `submode-exit` run in pi and are reached by the SDK as `mcp__pi__*`. `AskUserQuestion` uses the `ask` dialog.
+- **Redirected commands.** `/compact`, `/new`, `/model`, `/job*`, and `/spawn:*` act on the SDK session while a Claude model is active. SDK slash commands appear as pass-through pi commands.
+- **Subagents.** `.agents/agents/*.md` become SDK agent definitions.
+- **MCP servers can appear twice.** The SDK loads your `~/.claude` settings, CLAUDE.md, hooks, and MCP servers, while pi's MCP servers are reachable through `codemode`. The same server may be available both ways; this is allowed.
+
+**Authentication.** pi-adhd never handles Claude credentials: no `/login` entry, no reading of `~/.claude`, nothing written to `auth.json`. The bundled `claude` binary uses your own `ANTHROPIC_API_KEY` or your own `claude /login` session.
+
+**Publishing.** Personal use on your own plan is ordinary, individual usage. If you build a product on top of this for other people, Anthropic's terms for the Agent SDK point developers to API key authentication, so use an API key in that case. This is not legal advice; check Anthropic's current terms. Do not call the feature "Claude Code" or use Anthropic logos.
+
+## Session names: `session-title`
+
+When a run settles in a session that has no name yet, the extension asks a model for a short title generated from that run's user prompt and sets it as the session's display name — the name the session selector shows. A session is named once: a user-set name is never overwritten. Spawned child sessions are skipped. Every failure path falls back to the prompt's first line, so a naming failure never surfaces as an error.
+
+- **Model.** `/couralabs:session-title` reports the feature's state — enabled or disabled, and the model in force — then opens a picker over every auth-configured model. Picking a model stores it under `sessionTitle.model` (as `provider/id`) and enables the feature; "Session model (no override)" clears the override so the session's current model writes titles. Disabling is `/couralabs:toggle session-title`.
+- **Fallback.** With no override, the session's current model writes the title.
+- **Concurrency.** Runs are keyed per session, and a new run aborts a still-pending naming call, so a session is never named from a stale prompt.
+
 ## Configuration
 
 Every pi-adhd setting lives in a single JSON file:
@@ -359,12 +373,13 @@ It is organized as `{ feature: { option: value } }`, plus a top-level `extension
     "submodes",
     "commands",
     "ask-user",
-    "goal",
     "job",
     "pomodoro",
     "spawn",
     "timer",
-    "web"
+    "web",
+    "claude",
+    "session-title"
   ],
   "editor": { "fullCwd": false, "toolVerbs": { "grep": "Grepping" } },
   "thinking": {
@@ -383,6 +398,7 @@ It is organized as `{ feature: { option: value } }`, plus a top-level `extension
   },
   "timer": { "osNotification": true },
   "pomodoro": { "workMinutes": 25, "breakMinutes": 5, "longBreakMinutes": 15, "rounds": 4 },
+  "sessionTitle": { "enabled": true, "model": "anthropic/claude-haiku-5-5" },
   "web": {
     "fetch": { "provider": "auto", "nineRouterModel": "exa" },
     "search": { "provider": "auto", "nineRouterModel": "exa" }
@@ -415,8 +431,10 @@ It is organized as `{ feature: { option: value } }`, plus a top-level `extension
 | `web` | `fetch.nineRouterModel` | `"exa"` | Model the 9Router aggregator fetches with |
 | `web` | `search.provider` | `"auto"` | Default web search provider; `auto` tries every configured one in order |
 | `web` | `search.nineRouterModel` | `"exa"` | Model the 9Router aggregator searches with |
+| `sessionTitle` | `enabled` | `true` | Name each session from its last user prompt (toggle with `/couralabs:toggle session-title`) |
+| `sessionTitle` | `model` | unset | Model that writes the title, as `provider/id`; unset: the session's current model (set with `/couralabs:session-title`) |
 
-The `/couralabs:toggle` command opens an interactive list of every extension with its current state, followed by any feature toggles (settings-backed options that change a loaded extension's behavior without loading or unloading anything — currently none). Move with `↑↓` (or `j`/`k`) and press Enter to flip the highlighted row; `Esc` closes. Changes are persisted as you toggle and the extension set reloads once the list closes, so the choice survives reloads and new sessions. Passing a name — `/couralabs:toggle editor` — skips the list and flips that item directly, which is also the only form available when the session has no dialog UI. Missing keys fall back to the defaults and unknown keys are preserved, so the file can be edited by hand. `/spawn:settings` edits the operational `spawn` options (numeric values open an input prompt).
+The `/couralabs:toggle` command opens an interactive list of every extension with its current state, followed by the feature toggles — settings-backed options that change a loaded extension's behavior without loading or unloading anything (currently `session-title`). Move with `↑↓` (or `j`/`k`) and press Enter to flip the highlighted row; `Esc` closes. Changes are persisted as you toggle and the extension set reloads once the list closes, so the choice survives reloads and new sessions. Passing a name — `/couralabs:toggle editor` — skips the list and flips that item directly, which is also the only form available when the session has no dialog UI. Missing keys fall back to the defaults and unknown keys are preserved, so the file can be edited by hand. `/spawn:settings` edits the operational `spawn` options (numeric values open an input prompt).
 
 ```
 ── pi-adhd extensions ───────────────────── 11 on · 3 off ──
@@ -476,6 +494,7 @@ pi --use-theme synthwave84
 | Timer/pomodoro registry and footer feed | `shared/timers.ts` |
 | OS notification | `shared/os-notify.ts` |
 | Web providers | `extensions/tools/web/providers.ts`, `search-providers.ts` |
+| Title-generation prompt and fallback | `extensions/ui/session-title/generator.ts` |
 | Settings schema and defaults | `shared/settings.ts` |
 | Shared UI glyphs | `shared/glyphs.ts` |
 
@@ -484,7 +503,7 @@ pi --use-theme synthwave84
 ```text
 pi-adhd/
 ├── extensions/
-│   ├── index.ts             # barrel: loads every extension below (ui → agent → tools)
+│   ├── index.ts             # barrel: loads every extension below (ui → agent → tools → providers)
 │   ├── ui/                  # individually loadable UI extensions
 │   │   ├── editor/
 │   │   │   ├── index.ts         # extension factory: git timers + event wiring
@@ -500,13 +519,20 @@ pi-adhd/
 │   │   │   ├── index.ts         # extension factory: renderer wiring
 │   │   │   ├── renderers.ts     # status detection + color mapping + wrapping
 │   │   │   └── tool-frame.ts    # inline frame: pick glyph + PascalCase name + dim rule
-│   │   └── thinking/
+│   │   ├── thinking/
 │   │       ├── index.ts         # extension factory: component patch + event wiring
 │   │       ├── config.ts        # thinking config backed by couralabs/settings.json
 │   │       ├── durations.ts     # per-run duration persistence + restore
 │   │       ├── preview.ts       # reasoning-preview component + duration formatting
 │   │       ├── summaries.ts     # OpenAI reasoning-summary extraction
 │   │       └── types.ts
+│   │   └── session-title/
+│   │       ├── index.ts         # extension factory: prompt capture + naming + /couralabs:session-title
+│   │       ├── command.ts       # the `/couralabs:session-title` model picker
+│   │       ├── config.ts        # session-title config backed by couralabs/settings.json
+│   │       └── generator.ts     # title generation + prompt-first-line fallback
+│   ├── providers/
+│   │   └── claude/              # Claude Agent SDK provider: bridge, mirror tools, MCP server, renderers, commands
 │   ├── agent/               # individually loadable mode extensions
 │   │   ├── commands/
 │   │   │   └── index.ts         # extension factory: .agents/.claude prompt commands
@@ -528,18 +554,6 @@ pi-adhd/
 │       │   ├── overlay-box.ts
 │       │   ├── compat.ts
 │       │   └── types.ts
-│       ├── goal/
-│       │   ├── index.ts         # goal mode wiring + continuation loop
-│       │   ├── runtime.ts       # goal state machine + budget accounting
-│       │   ├── tool.ts          # the `goal` tool
-│       │   ├── commands.ts      # `/goal` + `/guided-goal`
-│       │   ├── evaluator.ts     # completion evaluator
-│       │   ├── restore.ts       # session-entry restore
-│       │   ├── todo-bridge.ts   # pi-todo-protocol integration (idle without an emitter)
-│       │   ├── template.ts      # prompt template renderer
-│       │   ├── state.ts
-│       │   ├── format.ts
-│       │   └── prompts/         # static .md prompt assets
 │       ├── job/
 │       │   ├── index.ts         # extension factory: manager + tools + commands
 │       │   ├── manager.ts       # in-memory job registry (spawn, capture, kill)
@@ -584,7 +598,7 @@ pi-adhd/
 │           └── search-builtin.ts   # built-in search providers
 ```
 
-Each extension is a directory whose `index.ts` exports the default factory. Helper modules sit beside it and are imported with explicit `.ts` extensions. Cross-extension helpers live in `shared/`. Extensions are grouped by kind — `extensions/ui/` (editor, footer, messages, thinking), `extensions/agent/` (modes, submodes), and `extensions/tools/` (ask-user, goal, job, pomodoro, spawn, timer, web) — and every `index.ts` is loadable on its own. The `pi.extensions` manifest in `package.json` points at `extensions/index.ts`, a barrel that reads the enabled set from `~/.pi/couralabs/settings.json` and calls only those factories (ui → agent → tools), so the package loads from a single entry and helper modules are never loaded as extensions on their own. `/couralabs:toggle` edits that settings array and reloads.
+Each extension is a directory whose `index.ts` exports the default factory. Helper modules sit beside it and are imported with explicit `.ts` extensions. Cross-extension helpers live in `shared/`. Extensions are grouped by kind — `extensions/ui/` (editor, footer, messages, thinking, session-title), `extensions/agent/` (modes, submodes), `extensions/tools/` (ask-user, job, pomodoro, spawn, timer, web), and `extensions/providers/` (claude) — and every `index.ts` is loadable on its own. The `pi.extensions` manifest in `package.json` points at `extensions/index.ts`, a barrel that reads the enabled set from `~/.pi/couralabs/settings.json` and calls only those factories (ui → agent → tools → providers), so the package loads from a single entry and helper modules are never loaded as extensions on their own. `/couralabs:toggle` edits that settings array and reloads.
 
 ### Loading extensions individually
 
@@ -592,8 +606,6 @@ Every extension can be loaded alone (`pi -e extensions/tools/web/index.ts`), and
 
 - The `footer` shows spawn cost only when the spawn service is published, and a submode label only when the submodes store is non-empty.
 - The `footer`'s countdown segment reads the shared timer registry, so it appears only when the `timer` or `pomodoro` extension is loaded; either one works with the footer absent.
-- `goal` reads `todo_updated` events and `todo-phases` entries from any loaded pi-todo-protocol emitter, and runs without task progress otherwise.
-- The `goal` ↔ submode interlock reads only the active session's live submode state (restored from the session branch), so a value left by another pi instance or an earlier install cannot block goal mode.
 - `submodes` filters its tool whitelist against the tools actually registered, so `spawn` and `ask` simply drop out when their extensions are absent.
 
 ## Add your own extension
@@ -622,6 +634,13 @@ The `pi` manifest in `package.json` loads `extensions/index.ts`, so add the fact
 - Host-provided packages (`@earendil-works/*`, `typebox`) are declared as `peerDependencies` only — never bundle or copy them into `dependencies`.
 - Runtime npm dependencies your extensions import go in `dependencies`; pi installs them when the package is installed.
 - `devDependencies` exist only for editor type-checking (`npx tsc --noEmit`).
+
+## License
+
+MIT — see [LICENSE](./LICENSE). `pi-adhd` also vendors MIT-licensed code:
+
+- `spawn` is vendored from [`@gotgenes/pi-subagents`](https://github.com/gotgenes/pi-packages/tree/main/packages/pi-subagents) (MIT) and restructured to the pi-adhd layout.
+- `thinking` is a vendored, pi-adhd-adapted port of [`pi-compact-thinking`](https://github.com/nostalfinals/pi-compact-thinking) (MIT).
 
 ## Based and/or inspired by
 

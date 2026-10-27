@@ -7,14 +7,13 @@
  *     system prompt with that file's content. The packaged Work rules are
  *     offloaded there as `work.md`, so Work is an ordinary user mode.
  *
+ * A Claude provider model forces the reserved automatic Claude mode (`/mode`
+ * is refused while it is active); changing back to another model restores the
+ * previous mode.
+ *
  * `/mode` cycles through all modes in alphabetical order (pi sorts in with
  * the file names), `/mode <name>` switches to a named mode, and an unknown
  * name reports the available ones. The footer shows the active mode and the
- * prompt field recolors its border. The mode is session-scoped: every switch
- * is snapshotted into a `mode-state` session entry and restored from the
- * current branch on session start, so two pi instances (or two sessions in
- * one process) never share a mode and a value cannot leak through the shared
- * settings file.
  */
 
 import { readFileSync } from "node:fs";
@@ -22,21 +21,23 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { isChildSession } from "../../../shared/child-sessions.ts";
-import { isGoalActive, switchBlockedByGoalMessage } from "../../../shared/interlock.ts";
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import { offloadPrompt } from "../../../shared/user-prompts.ts";
 import {
+	CLAUDE_MODE,
 	DEFAULT_AGENT_MODE,
 	PI_MODE,
 	MODE_STATE_ENTRY_TYPE,
 	getAgentMode,
+	isClaudeProvider,
 	listAgentModes,
 	modeNotice,
 	nextAgentMode,
 	readModePrompt,
-	restoreModeFromEntries,
+	restoreModeSnapshotFromEntries,
 	setAgentMode,
 	type AgentMode,
+	type SelectableAgentMode,
 } from "../../../shared/modes.ts";
 
 // Prompt lives in a static .md asset next to this module (published with the
@@ -60,22 +61,34 @@ export default function (pi: ExtensionAPI) {
 	 *  inert so it never publishes the parent's mode or overrides its own
 	 *  prompt with the parent's. */
 	let childSession = false;
-	/** Set the mode and snapshot it into the session. Returns false when goal
-	 *  mode blocks the switch. */
-	const applyMode = (mode: AgentMode): boolean => {
-		if (isGoalActive()) return false;
-		if (mode === getAgentMode()) return true;
+	/** The mode to return to when the Claude mode ends. */
+	let previousMode: SelectableAgentMode | undefined;
+	/** Set the mode and snapshot it, with the mode to return to, into the session. */
+	const applyMode = (mode: AgentMode): void => {
+		if (mode === getAgentMode()) return;
 		setAgentMode(mode);
-		pi.appendEntry(MODE_STATE_ENTRY_TYPE, { mode });
-		return true;
+		pi.appendEntry(MODE_STATE_ENTRY_TYPE, { mode, previousMode });
 	};
 	/** Restore the branch-local mode: the latest valid snapshot wins, else the
-	 *  default. Called on session start and tree navigation. */
+	 *  default. The active model decides whether the Claude mode applies, so a
+	 *  snapshot never keeps the Claude mode on a non-Claude model or drops it on a
+	 *  Claude one. Called on session start and tree navigation. */
 	const restoreMode = (ctx: ExtensionContext): void => {
-		const restored = restoreModeFromEntries(ctx.sessionManager.getBranch());
+		const snapshot = restoreModeSnapshotFromEntries(ctx.sessionManager.getBranch());
+		const selectable: SelectableAgentMode =
+			snapshot?.mode === CLAUDE_MODE || snapshot === undefined
+				? (snapshot?.previousMode ?? DEFAULT_AGENT_MODE)
+				: snapshot.mode;
 		// A snapshot can name a mode whose file has since been deleted; it then
 		// falls back to the default rather than activating a promptless mode.
-		setAgentMode(restored !== undefined && listAgentModes().includes(restored) ? restored : DEFAULT_AGENT_MODE);
+		const resolved = listAgentModes().includes(selectable) ? selectable : DEFAULT_AGENT_MODE;
+		if (isClaudeProvider(ctx.model?.provider)) {
+			previousMode = resolved;
+			setAgentMode(CLAUDE_MODE);
+			return;
+		}
+		previousMode = undefined;
+		setAgentMode(resolved);
 	};
 
 	pi.on("session_start", (_event, ctx) => {
@@ -89,15 +102,33 @@ export default function (pi: ExtensionAPI) {
 		restoreMode(ctx);
 	});
 
+	// Entering a Claude model forces the Claude mode and remembers the mode it
+	// replaced; leaving Claude restores that mode.
+	pi.on("model_select", (event) => {
+		if (childSession) return;
+		const current = getAgentMode();
+		if (isClaudeProvider(event.model.provider)) {
+			if (current === "claude") return;
+			previousMode = current;
+			applyMode("claude");
+			return;
+		}
+		if (current !== "claude") return;
+		const restored = previousMode ?? DEFAULT_AGENT_MODE;
+		previousMode = undefined;
+		applyMode(restored);
+	});
+
 	// Work mode swaps in the pi-adhd Work rules; Pi mode leaves the default
 	// prompt (or a user SYSTEM.md) in place, as does a user mode whose file
-	// vanished mid-session. `customPrompt` replaces pi's default system prompt,
-	// matching how SYSTEM.md is applied. Read fresh each run so edits to the
-	// mode file apply without a reload.
+	// vanished mid-session. The Claude mode leaves the prompt alone too: the
+	// Claude Agent SDK owns the system prompt. `customPrompt` replaces pi's
+	// default system prompt, matching how SYSTEM.md is applied. Read fresh each
+	// run so edits to the mode file apply without a reload.
 	pi.on("before_agent_start", (event) => {
 		if (childSession) return;
 		const mode = getAgentMode();
-		if (mode === PI_MODE) return;
+		if (mode === PI_MODE || mode === CLAUDE_MODE) return;
 		const prompt = readModePrompt(mode);
 		if (prompt !== undefined) event.systemPromptOptions.customPrompt = prompt;
 	});
@@ -108,7 +139,14 @@ export default function (pi: ExtensionAPI) {
 			const arg = args.trim();
 			const modes = listAgentModes();
 			const current = getAgentMode();
-			let next: AgentMode;
+			if (current === CLAUDE_MODE) {
+				ctx.ui.notify(
+					"/mode is unavailable while a Claude model is active: the Claude Agent SDK owns the system prompt. Switch to another model first.",
+					"warning",
+				);
+				return;
+			}
+			let next: SelectableAgentMode;
 			if (arg === "") {
 				// Cycle to the next mode in alphabetical order, wrapping around; an
 				// unknown current mode falls back to the first entry.
@@ -121,10 +159,7 @@ export default function (pi: ExtensionAPI) {
 				}
 				next = match;
 			}
-			if (!applyMode(next)) {
-				ctx.ui.notify(switchBlockedByGoalMessage(), "warning");
-				return;
-			}
+			applyMode(next);
 			// A restore on session_start is not a change, and a no-op switch (the
 			// requested mode is already active) changes nothing — only announce an
 			// actual transition.

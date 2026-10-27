@@ -47,9 +47,9 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { AskDialogComponent } from "./ask-dialog.ts";
+import { showRichAskDialog } from "./present-dialog.ts";
+import { renderAskCall, renderAskResult } from "./render.ts";
 import {
 	askSingleQuestion,
 	RESERVED_OPTION_LABELS,
@@ -57,9 +57,7 @@ import {
 	type NavigationControls,
 	type UIContext,
 	uiContextFromExtension,
-	untilAborted,
 } from "./ask-legacy.ts";
-import { replaceTabs } from "./compat.ts";
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import type {
 	AskToolDetails,
@@ -183,17 +181,6 @@ function formatSingleQuestionResponse(result: {
 }
 
 // ---------------------------------------------------------------------------
-// Transcript rendering
-// ---------------------------------------------------------------------------
-
-/** Flatten a question/custom input into one plain-text line for the compact
- *  result row. The dialog already showed the full options list; the transcript
- *  only needs the asked question and the given answer. */
-function flattenToOneLine(text: string): string {
-	return replaceTabs(text).replace(/\s+/g, " ").trim();
-}
-
-// ---------------------------------------------------------------------------
 // Extension entry
 // ---------------------------------------------------------------------------
 
@@ -272,31 +259,10 @@ export default function ompAskExtension(pi: ExtensionAPI): void {
 			if (ctx.mode === "tui") {
 				let richResult: ExtensionAskDialogResult | undefined;
 				try {
-					const showRichDialog = () =>
-						extensionUi.custom<ExtensionAskDialogResult | undefined>((tui, theme, keybindings, done) => {
-							const dialog = new AskDialogComponent(
-								theme,
-								keybindings,
-								richQuestions,
-								{
-									onSubmit: result => done(result),
-									onCancel: () => done(undefined),
-								},
-								{ timeout: timeout ?? undefined, tui: { requestRender: () => tui.requestRender() } },
-							);
-							// pi's custom() has no signal option; mirror omp's
-							// #presentDialog(signal) by cancelling the component
-							// when the agent turn is aborted.
-							signal?.addEventListener(
-								"abort",
-								() => {
-									dialog.externalCancel();
-								},
-								{ once: true },
-							);
-							return dialog;
-						});
-					richResult = await untilAborted(signal, showRichDialog);
+					richResult = await showRichAskDialog(extensionUi, richQuestions, {
+						timeoutMilliseconds: timeout ?? undefined,
+						signal,
+					});
 				} catch (error) {
 					if (error instanceof Error && error.name === "AbortError") {
 						ctx.abort();
@@ -483,68 +449,9 @@ export default function ompAskExtension(pi: ExtensionAPI): void {
 			return { content: [{ type: "text" as const, text: responseText }], details };
 		},
 
-		renderCall(args: { questions?: unknown }, theme) {
-			// omp updates the framed question block in place once the user
-			// answers; pi's ToolExecutionComponent appends the result render
-			// below the call render, so a full question block here would leave
-			// the transcript with every question shown twice. Render only a
-			// tense-neutral summary line (it also appears in HTML export above
-			// the result block); the merged question/options/answer block
-			// renders once from renderResult after the dialog settles.
-			const count = Array.isArray(args.questions) ? args.questions.length : 0;
-			const summary = count > 0 ? `Ask · ${count} ${count === 1 ? "question" : "questions"}` : "Ask";
-			return new Text(theme.fg("dim", summary), 0, 0);
-		},
+		renderCall: (args, theme) => renderAskCall(args, theme),
 
-		renderResult(result, _options, theme) {
-			const details = result.details as AskToolDetails | undefined;
-
-			if (!details) {
-				const txt = result.content[0];
-				const fallback = txt?.type === "text" && txt.text ? txt.text : "";
-				return new Text(`${theme.fg("warning", "~ Ask")}${fallback ? `\n${theme.fg("dim", fallback)}` : ""}`, 0, 0);
-			}
-
-			// One compact line per question: the asked question and the given
-			// answer. The dialog already showed the full options list, so the
-			// transcript does not re-list unselected options.
-			const answerLine = (
-				label: string,
-				selectedOptions: string[] | undefined,
-				customInput: string | undefined,
-				timedOut: boolean | undefined,
-			): string => {
-				const parts: string[] = [];
-				if (selectedOptions && selectedOptions.length > 0) parts.push(selectedOptions.join(", "));
-				if (customInput !== undefined) parts.push(`“${flattenToOneLine(customInput)}”`);
-				const answer =
-					parts.length > 0
-						? theme.fg("toolOutput", parts.join(" · "))
-						: theme.fg("warning", "(no answer)");
-				// Distinguish auto-selection from a real user choice.
-				const timeoutMark = timedOut ? theme.fg("dim", " · auto-selected after timeout") : "";
-				return `${theme.fg("muted", label)}${theme.fg("dim", " → ")}${answer}${timeoutMark}`;
-			};
-
-			if (details.results && details.results.length > 0) {
-				const lines = details.results.map(r =>
-					answerLine(`[${r.id}] ${flattenToOneLine(r.question)}`, r.selectedOptions, r.customInput, r.timedOut),
-				);
-				return new Text(lines.join("\n"), 0, 0);
-			}
-
-			if (!details.question) {
-				const txt = result.content[0];
-				const fallback = txt?.type === "text" && txt.text ? txt.text : "";
-				return new Text(fallback, 0, 0);
-			}
-
-			return new Text(
-				answerLine(flattenToOneLine(details.question), details.selectedOptions, details.customInput, details.timedOut),
-				0,
-				0,
-			);
-		},
+		renderResult: (result, _options, theme) => renderAskResult(result, theme),
 	});
 
 	// print/json hosts cannot prompt: hide the tool instead of letting the LLM

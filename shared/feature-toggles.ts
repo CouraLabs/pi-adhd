@@ -9,6 +9,8 @@
  * toggle, the way `shared/extension-catalog.ts` is for extensions.
  */
 
+import { loadSettings, updateSettings } from "./settings.ts";
+
 /** One non-extension toggle shown by `/couralabs:toggle`. */
 export interface FeatureToggleEntry {
 	/** Stable identifier, accepted as the `/couralabs:toggle` argument. */
@@ -23,9 +25,18 @@ export interface FeatureToggleEntry {
 	readonly setEnabled: (enabled: boolean) => void;
 }
 
-/** Every feature toggle, in dialog order. Currently none — the mechanism
- *  remains for future settings-backed switches. */
-export const FEATURE_TOGGLES: readonly FeatureToggleEntry[] = [];
+/** Every feature toggle, in dialog order. */
+export const FEATURE_TOGGLES: readonly FeatureToggleEntry[] = [
+	{
+		id: "session-title",
+		label: "Session titles",
+		description: "Name each session from its last user prompt; /couralabs:session-title picks the model",
+		isEnabled: () => loadSettings().sessionTitle.enabled,
+		setEnabled: (enabled) => {
+			updateSettings({ sessionTitle: { enabled } });
+		},
+	},
+];
 
 /** Resolve operator input (id, case-insensitive) to a feature toggle. */
 export function resolveFeatureToggle(input: string): FeatureToggleEntry | undefined {

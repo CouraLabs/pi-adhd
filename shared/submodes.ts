@@ -27,9 +27,13 @@
  * only mirrors the active session for the in-process extensions that read it.
  */
 
+import { readFileSync } from "node:fs";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ThemeColor } from "@earendil-works/pi-coding-agent";
 import { SUBMODE_GRILL, SUBMODE_PLAN, SUBMODE_STRAIGHT } from "./glyphs.ts";
 import { createGlobalStore } from "./store.ts";
+import { readUserPrompt } from "./user-prompts.ts";
 
 /** The available submodes. `"none"` means no submode is active. */
 export type Submode = "none" | "plan" | "grill" | "straight";
@@ -122,6 +126,122 @@ export const STRAIGHT_SECTION = "straight_mode";
  * submode section so it is the last text in the system prompt.
  */
 export const POLICY_SECTION = "submode_policy";
+
+/** Prompt section tag for each active submode. */
+export const SUBMODE_SECTION: Record<ActiveSubmode, string> = {
+	plan: PLAN_SECTION,
+	grill: GRILL_SECTION,
+	straight: STRAIGHT_SECTION,
+};
+
+/** Prompt asset file name for each active submode, in the packaged and user prompt folders. */
+export const SUBMODE_PROMPT_FILE: Record<ActiveSubmode, string> = {
+	plan: "plan.md",
+	grill: "grill.md",
+	straight: "straight.md",
+};
+
+const SUBMODE_PROMPTS_DIR = path.join(
+	path.dirname(fileURLToPath(import.meta.url)),
+	"..",
+	"extensions",
+	"agent",
+	"submodes",
+	"prompts",
+);
+
+const packagedPromptCache = new Map<ActiveSubmode, string>();
+
+/** The prompt shipped with the package for a submode; the fallback for user edits. */
+export function packagedSubmodePrompt(submode: ActiveSubmode): string {
+	const cached = packagedPromptCache.get(submode);
+	if (cached !== undefined) return cached;
+	const text = readFileSync(path.join(SUBMODE_PROMPTS_DIR, SUBMODE_PROMPT_FILE[submode]), "utf8");
+	packagedPromptCache.set(submode, text);
+	return text;
+}
+
+/** The submode's prompt as the user has edited it, else the packaged text. Read fresh on every call. */
+export function readSubmodePrompt(submode: ActiveSubmode): string {
+	return readUserPrompt("submodes", SUBMODE_PROMPT_FILE[submode], packagedSubmodePrompt(submode));
+}
+
+/** Per-submode role sentence for the ACTIVE SUBMODE directive. */
+export const SUBMODE_ROLE: Record<ActiveSubmode, string> = {
+	plan: "You are the architect: study the codebase, then submit a plan for review. Do not edit or write files.",
+	grill: "You are the designer: interview the user to a shared understanding. Do not implement, write a plan, or edit files.",
+	straight:
+		"You are the implementer: ask clarifying questions, explore the codebase, propose designs, then implement the approved one.",
+};
+
+/** Per-submode handoff sentence: how the model leaves or moves on. */
+export const SUBMODE_HANDOFF: Record<ActiveSubmode, string> = {
+	plan: "Submit the finished plan with `plan-write`; leave or switch with `submode-exit`.",
+	grill: "Ask questions with `ask`; leave or switch with `submode-exit`.",
+	straight: "Work the phases to a finished feature; leave with `submode-exit` when the user has the result.",
+};
+
+/**
+ * A concise directive naming the active submode, its role, and the handoff tool.
+ * Prepended to the submode section so the model knows which submode it is in
+ * regardless of the main mode.
+ */
+export function submodeDirective(submode: ActiveSubmode): string {
+	return [`ACTIVE SUBMODE: ${SUBMODE_NAME[submode]}.`, SUBMODE_ROLE[submode], SUBMODE_HANDOFF[submode]].join(" ");
+}
+
+/**
+ * The tool policy section, emitted last in the system prompt. It states the
+ * allowed set and every forbidden name outright, since the main mode may name
+ * tools the submode forbids.
+ */
+export function formatToolPolicy(
+	submode: ActiveSubmode,
+	allowed: readonly string[],
+	forbidden: readonly string[],
+): string {
+	return [
+		`# Tool policy — ${SUBMODE_NAME[submode]} submode`,
+		"",
+		"This section overrides every tool name mentioned anywhere earlier in this prompt.",
+		"",
+		`You may call only these tools: ${allowed.map((name) => `\`${name}\``).join(", ")}.`,
+		"",
+		`These tools do not exist in this submode and a call to one fails: ${forbidden.map((name) => `\`${name}\``).join(", ")}.`,
+		"",
+		"Do not call them, do not name them, and do not plan steps that require them.",
+	].join("\n");
+}
+
+/** Maps pi tool names to the names a non-pi host (the Claude Agent SDK) calls them. */
+export type ToolNameMap = ReadonlyMap<string, string>;
+
+function renameToolsInText(text: string, toolNames: ToolNameMap): string {
+	return text.replace(/([`"])([a-z][a-z-]*)\1/g, (match, quote: string, name: string) => {
+		const renamed = toolNames.get(name);
+		return renamed === undefined ? match : `${quote}${renamed}${quote}`;
+	});
+}
+
+/**
+ * The prompt sections for the active submode, keyed by section tag, for a host
+ * that builds its own system prompt instead of reading pi's. Every pi tool name
+ * in the submode text, the directive, and the tool policy is renamed through
+ * `toolNames`; its keys are the complete set of tools the host offers, so any
+ * key a submode does not allow is listed as forbidden. Empty when no submode
+ * is active.
+ */
+export function getSubmodePromptSections(toolNames: ToolNameMap): Record<string, string> {
+	const submode = getSubmode();
+	if (submode === "none") return {};
+	const allowedNames = new Set(SUBMODE_TOOLS[submode].filter((name) => toolNames.has(name)).map((name) => toolNames.get(name) as string));
+	const forbiddenNames = new Set([...toolNames.values()].filter((name) => !allowedNames.has(name)));
+	const body = `${submodeDirective(submode)}\n\n${readSubmodePrompt(submode)}`;
+	return {
+		[SUBMODE_SECTION[submode]]: renameToolsInText(body, toolNames),
+		[POLICY_SECTION]: formatToolPolicy(submode, [...allowedNames].sort(), [...forbiddenNames].sort()),
+	};
+}
 
 const store = createGlobalStore<Submode>(Symbol.for("@couralabs/pi-adhd/agent-submode"), DEFAULT_SUBMODE);
 

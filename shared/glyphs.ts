@@ -1,8 +1,8 @@
 /** Prompt chevron shared by the prompt editor and user messages. */
 export const PROMPT = "❯";
 
-/** Status glyph before each tool call, colored with the call's status. */
-export const TOOL_PICK = "⯁";
+/** Status glyph before each tool call, colored with the call's status. The corner turns the glyph into the root of the frame's rule tree. */
+export const TOOL_PICK = "┌⯁";
 
 /** Glyph for a settled agent run in the loading widget above the editor. */
 export const TURN_DONE = "✓";
@@ -11,7 +11,7 @@ export const TURN_DONE = "✓";
 export const ELLIPSIS = "…";
 
 /** Separator between status/usage segments. */
-export const SEPARATOR = " ∙ ";
+export const SEPARATOR = " ‧ ";
 
 // ── Editor field box ────────────────────────────────────────────────────────
 
@@ -36,6 +36,15 @@ export const CACHE_GLYPH = "⮏";
 /** Glyph for the tokens-per-second rate on the loading widget — the former cache glyph, freed when the cache moved to `⮏`. */
 export const RATE_GLYPH = "⭍";
 
+// ── Plan rate-limit gauge ───────────────────────────────────────────────────
+
+/** Label for the 5-hour plan rate-limit window. */
+export const RATE_LIMIT_FIVE_HOUR_LABEL = "🯵h";
+/** Label for the 7-day plan rate-limit window. */
+export const RATE_LIMIT_SEVEN_DAY_LABEL = "🯷d";
+/** Separator between the two rate-limit windows. */
+export const RATE_LIMIT_SEPARATOR = "⋅";
+
 // ── Context-window gauge ────────────────────────────────────────────────────
 
 /** Shading ramp for the footer's context gauge: empty → light → heavy → full. */
@@ -58,6 +67,8 @@ export const MODE_PI = "π";
 export const MODE_WORK = "⦵";
 /** Glyph for user-defined agent modes (any `~/.pi/couralabs/prompts/modes/<name>.md`). */
 export const MODE_CUSTOM = "◈";
+/** Claude agent-mode glyph. */
+export const MODE_CLAUDE = "🞻";
 /** Plan submode glyph. */
 export const SUBMODE_PLAN = "⚼";
 /** Grill submode glyph. */

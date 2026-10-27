@@ -6,7 +6,7 @@
  */
 
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
-import { mixColors, truncateToWidth } from "@earendil-works/pi-tui";
+import { mixColors, truncateToWidth, type Color } from "@earendil-works/pi-tui";
 import { formatTokens } from "../../../shared/format.ts";
 import {
 	CONTEXT_GLYPH,
@@ -14,11 +14,16 @@ import {
 	GAUGE_GLYPHS,
 	POMODORO_BREAK,
 	POMODORO_WORK,
+	RATE_LIMIT_FIVE_HOUR_LABEL,
+	RATE_LIMIT_SEPARATOR,
+	RATE_LIMIT_SEVEN_DAY_LABEL,
 	SEPARATOR,
 	THINKING_LEVELS,
 	TIMER_GLYPH,
 } from "../../../shared/glyphs.ts";
+import { prettyModelName } from "../../../shared/model-name.ts";
 import { agentModeColor, agentModeLabel, type AgentMode } from "../../../shared/modes.ts";
+import { formatTimeUntilReset, type RateLimits, type RateLimitWindow } from "../../../shared/rate-limits.ts";
 import { SUBMODE_LABEL, submodeColor, type Submode } from "../../../shared/submodes.ts";
 import { earliestTimer, formatCountdown, remainingMs, type ActiveTimer } from "../../../shared/timers.ts";
 import { usageCost, usageGroup, type UsageTotals } from "../../../shared/usage.ts";
@@ -44,6 +49,8 @@ export interface FooterState {
 	spawnCost: number;
 	/** Running countdowns, shown before the agent mode; the earliest timer wins. */
 	timers: readonly ActiveTimer[];
+	/** Latest plan rate-limit windows; drawn only in `claude` mode. */
+	rateLimits: RateLimits;
 	statuses: ReadonlyMap<string, string>;
 	/**
 	 * Pre-rendered lines contributed by other extensions (see
@@ -97,6 +104,63 @@ export function contextBar(theme: Theme, percent: number, positions = 5): string
 function contextColor(theme: Theme, percent: number, text: string): string {
 	const amount = Math.max(0, Math.min(1, percent / 100));
 	return theme.style(text, { fg: mixColors(theme.colors.success, theme.colors.error, amount) });
+}
+
+const PLAN_GAUGE_POSITIONS = 5;
+const PLAN_GAUGE_PARTIAL_THRESHOLD = 0.5;
+
+/**
+ * Color along evenly spaced `stops` at `amount` (0-1). Falls back to the
+ * nearest stop when the theme's colors cannot be mixed.
+ */
+function gradientColor(stops: readonly Color[], amount: number): Color {
+	const clamped = Math.max(0, Math.min(1, amount));
+	const scaled = clamped * (stops.length - 1);
+	const lower = Math.min(Math.floor(scaled), stops.length - 2);
+	try {
+		return mixColors(stops[lower], stops[lower + 1], scaled - lower);
+	} catch {
+		return stops[Math.round(scaled)];
+	}
+}
+
+function planGaugeColor(theme: Theme, percent: number): Color {
+	return gradientColor([theme.colors.text, theme.colors.warning, theme.colors.error], percent / 100);
+}
+
+/** Five-cell gauge: full cells, a ▓ once the next cell is half used, then dim ░. */
+function planGauge(theme: Theme, percent: number): string {
+	const consumed = (Math.max(0, Math.min(100, percent)) / 100) * PLAN_GAUGE_POSITIONS;
+	const full = Math.floor(consumed);
+	const partial = full < PLAN_GAUGE_POSITIONS && consumed - full >= PLAN_GAUGE_PARTIAL_THRESHOLD ? 1 : 0;
+	const color = planGaugeColor(theme, percent);
+	const filled = GAUGE_GLYPHS[3].repeat(full);
+	const partialCell = partial ? GAUGE_GLYPHS[2] : "";
+	const empty = GAUGE_GLYPHS[0].repeat(PLAN_GAUGE_POSITIONS - full - partial);
+	return `${filled ? theme.style(filled, { fg: color }) : ""}${partialCell ? theme.style(partialCell, { fg: color }) : ""}${empty ? theme.fg("dim", empty) : ""}`;
+}
+
+function planWindowSegment(theme: Theme, label: string, window: RateLimitWindow | undefined): string | undefined {
+	if (!window) return undefined;
+	const timeLeft = formatTimeUntilReset(window.resetsAt);
+	if (!timeLeft) return undefined;
+	const mutedDim = (text: string) => theme.style(text, { fg: "muted", dim: true });
+	return [
+		theme.fg("accent", label),
+		theme.fg("muted", `${Math.round(window.percent)}%`),
+		planGauge(theme, window.percent),
+		mutedDim("in"),
+		theme.fg("text", timeLeft),
+	].join(" ");
+}
+
+/** The `🯵h 92% ████▓ in 1h50m ⋅ 🯷d 62% ███░░ in 1d11h` segment; empty when no window is known. */
+function planRateLimitSegment(theme: Theme, limits: RateLimits): string {
+	const windows = [
+		planWindowSegment(theme, RATE_LIMIT_FIVE_HOUR_LABEL, limits.fiveHour),
+		planWindowSegment(theme, RATE_LIMIT_SEVEN_DAY_LABEL, limits.sevenDay),
+	].filter((segment): segment is string => segment !== undefined);
+	return windows.join(` ${theme.style(RATE_LIMIT_SEPARATOR, { fg: "muted", dim: true })} `);
 }
 
 function sanitizeStatus(text: string): string {
@@ -153,7 +217,7 @@ export function renderFooter(state: FooterState, width: number, theme: Theme): s
 		parts.push(submodeLabel);
 	}
 	if (state.model) {
-		parts.push(theme.fg("text", `${state.model.provider}/${state.model.id}`));
+		parts.push(theme.fg("text", prettyModelName(state.model)));
 		if (state.model.reasoning) {
 			const level = state.thinkingLevel;
 			const glyph = THINKING_LEVELS[level];
@@ -178,8 +242,9 @@ export function renderFooter(state: FooterState, width: number, theme: Theme): s
 	if (group) parts.push(group);
 	const cost = usageCost(totals, theme, state.spawnCost);
 	if (cost) parts.push(cost);
+	if (state.mode === "claude") parts.push(planRateLimitSegment(theme, state.rateLimits));
 
-	lines.push(truncateToWidth(`  ${joinSegments(parts, theme)}`, width, ELLIPSIS));
+	lines.push(truncateToWidth(` ${joinSegments(parts, theme)}`, width, ELLIPSIS));
 
 	// ── Statuses from other extensions ──
 	if (state.statuses.size > 0) {

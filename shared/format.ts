@@ -20,9 +20,13 @@ export function formatTokens(count: number): string {
 }
 
 /**
- * Left margin shared by the prompt editor box and the widgets above it. The
- * editor insets its box by one column, so widgets use the same pad to line up
- * with the prompt text instead of starting flush against the terminal edge.
+ * Left margin shared by widgets that float around the prompt editor box.
+ *
+ * The editor draws its border at column 0, a space at column 1, and the `❯`
+ * marker at column 2 (prompt text starts at column 4). Padding widgets by two
+ * columns puts each widget's leading glyph directly under the `❯` marker and
+ * its label under the prompt text, so the whole column of text reads as one
+ * left edge.
  */
 export const WIDGET_LEFT_PADDING = " ";
 

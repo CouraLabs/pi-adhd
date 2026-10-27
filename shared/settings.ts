@@ -74,6 +74,15 @@ export interface ThinkingConfig {
 	animationIntervalMs: number;
 }
 
+/** Configuration for the `session-title` extension's automatic session names. */
+export interface SessionTitleConfig {
+	/** Generate a session title from the last user prompt when the session is still unnamed. */
+	enabled: boolean;
+	/** Model that writes the title, as `provider/id` (written by `/couralabs:session-title`).
+	 *  Unset: the session's current model writes the title. */
+	model?: string;
+}
+
 /** Configuration for the `timer` extension's `/timer` command. */
 export interface TimerConfig {
 	/** Push a native OS notification when a timer fires, in addition to the terminal bell. */
@@ -115,6 +124,7 @@ export interface CouralabsSettings {
 	spawn: SpawnConfig;
 	timer: TimerConfig;
 	pomodoro: PomodoroConfig;
+	sessionTitle: SessionTitleConfig;
 	web: WebConfigSection;
 }
 
@@ -126,6 +136,7 @@ export interface SettingsPatch {
 	spawn?: Partial<SpawnConfig>;
 	timer?: Partial<TimerConfig>;
 	pomodoro?: Partial<PomodoroConfig>;
+	sessionTitle?: Partial<SessionTitleConfig>;
 	web?: {
 		fetch?: Partial<WebProviderConfig>;
 		search?: Partial<WebProviderConfig>;
@@ -161,6 +172,9 @@ export const DEFAULT_SETTINGS: CouralabsSettings = {
 		breakMinutes: 5,
 		longBreakMinutes: 15,
 		rounds: 4,
+	},
+	sessionTitle: {
+		enabled: true,
 	},
 	web: {
 		fetch: { provider: "auto", nineRouterModel: "exa" },

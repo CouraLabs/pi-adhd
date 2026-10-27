@@ -36,12 +36,13 @@ export const EXTENSION_CATALOG: readonly ExtensionCatalogEntry[] = [
 	{ name: "submodes", description: "Plan/Grill/Straight submodes" },
 	{ name: "commands", description: "/cmd:<name> prompt commands from .agents + .claude" },
 	{ name: "ask-user", aliases: ["askUser", "ask"], description: "ask_user tool" },
-	{ name: "goal", description: "persistent goal loop" },
 	{ name: "job", description: "background terminal jobs" },
 	{ name: "pomodoro", description: "pomodoro work/break sessions" },
+	{ name: "session-title", aliases: ["sessionTitle", "titles"], description: "automatic session titles from the last user prompt" },
 	{ name: "spawn", description: "spawn tool and sub-agents" },
 	{ name: "timer", description: "/timer bell countdown" },
 	{ name: "web", description: "web fetch and search tools" },
+	{ name: "claude", description: "Claude Agent SDK provider and Claude mode" },
 ];
 
 /** Canonical names of every extension, used as the settings default. */

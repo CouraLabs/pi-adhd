@@ -3,7 +3,7 @@
  *
  * Every pi-adhd extension is individually loadable: a host may load one, a
  * few, or the whole package. When one extension reads state another owns —
- * goal mode consulting the persisted submode, for example — it must not act
+ * a mode consulting the persisted submode, for example — it must not act
  * on that state unless the owner is actually loaded, or a value persisted by
  * an earlier install would leak in. Each extension marks itself at factory
  * time; readers check before consuming another extension's state.
@@ -20,14 +20,15 @@ import { createGlobalStore } from "./store.ts";
 /** Names of the pi-adhd extensions a consumer may check for. */
 export type ExtensionName =
 	| "ask-user"
+	| "claude"
 	| "commands"
 	| "editor"
 	| "footer"
-	| "goal"
 	| "job"
 	| "messages"
 	| "modes"
 	| "pomodoro"
+	| "session-title"
 	| "spawn"
 	| "submodes"
 	| "thinking"

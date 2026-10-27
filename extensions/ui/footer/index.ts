@@ -16,6 +16,7 @@ type ContextUsage = ReturnType<ExtensionContext["getContextUsage"]>;
 import { getFooterSections, subscribeFooterSections } from "../../../shared/footer-sections.ts";
 import { isExtensionLoaded, markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import { getAgentMode, subscribeAgentMode } from "../../../shared/modes.ts";
+import { getRateLimits, subscribeRateLimits } from "../../../shared/rate-limits.ts";
 import { getSubmode, subscribeSubmode } from "../../../shared/submodes.ts";
 import { getTimers, subscribeTimers } from "../../../shared/timers.ts";
 import { computeUsage, emptyUsage, type UsageTotals } from "../../../shared/usage.ts";
@@ -33,6 +34,7 @@ export default function (pi: ExtensionAPI) {
 	let unsubscribeSubmode: (() => void) | undefined;
 	let unsubscribeSections: (() => void) | undefined;
 	let unsubscribeTimers: (() => void) | undefined;
+	let unsubscribeRateLimits: (() => void) | undefined;
 	let timerTick: NodeJS.Timeout | undefined;
 
 	const requestRender = () => tui?.requestRender();
@@ -125,6 +127,7 @@ export default function (pi: ExtensionAPI) {
 							usage: usageTotals(),
 							spawnCost: spawnCost(),
 							timers: getTimers(),
+							rateLimits: getRateLimits(),
 							statuses: footerData.getExtensionStatuses(),
 							sections,
 						},
@@ -155,6 +158,8 @@ export default function (pi: ExtensionAPI) {
 			syncTimerTick();
 			requestRender();
 		});
+		unsubscribeRateLimits?.();
+		unsubscribeRateLimits = subscribeRateLimits(() => requestRender());
 		syncTimerTick();
 
 		if (context.mode !== "tui") return;
@@ -201,6 +206,8 @@ export default function (pi: ExtensionAPI) {
 		unsubscribeSections = undefined;
 		unsubscribeTimers?.();
 		unsubscribeTimers = undefined;
+		unsubscribeRateLimits?.();
+		unsubscribeRateLimits = undefined;
 		if (timerTick) {
 			clearInterval(timerTick);
 			timerTick = undefined;

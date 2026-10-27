@@ -23,25 +23,30 @@
  * file.
  */
 
-import { readFileSync } from "node:fs";
-import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext, ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { isChildSession } from "../../../shared/child-sessions.ts";
-import { isGoalActive, switchBlockedByGoalMessage } from "../../../shared/interlock.ts";
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
-import { offloadPrompt, readUserPrompt } from "../../../shared/user-prompts.ts";
+import { isClaudeProvider } from "../../../shared/modes.ts";
+import { toSdkToolName } from "../../providers/claude/policy.ts";
+import { isMirroredSdkTool } from "../../providers/claude/sdk-tools.ts";
+import { retargetToolSet } from "../../providers/claude/tool-swap.ts";
+import { offloadPrompt } from "../../../shared/user-prompts.ts";
 import {
 	GRILL_SECTION,
 	PLAN_SECTION,
 	POLICY_SECTION,
 	STRAIGHT_SECTION,
 	SUBMODE_LABEL,
-	SUBMODE_NAME,
 	SUBMODE_NOTICE,
+	SUBMODE_PROMPT_FILE,
+	SUBMODE_SECTION,
 	SUBMODE_STATE_ENTRY_TYPE,
 	SUBMODE_TOOLS,
+	formatToolPolicy,
 	getSubmode,
+	packagedSubmodePrompt,
+	readSubmodePrompt,
+	submodeDirective,
 	restoreSubmodeFromEntries,
 	setSubmode,
 	type ActiveSubmode,
@@ -50,36 +55,6 @@ import {
 import { createPlanWriteTool, formatComments } from "./plan-write.ts";
 import type { PlanLineComment, PlanVerdict } from "./plan-review.ts";
 import { createSubmodeExitTool, type SubmodeExitMode } from "./submode-exit.ts";
-
-// Prompts live as static .md assets next to this module (published with the
-// package). Loaded at runtime: pi loads extensions through jiti, which does
-// not support bundler-style text imports. These are the packaged fallbacks:
-// at load time the extension copies each to
-// ~/.pi/couralabs/prompts/submodes/<name>.md (once) and reads the prompt from
-// there on every run, so user edits apply without touching the package.
-const promptsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "prompts");
-const packagedPlanPrompt = readFileSync(path.join(promptsDir, "plan.md"), "utf8");
-const packagedGrillPrompt = readFileSync(path.join(promptsDir, "grill.md"), "utf8");
-const packagedStraightPrompt = readFileSync(path.join(promptsDir, "straight.md"), "utf8");
-
-/**
- * Per-submode role sentence for the ACTIVE SUBMODE directive. A record rather
- * than a two-way ternary, so a new submode cannot silently inherit another's
- * role.
- */
-const SUBMODE_ROLE: Record<ActiveSubmode, string> = {
-	plan: "You are the architect: study the codebase, then submit a plan for review. Do not edit or write files.",
-	grill: "You are the designer: interview the user to a shared understanding. Do not implement, write a plan, or edit files.",
-	straight:
-		"You are the implementer: ask clarifying questions, explore the codebase, propose designs, then implement the approved one.",
-};
-
-/** Per-submode handoff sentence: how the model leaves or moves on. */
-const SUBMODE_HANDOFF: Record<ActiveSubmode, string> = {
-	plan: "Submit the finished plan with `plan-write`; leave or switch with `submode-exit`.",
-	grill: "Ask questions with `ask`; leave or switch with `submode-exit`.",
-	straight: "Work the phases to a finished feature; leave with `submode-exit` when the user has the result.",
-};
 
 /** The `submode-exit` result sentence for each switch target. */
 const SUBMODE_SWITCH_RESULT: Record<ActiveSubmode, string> = {
@@ -104,13 +79,6 @@ const TOGGLE_DESCRIPTION: Record<ActiveSubmode, string> = {
 	plan: "Toggle the Plan submode",
 	grill: "Toggle the Grill submode",
 	straight: "Toggle the Straight submode",
-};
-
-/** The prompt section tag and packaged fallback asset for each submode. */
-const SUBMODE_PROMPTS: Record<ActiveSubmode, { section: string; file: string; packaged: string }> = {
-	plan: { section: PLAN_SECTION, file: "plan.md", packaged: packagedPlanPrompt },
-	grill: { section: GRILL_SECTION, file: "grill.md", packaged: packagedGrillPrompt },
-	straight: { section: STRAIGHT_SECTION, file: "straight.md", packaged: packagedStraightPrompt },
 };
 
 /**
@@ -147,8 +115,8 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 	// Offload the packaged prompts to the editable user folder (no-op when they
 	// are already there) so the user can edit them; every run then reads those
 	// files.
-	for (const entry of Object.values(SUBMODE_PROMPTS)) {
-		offloadPrompt("submodes", entry.file, entry.packaged);
+	for (const submode of Object.keys(SUBMODE_PROMPT_FILE) as ActiveSubmode[]) {
+		offloadPrompt("submodes", SUBMODE_PROMPT_FILE[submode], packagedSubmodePrompt(submode));
 	}
 	/** Active tools before the first submode was entered; restored on exit. */
 	let savedTools: string[] | undefined;
@@ -158,6 +126,9 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 	 *  inert so it never narrows the parent's tool set or appends the parent's
 	 *  prompt sections to its own run. */
 	let childSession = false;
+	/** Whether the active model is a Claude provider model, whose SDK tools are
+	 *  mirrored under SDK names rather than pi names. */
+	let claudeActive = false;
 	/** The last plan submitted through `plan-write`, awaiting the model's exit. */
 	let pendingPlan: PendingPlan | undefined;
 	/** A plan whose approval asked for compaction before implementation. */
@@ -183,15 +154,12 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 		pi.setActiveTools(allowedTools(submode));
 	};
 
-	/** Enter a submode and snapshot it into the session. Returns false when goal
-	 *  mode blocks the switch. */
-	const enterSubmode = (submode: ActiveSubmode): boolean => {
-		if (isGoalActive()) return false;
-		if (getSubmode() === submode) return true;
+	/** Enter a submode and snapshot it into the session. */
+	const enterSubmode = (submode: ActiveSubmode): void => {
+		if (getSubmode() === submode) return;
 		setSubmode(submode);
 		applyTools(submode);
 		pi.appendEntry(SUBMODE_STATE_ENTRY_TYPE, { submode });
-		return true;
 	};
 
 	const exitSubmode = () => {
@@ -215,19 +183,18 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 		pi.setActiveTools(allowedTools(submode));
 	};
 
-	/** Toggle a submode on, or off when it is already active. Returns false when
-	 *  goal mode blocks entering. */
-	const toggleSubmode = (submode: ActiveSubmode): boolean => {
+	/** Toggle a submode on, or off when it is already active. */
+	const toggleSubmode = (submode: ActiveSubmode): void => {
 		if (getSubmode() === submode) {
 			exitSubmode();
-			return true;
+			return;
 		}
-		return enterSubmode(submode);
+		enterSubmode(submode);
 	};
 
 	const transition = (mode: SubmodeExitMode, ctx: ExtensionToolContext): string => {
 		if (mode !== "exit") {
-			if (!enterSubmode(mode)) return switchBlockedByGoalMessage();
+			enterSubmode(mode);
 			ctx.ui.notify(SUBMODE_NOTICE[mode], "info");
 			// The tool ends this run, so the target submode takes effect in the next one,
 			// started from the `agent_settled` handler. Queueing a follow-up here would
@@ -270,7 +237,14 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 	 */
 	const allowedTools = (submode: ActiveSubmode): string[] => {
 		const registered = new Set(pi.getAllTools().map((tool) => tool.name));
-		return SUBMODE_TOOLS[submode].filter((name) => registered.has(name) && (hasUI || name !== "ask"));
+		const permitted = SUBMODE_TOOLS[submode].filter((name) => hasUI || name !== "ask");
+		if (!claudeActive) return permitted.filter((name) => registered.has(name));
+		const claudeNames = permitted.map((name) => {
+			const sdkName = toSdkToolName(name);
+			return isMirroredSdkTool(sdkName) && registered.has(sdkName) ? sdkName : name;
+		});
+		if (registered.has("Skill")) claudeNames.push("Skill");
+		return [...new Set(claudeNames)].filter((name) => registered.has(name));
 	};
 
 	/** Every registered tool the active submode forbids, sorted for a stable prompt. */
@@ -283,40 +257,9 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 			.sort();
 	};
 
-	/**
-	 * A concise directive naming the active submode, its role, and the handoff tool.
-	 * Prepended to the submode section so the model knows which submode it is in
-	 * regardless of the main Pi/Work mode.
-	 */
-	const submodeDirective = (submode: ActiveSubmode): string => {
-		return [
-			`ACTIVE SUBMODE: ${SUBMODE_NAME[submode]}.`,
-			SUBMODE_ROLE[submode],
-			SUBMODE_HANDOFF[submode],
-		].join(" ");
-	};
-
-	/**
-	 * The tool policy for the run, emitted as the last section of the system prompt.
-	 * The main mode may replace the preamble with prose naming tools this submode
-	 * forbids (`work.md` names `edit` and `write`), so the policy states the
-	 * allowed set and every forbidden name outright.
-	 */
-	const toolPolicy = (submode: ActiveSubmode): string => {
-		const allowed = allowedTools(submode);
-		const forbidden = forbiddenTools(submode);
-		return [
-			`# Tool policy — ${SUBMODE_NAME[submode]} submode`,
-			"",
-			"This section overrides every tool name mentioned anywhere earlier in this prompt.",
-			"",
-			`You may call only these tools: ${allowed.map((name) => `\`${name}\``).join(", ")}.`,
-			"",
-			`These tools do not exist in this submode and a call to one fails: ${forbidden.map((name) => `\`${name}\``).join(", ")}.`,
-			"",
-			"Do not call them, do not name them, and do not plan steps that require them.",
-		].join("\n");
-	};
+	/** The tool policy for the run, emitted as the last section of the system prompt. */
+	const toolPolicy = (submode: ActiveSubmode): string =>
+		formatToolPolicy(submode, allowedTools(submode), forbiddenTools(submode));
 
 	// Append the submode prompt sections and set the active tool set for the run.
 	// Sections are additive, so the main mode's prompt is untouched. The policy
@@ -332,19 +275,19 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 		if (submode === "none") return;
 
 		// Re-assert the whitelist every run: another extension can widen the active set
-		// between runs (`goal` restores a list it saved before the submode narrowed it),
-		// and the policy must match the tools actually offered.
+		// between runs, and the policy
+		// must match the tools actually offered.
 		const allowed = allowedTools(submode);
 		pi.setActiveTools(allowed);
 		event.systemPromptOptions.selectedTools = allowed;
 
-		const entry = SUBMODE_PROMPTS[submode];
-		sections[entry.section] = `${submodeDirective(submode)}\n\n${readUserPrompt("submodes", entry.file, entry.packaged)}`;
+		sections[SUBMODE_SECTION[submode]] = `${submodeDirective(submode)}\n\n${readSubmodePrompt(submode)}`;
 		sections[POLICY_SECTION] = toolPolicy(submode);
 	});
 
 	pi.on("session_start", (_event, ctx) => {
 		hasUI = ctx.hasUI;
+		claudeActive = isClaudeProvider(ctx.model?.provider);
 		childSession = isChildSession(ctx.sessionManager.getSessionId());
 		// A new session starts clean: no plan, handoff, or saved tool set carries
 		// over from the previous one in this process.
@@ -362,6 +305,18 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 	pi.on("session_tree", (_event, ctx) => {
 		if (childSession) return;
 		restoreSubmode(ctx);
+	});
+
+	pi.on("model_select", (event) => {
+		if (childSession) return;
+		const nowClaude = isClaudeProvider(event.model.provider);
+		if (nowClaude === claudeActive) return;
+		claudeActive = nowClaude;
+		if (savedTools !== undefined) {
+			savedTools = retargetToolSet(savedTools, new Set(pi.getAllTools().map((tool) => tool.name)), nowClaude);
+		}
+		const submode = getSubmode();
+		if (submode !== "none") pi.setActiveTools(allowedTools(submode));
 	});
 
 	pi.on("session_shutdown", () => {
@@ -412,10 +367,7 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 		handler: async (args, ctx) => {
 			const arg = args.trim().toLowerCase();
 			if (arg === "plan" || arg === "grill" || arg === "straight") {
-				if (!enterSubmode(arg)) {
-					ctx.ui.notify(switchBlockedByGoalMessage(), "warning");
-					return;
-				}
+				enterSubmode(arg);
 				ctx.ui.notify(SUBMODE_NOTICE[arg], "info");
 				return;
 			}
@@ -436,10 +388,7 @@ export default function piSubmodesExtension(pi: ExtensionAPI): void {
 		pi.registerCommand(submode, {
 			description: TOGGLE_DESCRIPTION[submode],
 			handler: async (_args, ctx) => {
-				if (!toggleSubmode(submode)) {
-					ctx.ui.notify(switchBlockedByGoalMessage(), "warning");
-					return;
-				}
+				toggleSubmode(submode);
 				ctx.ui.notify(getSubmode() === submode ? SUBMODE_NOTICE[submode] : SUBMODE_NOTICE.none, "info");
 			},
 		});

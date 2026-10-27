@@ -60,6 +60,9 @@ export default function (pi: ExtensionAPI) {
 	const loadingSources = () => ({
 		running: () => (tracker ? tracker.parts() : undefined),
 		settled: () => settled,
+		// Read live: `session_info_changed` (a new session name, including one the
+		// session-title extension just generated) triggers the render that picks it up.
+		sessionName: () => ctx?.sessionManager.getSessionName(),
 	});
 
 	const startWidgetTick = (): void => {

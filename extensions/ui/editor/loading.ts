@@ -7,23 +7,25 @@
  * current LLM return, the live output-token estimate (streamed characters ÷ 4,
  * see `./status.ts`), and the live rate — tokens over streaming time only, so
  * the request round trip and the first-token wait never dilute it:
- * `🞘 Reading for 12s ∙ ↓ 3400 ∙ ⭍ 214.2 tok/s (esc)`.
+ * `🞘 Reading for 12s ∙ ↓ 3400 ∙ ⭍ 214.2 tok/s ∙ <accent>Session name</> (esc)` — the
+ * session name joins once the session has one.
  *
  * When the run settles the widget does not vanish (as pi's working row would) —
  * it keeps the last turn's clock and output tokens on screen while the next
- * prompt is typed: `✓ Finished in 45s ∙ ↓ 12300 ∙ ⭍ 275.4 tok/s`. The next run
+ * prompt is typed, with the session name in accent alongside:
+ * `✓ Finished in 45s ∙ ↓ 12300 ∙ ⭍ 275.4 tok/s ∙ <accent>Name</>`. The next run
  * overwrites the summary the moment its tracker exists.
  *
- * Statelessness by construction: every render reads the tracker and the
- * settled summary afresh, so events, ticks, mode recolors, and theme swaps all
- * flow through the same path — the extension only ever requests frames. The
- * one piece of internal state is the spinner's wall-clock frame advance, so
- * extra renders between ticks never skip frames.
+/** Statelessness by construction: every render reads the tracker, the settled
+ *  summary, and the session name afresh, so events, ticks, mode recolors, and
+ *  theme swaps all flow through the same path — the extension only ever
+ *  requests frames. The one piece of internal state is the spinner's
+ *  wall-clock frame advance, so extra renders between ticks never skip frames.
  */
 
 import type { Theme, ThemeColor } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth } from "@earendil-works/pi-tui";
-import { padWidgetLines } from "../../../shared/format.ts";
+import { padWidgetLines, WIDGET_LEFT_PADDING } from "../../../shared/format.ts";
 import { RATE_GLYPH, SEPARATOR, TURN_DONE } from "../../../shared/glyphs.ts";
 import type { WorkingTone } from "./status.ts";
 import { SPINNER_FRAMES, SPINNER_INTERVAL_MS } from "./spinner.ts";
@@ -44,6 +46,8 @@ export interface LoadingWidgetSources {
 	running(): (LoadingFigures & { label: string; tone: WorkingTone }) | undefined;
 	/** The last settled run's figures; persists until the next run starts. */
 	settled(): LoadingFigures | undefined;
+	/** The session's display name, when one is set; undefined while unnamed. */
+	sessionName(): string | undefined;
 }
 
 /** Hint appended to the running line. */
@@ -79,7 +83,9 @@ export class LoadingWidget {
 		const running = this.sources.running();
 		const line = running ? this.runningLine(running) : this.settledLine();
 		if (line === undefined) return [];
-		return padWidgetLines([truncateToWidth(line, width, theme.fg("dim", "…"))]);
+		// Truncate inside the padded width: the pad is applied after the cut, so a
+		// full-width line would otherwise wrap by the padding's column count.
+		return padWidgetLines([truncateToWidth(line, Math.max(1, width - WIDGET_LEFT_PADDING.length), theme.fg("dim", "…"))]);
 	}
 
 	invalidate(): void {
@@ -96,9 +102,11 @@ export class LoadingWidget {
 		return SPINNER_FRAMES[this.frameIndex];
 	}
 
-	/** `🞘 Answering <muted>for</> 12s ∙ ↓ 3400 ∙ ⭍ 214.2 tok/s (esc)` — the spinner
+	/** `🞘 Answering <muted>for</> 12s ∙ ↓ 3400 ∙ ⭍ 214.2 tok/s ∙ <accent>Name</> (esc)` — the spinner
 	 *  rides the default foreground, the label rides its phase's semantic color,
-	 *  "for" rides muted, and the separator joins the segments dim. */
+	 *  "for" rides muted, the session name (when one is set) rides accent, and the
+	 *  separator joins the segments dim. The name appears only once the session
+	 *  has one — the first run of a fresh session runs unnamed. */
 	private runningLine({ label, tone, elapsed, tokens, tps }: LoadingFigures & { label: string; tone: WorkingTone }): string {
 		const theme = this.theme;
 		const spinner = this.spinnerFrame();
@@ -109,11 +117,13 @@ export class LoadingWidget {
 		if (tps !== undefined) {
 			parts.push(`${theme.fg("warning", RATE_GLYPH)}${theme.fg("dim", ` ${tps.toFixed(1)} tok/s`)}`);
 		}
+		const sessionName = this.sources.sessionName();
+		if (sessionName) parts.push(theme.fg("accent", sessionName));
 		return `${parts.join(theme.fg("dim", SEPARATOR))}${theme.fg("muted", ` ${ESCAPE_HINT}`)}`;
 	}
 
-	/** `✓ Finished <muted>in</> 45s ∙ ↓ 12300 ∙ ⭍ 275.4 tok/s` — the last turn's figures,
-	 *  kept on screen. */
+	/** `✓ Finished <muted>in</> 45s ∙ ↓ 12300 ∙ ⭍ 275.4 tok/s ∙ <accent>Name</>` — the last turn's
+	 *  figures, kept on screen, with the session name once the session has one. */
 	private settledLine(): string | undefined {
 		const settled = this.sources.settled();
 		if (!settled) return undefined;
@@ -125,6 +135,8 @@ export class LoadingWidget {
 		if (settled.tps !== undefined) {
 			parts.push(`${theme.fg("warning", RATE_GLYPH)}${theme.fg("dim", ` ${settled.tps.toFixed(1)} tok/s`)}`);
 		}
+		const sessionName = this.sources.sessionName();
+		if (sessionName) parts.push(theme.fg("accent", sessionName));
 		return parts.join(theme.fg("dim", SEPARATOR));
 	}
 }
