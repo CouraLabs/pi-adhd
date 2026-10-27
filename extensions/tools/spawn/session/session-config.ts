@@ -1,7 +1,6 @@
 import type { Model } from "@earendil-works/pi-ai";
 import type { AgentConfigLookup } from "../config/agent-types.ts";
 import type { EnvInfo } from "./env.ts";
-import { resolveModel, type ModelRegistry } from "./model-resolver.ts";
 import type { ProjectContextLoader } from "./project-context.ts";
 import type { InheritedPrompt } from "./prompts.ts";
 import type {
@@ -35,8 +34,6 @@ export interface AssemblerContext {
 
   parentModel?: Model<any>;
 
-  modelRegistry: ModelRegistry;
-
   parentToolNames: readonly string[];
 }
 
@@ -64,16 +61,6 @@ export interface SessionConfig {
   agentMaxTurns: number | undefined;
 }
 
-function resolveDefaultModel(
-  parentModel: Model<any> | undefined,
-  registry: AssemblerContext["modelRegistry"],
-  configModel?: string,
-): Model<any> | undefined {
-  if (!configModel) return parentModel;
-  const resolved = resolveModel(configModel, registry);
-  return typeof resolved === "string" ? parentModel : resolved;
-}
-
 export function assembleSessionConfig(
   type: SpawnType,
   ctx: AssemblerContext,
@@ -89,9 +76,7 @@ export function assembleSessionConfig(
 
   const toolNames = registry.getToolNamesForType(type, ctx.parentToolNames);
 
-  const model =
-    options.model ??
-    resolveDefaultModel(ctx.parentModel, ctx.modelRegistry, agentConfig.model);
+  const model = options.model ?? ctx.parentModel;
 
   const systemPrompt = io.buildAgentPrompt(
     agentConfig,

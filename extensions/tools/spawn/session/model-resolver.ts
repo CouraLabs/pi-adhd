@@ -20,13 +20,22 @@ export interface ModelResolutionError {
 
 export type ModelResolution = ModelResolutionResult | ModelResolutionError;
 
+export interface DefaultModelRef {
+  provider: string;
+  id: string;
+}
+
 export function resolveInvocationModel(
   parentModel: Model<any> | undefined,
   modelInput: string | undefined,
   modelFromParams: boolean,
   registry: ModelRegistry | undefined,
+  defaultModelRef?: DefaultModelRef,
 ): ModelResolution {
   if (!modelInput) return { model: parentModel };
+  const trimmed = modelInput.trim();
+  if (trimmed === "inherit") return { model: parentModel };
+  if (trimmed === "default") return resolveDefaultModelRef(defaultModelRef, registry);
   if (!registry) {
     if (modelFromParams) return { error: "No model registry available." };
     return {
@@ -41,6 +50,23 @@ export function resolveInvocationModel(
     model: parentModel,
     fallbackNote: `Agent model "${modelInput}" did not match an available model, so the spawn runs on the session model instead.`,
   };
+}
+
+function resolveDefaultModelRef(
+  defaultModelRef: DefaultModelRef | undefined,
+  registry: ModelRegistry | undefined,
+): ModelResolution {
+  if (!defaultModelRef) {
+    return { error: "model: \"default\" is set but no default model is configured." };
+  }
+  const ref = `${defaultModelRef.provider}/${defaultModelRef.id}`;
+  const found = registry?.find(defaultModelRef.provider, defaultModelRef.id);
+  if (!found) {
+    return {
+      error: `model: "default" resolved to the configured default model "${ref}", but it is not available in the model registry.`,
+    };
+  }
+  return { model: found };
 }
 
 export function resolveModel(

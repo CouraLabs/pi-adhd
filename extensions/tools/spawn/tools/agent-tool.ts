@@ -142,7 +142,7 @@ export class AgentTool {
 			"- Provide clear, detailed prompts so the agent can work autonomously.",
 			"- Spawn results are returned as text — summarize them for the user.",
 			"- Use resume with an agent ID to continue a previous agent's work, or to answer an agent that ended its turn with a question.",
-			'- Use model to specify a different model (as "provider/modelId", or fuzzy e.g. "haiku", "sonnet").',
+			'- Use model to specify a different model (as "provider/modelId", fuzzy e.g. "haiku", "sonnet", "default" for Pi\'s configured default, or "inherit" for the parent session model).',
 			"- Use thinking to control extended thinking level.",
 			"- Use inherit_context if the agent needs the parent conversation history.",
 		].join("\n");
@@ -174,7 +174,7 @@ ${guidelines}
 				model: Type.Optional(
 					Type.String({
 						description:
-							'Optional model override. Accepts "provider/modelId" or fuzzy name (e.g. "haiku", "sonnet"). Omit to use the agent type\'s default.',
+							'Optional model override. Accepts "provider/modelId" or fuzzy name (e.g. "haiku", "sonnet"), "default" for Pi\'s configured default model, or "inherit" for the parent session model. Omit to use the agent type\'s default.',
 					}),
 				),
 				thinking: Type.Optional(

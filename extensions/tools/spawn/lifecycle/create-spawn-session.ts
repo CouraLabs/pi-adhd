@@ -136,7 +136,6 @@ export async function createSpawnSession(
       parentSystemPrompt: snapshot.systemPrompt,
       parentPortablePrompt: snapshot.portablePrompt,
       parentModel: snapshot.model,
-      modelRegistry: snapshot.modelRegistry,
       parentToolNames: deps.listParentToolNames(),
       resolvePromptInheritance: deps.resolvePromptInheritance,
     },

@@ -28,6 +28,7 @@ import { createSpawnRuntime } from "./runtime.ts";
 import { publishSpawnService, unpublishSpawnService } from "./service/service.ts";
 import { SpawnServiceAdapter } from "./service/service-adapter.ts";
 import { detectEnv } from "./session/env.ts";
+import { type DefaultModelRef } from "./session/model-resolver.ts";
 import { isChildSession } from "../../../shared/child-sessions.ts";
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import { getUserPromptsDir } from "../../../shared/user-prompts.ts";
@@ -172,7 +173,10 @@ export default function (pi: ExtensionAPI) {
     spawnEnabled = !isChild;
     applySpawnEnabled(isChild);
 
-    if (!isChild) publishSpawnService(service);
+    if (!isChild) {
+      publishSpawnService(service);
+      runtime.setDefaultModelRef(resolveConfiguredDefaultModel(ctx));
+    }
   });
   pi.on("session_before_switch", () => lifecycle.handleSessionBeforeSwitch());
   pi.on("session_shutdown", () => lifecycle.handleSessionShutdown());
@@ -216,4 +220,17 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
+}
+
+function resolveConfiguredDefaultModel(ctx: { readonly cwd: string }): DefaultModelRef | undefined {
+  try {
+    const settingsManager = SdkSettingsManager.create(ctx.cwd, getAgentDir());
+    const provider = settingsManager.getDefaultProvider();
+    const modelId = settingsManager.getDefaultModel();
+    if (!provider || !modelId) return undefined;
+    return { provider, id: modelId };
+  } catch (err) {
+    debugLog("resolveConfiguredDefaultModel", err);
+    return undefined;
+  }
 }

@@ -3,6 +3,7 @@ import {
   type ParentPromptOptions,
   type ParentSnapshot,
 } from "./lifecycle/parent-snapshot.ts";
+import { type DefaultModelRef } from "./session/model-resolver.ts";
 import type { ModelInfo } from "./tools/spawn-config.ts";
 import type { SessionContext } from "./types.ts";
 
@@ -17,8 +18,14 @@ export class SpawnRuntime {
 
   private lastPromptOptions: ParentPromptOptions | undefined = undefined;
 
+  private defaultModelRef: DefaultModelRef | undefined = undefined;
+
   setSessionContext(ctx: SessionContext): void {
     this.currentCtx = ctx;
+  }
+
+  setDefaultModelRef(ref: DefaultModelRef | undefined): void {
+    this.defaultModelRef = ref;
   }
 
   clearSessionContext(): void {
@@ -38,6 +45,7 @@ export class SpawnRuntime {
     return {
       parentModel: this.currentCtx?.model,
       modelRegistry: this.currentCtx?.modelRegistry,
+      defaultModelRef: this.defaultModelRef,
     };
   }
 
