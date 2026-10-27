@@ -266,7 +266,7 @@ You are an expert code reviewer specializing in modern software development...
 | `enabled` | `false` keeps the definition but hides it from the catalogue and rejects spawning it (default `true`) |
 | `tool_guideline` | One-line selection guidance, included in the spawn tool description |
 
-The `tools` field has four forms. `tools: "*"` — quoted, because a bare `*` is invalid YAML — gives the agent every tool available in the parent session at spawn time, including extension and MCP tools. Omitting the field gives the fixed built-in list `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`. `tools: "none"` gives no tools, and an explicit list restricts the agent to those tools. Mixing `*` or `none` with other tool names is a validation error.
+The `tools` field has four forms. `tools: all` gives the agent every tool available in the parent session at spawn time, including extension and MCP tools. Omitting the field gives the fixed built-in list `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`. `tools: "none"` gives no tools, and an explicit list restricts the agent to those tools. Mixing `all` or `none` with other tool names is a validation error.
 
 The `spawn` call's `model`, `thinking`, `max_turns`, and `inherit_context` parameters are per-invocation overrides that always win over the file — for every field the caller's parameter comes first, then the frontmatter, then the field's normal fallback. Overrides are ephemeral: they never modify the agent's file, so the next spawn of the same agent is back to its file's values. The `locked` frontmatter key and the `/spawn:model` command are gone; to change an agent's persistent defaults, edit its markdown file — the files are the source of truth, and hand-editing them is the intended workflow.
 

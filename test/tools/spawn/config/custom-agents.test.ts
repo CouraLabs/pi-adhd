@@ -103,13 +103,13 @@ describe("loadAgentDefinitions", () => {
 		});
 	});
 
-	it("treats tools * as allTools", () => {
-		writeProjectAgent("star-list", 'tools:\n  - "*"\n');
-		writeProjectAgent("star-scalar", 'tools: "*"\n');
+	it("treats tools all as allTools", () => {
+		writeProjectAgent("all-list", "tools:\n  - all\n");
+		writeProjectAgent("all-scalar", "tools: all\n");
 
 		const agents = load();
-		expect(agents.get("star-list")).toMatchObject({ allTools: true, toolNames: undefined });
-		expect(agents.get("star-scalar")).toMatchObject({ allTools: true, toolNames: undefined });
+		expect(agents.get("all-list")).toMatchObject({ allTools: true, toolNames: undefined });
+		expect(agents.get("all-scalar")).toMatchObject({ allTools: true, toolNames: undefined });
 	});
 
 	it("treats tools none as an empty tool list", () => {
@@ -129,10 +129,10 @@ describe("loadAgentDefinitions", () => {
 		expect(agent?.allTools).toBe(false);
 	});
 
-	it("rejects * mixed with other tool names, naming the file", () => {
-		const path = writeProjectAgent("mixed-star", 'tools: read, "*"\n');
+	it("rejects all mixed with other tool names, naming the file", () => {
+		const path = writeProjectAgent("mixed-all", "tools: all, read\n");
 
-		expect(() => load()).toThrow(`Invalid tools field in ${path}: "*" must be the only value`);
+		expect(() => load()).toThrow(`Invalid tools field in ${path}: "all" must be the only value`);
 		rmSync(path);
 	});
 

@@ -70,10 +70,10 @@ function toolSelection(value: unknown, filePath: string): Pick<AgentConfig, "too
 	const items = parseListField(value);
 	if (items === undefined) return { allTools: false };
 
-	if (items.length === 1 && items[0] === "*") return { allTools: true, toolNames: undefined };
+	if (items.length === 1 && items[0] === "all") return { allTools: true, toolNames: undefined };
 	if (items.length === 1 && items[0] === "none") return { allTools: false, toolNames: [] };
-	if (items.includes("*")) {
-		throw new Error(`Invalid tools field in ${filePath}: "*" must be the only value`);
+	if (items.includes("all")) {
+		throw new Error(`Invalid tools field in ${filePath}: "all" must be the only value`);
 	}
 	if (items.includes("none")) {
 		throw new Error(`Invalid tools field in ${filePath}: "none" must be the only value`);
