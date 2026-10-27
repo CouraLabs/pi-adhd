@@ -6,7 +6,7 @@ import {
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import type { AgentConfigLookup } from "../config/agent-types.ts";
-import { debugNote } from "../debug.ts";
+import { debugLog, debugNote } from "../debug.ts";
 import type { ChildLifecyclePublisher } from "./child-lifecycle.ts";
 import type { ParentSnapshot } from "./parent-snapshot.ts";
 import { SpawnSession } from "./spawn-session.ts";
@@ -33,6 +33,7 @@ export interface ResourceLoaderLike {
 
 export interface SessionManagerLike {
   newSession(opts: { parentSession?: string }): void;
+  appendCustomEntry(customType: string, data?: unknown): string;
   getSessionFile(): string | undefined;
   getSessionId(): string;
 }
@@ -177,6 +178,17 @@ export async function createSpawnSession(
   const sessionDir = deps.io.deriveSessionDir(params.parentSession?.parentSessionFile, cfg.effectiveCwd);
   const sessionManager = deps.io.createSessionManager(cfg.effectiveCwd, sessionDir);
   sessionManager.newSession({ parentSession: params.parentSession?.parentSessionId });
+  try {
+    sessionManager.appendCustomEntry("agent-xpto-parent", {
+      parentSessionId: params.parentSession?.parentSessionId ?? "",
+      parentSessionFile: params.parentSession?.parentSessionFile ?? "",
+      runId: params.parentSession?.toolCallId ?? "",
+      targetAgentId: type,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    debugLog("stamp parent session", err);
+  }
   const sessionId = sessionManager.getSessionId();
 
   registerChildSession(sessionId);
