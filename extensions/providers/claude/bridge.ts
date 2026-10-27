@@ -6,6 +6,7 @@ import { fromPiAgentDefinitions } from "./agents.ts";
 import { buildSubmodeAppend, foregroundAgentHook, submodePolicyHook } from "./policy.ts";
 import { PI_MCP_SERVER_NAME, PiToolServer, isPiOwnedToolName } from "./pi-mcp.ts";
 import type { PiToolDescriptions } from "./pi-mcp.ts";
+import { attachInterruptedAgents, clearLimitHit, hasLimitHit, recordLimitHit } from "./limit-handoff/pending-limit.ts";
 import { agentProgressRouter } from "./render-agent.ts";
 import { askAnswerBroker, createAskCanUseTool, createAskPreToolUseHook } from "./render-ask.ts";
 import { SDK_TOOL_NAMES } from "./sdk-tools.ts";
@@ -488,8 +489,23 @@ function trackBackgroundTasks(sessionKey: string, message: SDKMessage): void {
 	);
 }
 
+function trackRateLimitHit(sessionKey: string, message: SDKMessage): void {
+	if (message.type === "rate_limit_event" && message.rate_limit_info.status === "rejected") {
+		recordLimitHit(sessionKey, message.rate_limit_info.resetsAt);
+		return;
+	}
+	if (message.type === "assistant" && message.error === "rate_limit") {
+		recordLimitHit(sessionKey, undefined);
+		return;
+	}
+	if (message.type !== "result") return;
+	if (!message.is_error) clearLimitHit(sessionKey);
+	else if (hasLimitHit(sessionKey)) attachInterruptedAgents(sessionKey, agentProgressRouter.interruptedRuns(sessionKey));
+}
+
 function observeSdkMessage(sessionKey: string, state: ClaudeSessionState, message: SDKMessage): void {
 	trackBackgroundTasks(sessionKey, message);
+	trackRateLimitHit(sessionKey, message);
 	if (message.type === "system" && message.subtype === "init") state.sdkSessionId = message.session_id;
 	if (message.type === "user" && message.isSynthetic === true) captureCompactionSummary(state, message);
 	for (const listener of state.listeners) listener(message);

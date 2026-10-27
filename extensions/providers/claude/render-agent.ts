@@ -8,6 +8,7 @@ export type AgentRunStatus = "running" | "completed" | "failed" | "stopped";
 export interface AgentRunSnapshot {
 	subagentType?: string;
 	description?: string;
+	prompt?: string;
 	status: AgentRunStatus;
 	toolCallCount: number;
 	lastToolName?: string;
@@ -23,6 +24,7 @@ interface TrackedRun {
 	snapshot: AgentRunSnapshot;
 	seenToolUseIds: Set<string>;
 	listeners: Set<AgentRunListener>;
+	generation: number;
 }
 
 const RESULT_COLLAPSED_LINES = 5;
@@ -36,6 +38,18 @@ function parentToolUseIdOf(message: SDKMessage): string | undefined {
 export class AgentProgressRouter {
 	private readonly runs = new Map<string, TrackedRun>();
 	private readonly releasedToolUseIds = new Set<string>();
+	private readonly generations = new Map<string, number>();
+
+	beginTurn(sessionKey: string): void {
+		this.generations.set(sessionKey, this.generationOf(sessionKey) + 1);
+	}
+
+	interruptedRuns(sessionKey: string): AgentRunSnapshot[] {
+		const generation = this.generationOf(sessionKey);
+		return [...this.runs.values()]
+			.filter((run) => run.sessionKey === sessionKey && run.generation === generation && run.snapshot.status !== "completed")
+			.map((run) => ({ ...run.snapshot }));
+	}
 
 	route(sessionKey: string, message: SDKMessage): void {
 		if (message.type === "system") {
@@ -43,7 +57,10 @@ export class AgentProgressRouter {
 			return;
 		}
 		const parentToolUseId = parentToolUseIdOf(message);
-		if (parentToolUseId === undefined) return;
+		if (parentToolUseId === undefined) {
+			if (message.type === "assistant") this.captureAgentInvocations(sessionKey, message);
+			return;
+		}
 		if (message.type === "assistant") this.routeSubagentAssistantMessage(sessionKey, parentToolUseId, message);
 	}
 
@@ -70,14 +87,41 @@ export class AgentProgressRouter {
 		}
 	}
 
+	private generationOf(sessionKey: string): number {
+		return this.generations.get(sessionKey) ?? 0;
+	}
+
+	private captureAgentInvocations(sessionKey: string, message: Extract<SDKMessage, { type: "assistant" }>): void {
+		const content = message.message.content;
+		if (!Array.isArray(content)) return;
+		for (const block of content) {
+			if (block.type !== "tool_use" || block.name !== "Agent") continue;
+			const input = block.input as { prompt?: unknown; description?: unknown; subagent_type?: unknown };
+			this.update(block.id, sessionKey, (run) => {
+				if (typeof input.prompt === "string") run.snapshot.prompt = input.prompt;
+				if (typeof input.description === "string") run.snapshot.description = run.snapshot.description ?? input.description;
+				if (typeof input.subagent_type === "string") run.snapshot.subagentType = run.snapshot.subagentType ?? input.subagent_type;
+			});
+		}
+	}
+
 	private trackedRun(toolUseId: string, sessionKey: string): TrackedRun | undefined {
 		if (this.releasedToolUseIds.has(toolUseId)) return undefined;
 		let run = this.runs.get(toolUseId);
 		if (!run) {
-			run = { sessionKey, snapshot: { status: "running", toolCallCount: 0 }, seenToolUseIds: new Set(), listeners: new Set() };
+			run = {
+				sessionKey,
+				snapshot: { status: "running", toolCallCount: 0 },
+				seenToolUseIds: new Set(),
+				listeners: new Set(),
+				generation: this.generationOf(sessionKey),
+			};
 			this.runs.set(toolUseId, run);
 		}
-		if (run.sessionKey === UNASSIGNED_SESSION_KEY) run.sessionKey = sessionKey;
+		if (run.sessionKey === UNASSIGNED_SESSION_KEY) {
+			run.sessionKey = sessionKey;
+			run.generation = this.generationOf(sessionKey);
+		}
 		return run;
 	}
 

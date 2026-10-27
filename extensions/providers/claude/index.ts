@@ -7,6 +7,7 @@ import { registerClaudeCommands } from "./commands.ts";
 import { CLAUDE_MODELS } from "./models.ts";
 import { isPiOwnedToolName } from "./pi-mcp.ts";
 import type { PiToolDescriptions } from "./pi-mcp.ts";
+import { registerLimitHandoff } from "./limit-handoff/index.ts";
 import { registerMirrorTools } from "./mirror-tools.ts";
 import { registerSessionHost } from "./session-host.ts";
 import { SYNC_ENTRY_TYPE, isSyncRecord } from "./session-sync.ts";
@@ -85,6 +86,7 @@ export default function registerClaudeProvider(pi: ExtensionAPI): void {
 	installToolSwap(pi);
 	installSessionHost(pi);
 	registerClaudeCommands(pi);
+	registerLimitHandoff(pi);
 
 	pi.on("session_shutdown", (_event, context) => {
 		disposeClaudeSession(context.sessionManager.getSessionId());

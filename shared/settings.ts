@@ -82,6 +82,11 @@ export interface WebConfigSection {
 	search: WebProviderConfig;
 }
 
+export interface ClaudeLimitHandoffConfig {
+
+	model?: string;
+}
+
 export interface CouralabsSettings {
 
 	extensions: string[];
@@ -92,6 +97,7 @@ export interface CouralabsSettings {
 	pomodoro: PomodoroConfig;
 	sessionTitle: SessionTitleConfig;
 	web: WebConfigSection;
+	claudeLimitHandoff: ClaudeLimitHandoffConfig;
 }
 
 export interface SettingsPatch {
@@ -102,6 +108,7 @@ export interface SettingsPatch {
 	timer?: Partial<TimerConfig>;
 	pomodoro?: Partial<PomodoroConfig>;
 	sessionTitle?: Partial<SessionTitleConfig>;
+	claudeLimitHandoff?: Partial<ClaudeLimitHandoffConfig>;
 	web?: {
 		fetch?: Partial<WebProviderConfig>;
 		search?: Partial<WebProviderConfig>;
@@ -145,6 +152,7 @@ export const DEFAULT_SETTINGS: CouralabsSettings = {
 		fetch: { provider: "auto", nineRouterModel: "exa" },
 		search: { provider: "auto", nineRouterModel: "exa" },
 	},
+	claudeLimitHandoff: {},
 };
 
 export function getSettingsPath(): string {

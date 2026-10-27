@@ -60,6 +60,7 @@ Fifteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`,
 | `/plan` `/grill` `/straight` | Toggle one submode |
 | `/couralabs:toggle [name]` | Open a list to toggle extensions and feature toggles, or flip one by name |
 | `/couralabs:session-title` | Show session-title state and pick the model that names sessions |
+| `/couralabs:claude-limit-handoff` | Pick the model that takes over when the Claude rate limit is reached (none: wait for the reset, then auto-continue) |
 | `/full-cwd [on\|off]` | Show the full working directory or only its last folder |
 | `/spawn:settings` `/spawn:sessions` `/spawn:model` | Tune limits, open a transcript, set agent defaults |
 | `/web` | Pick web fetch and search providers |
@@ -432,6 +433,7 @@ It is organized as `{ feature: { option: value } }`, plus a top-level `extension
 | `web` | `search.provider` | `"auto"` | Default web search provider; `auto` tries every configured one in order |
 | `web` | `search.nineRouterModel` | `"exa"` | Model the 9Router aggregator searches with |
 | `sessionTitle` | `enabled` | `true` | Name each session from its last user prompt (toggle with `/couralabs:toggle session-title`) |
+| `claudeLimitHandoff` | `model` | unset | Model (`provider/id`, non-Claude) that takes over when the Claude limit is hit; unset: wait for the reset and send "continue the implementation where it did stop" (set with `/couralabs:claude-limit-handoff`) |
 | `sessionTitle` | `model` | unset | Model that writes the title, as `provider/id`; unset: the session's current model (set with `/couralabs:session-title`) |
 
 The `/couralabs:toggle` command opens an interactive list of every extension with its current state, followed by the feature toggles — settings-backed options that change a loaded extension's behavior without loading or unloading anything (currently `session-title`). Move with `↑↓` (or `j`/`k`) and press Enter to flip the highlighted row; `Esc` closes. Changes are persisted as you toggle and the extension set reloads once the list closes, so the choice survives reloads and new sessions. Passing a name — `/couralabs:toggle editor` — skips the list and flips that item directly, which is also the only form available when the session has no dialog UI. Missing keys fall back to the defaults and unknown keys are preserved, so the file can be edited by hand. `/spawn:settings` edits the operational `spawn` options (numeric values open an input prompt).
