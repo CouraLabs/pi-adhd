@@ -15,6 +15,7 @@ import {
 import { AgentTypeRegistry } from "./config/agent-types.ts";
 import { globalAgentsDir } from "./config/agent-dirs.ts";
 import { loadAgentDefinitions } from "./config/custom-agents.ts";
+import { resolveConfiguredDefaultModel } from "./config/default-model.ts";
 import { provisionDefaultAgents } from "./config/seed-agents.ts";
 import { loadPackagedSeedAgents } from "./config/seed-source.ts";
 import { debugLog } from "./debug.ts";
@@ -28,7 +29,6 @@ import { createSpawnRuntime } from "./runtime.ts";
 import { publishSpawnService, unpublishSpawnService } from "./service/service.ts";
 import { SpawnServiceAdapter } from "./service/service-adapter.ts";
 import { detectEnv } from "./session/env.ts";
-import { type DefaultModelRef } from "./session/model-resolver.ts";
 import { isChildSession } from "../../../shared/child-sessions.ts";
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import { getUserPromptsDir } from "../../../shared/user-prompts.ts";
@@ -175,7 +175,7 @@ export default function (pi: ExtensionAPI) {
 
     if (!isChild) {
       publishSpawnService(service);
-      runtime.setDefaultModelRef(resolveConfiguredDefaultModel(ctx));
+      runtime.setDefaultModelRef(resolveConfiguredDefaultModel(ctx.cwd));
     }
   });
   pi.on("session_before_switch", () => lifecycle.handleSessionBeforeSwitch());
@@ -220,17 +220,4 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-}
-
-function resolveConfiguredDefaultModel(ctx: { readonly cwd: string }): DefaultModelRef | undefined {
-  try {
-    const settingsManager = SdkSettingsManager.create(ctx.cwd, getAgentDir());
-    const provider = settingsManager.getDefaultProvider();
-    const modelId = settingsManager.getDefaultModel();
-    if (!provider || !modelId) return undefined;
-    return { provider, id: modelId };
-  } catch (err) {
-    debugLog("resolveConfiguredDefaultModel", err);
-    return undefined;
-  }
 }
