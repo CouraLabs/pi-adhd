@@ -146,15 +146,10 @@ const spawnSessionsRedirect: CommandRedirect = async ({ context }) => {
 	}
 };
 
-const spawnModelRedirect: CommandRedirect = async ({ args, context, original }) => {
-	await original(args, context);
-	report(context, SPAWN_CHANGES_NOTICE);
-};
-
 const spawnSettingsRedirect: CommandRedirect = async ({ context }) => {
 	report(
 		context,
-		"Pi spawn limits do not apply to Claude subagents. Edit max_turns and model in .agents/agents/*.md (see /spawn:model). " +
+		"Pi spawn limits do not apply to Claude subagents. Edit max_turns and model in .agents/agents/*.md. " +
 			SPAWN_CHANGES_NOTICE,
 		"warning",
 	);
@@ -166,7 +161,6 @@ const COMMAND_REDIRECTS: ReadonlyMap<string, CommandRedirect> = new Map([
 	["job-kill", jobKillRedirect],
 	["job-read", jobReadRedirect],
 	["spawn:sessions", spawnSessionsRedirect],
-	["spawn:model", spawnModelRedirect],
 	["spawn:settings", spawnSettingsRedirect],
 ]);
 

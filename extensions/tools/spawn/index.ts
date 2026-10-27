@@ -34,7 +34,6 @@ import { deriveSpawnSessionDir } from "./session/session-dir.ts";
 import { SettingsManager } from "./settings.ts";
 import { AgentTool } from "./tools/agent-tool.ts";
 import { SessionNavigatorHandler } from "./ui/session-navigator.ts";
-import { SpawnDefaultsHandler } from "./ui/spawn-defaults.ts";
 import { SpawnSettingsHandler } from "./ui/spawn-settings.ts";
 
 export default function (pi: ExtensionAPI) {
@@ -47,11 +46,7 @@ export default function (pi: ExtensionAPI) {
   });
   settings.load();
 
-  const registry = new AgentTypeRegistry(
-    () => loadCustomAgents(process.cwd()),
-    () => settings.agentModels,
-    () => settings.agentThinking,
-  );
+  const registry = new AgentTypeRegistry(() => loadCustomAgents(process.cwd()));
 
   const eventsObserver = new SpawnEventsObserver({
     emit: (channel, data) => pi.events.emit(channel, data),
@@ -206,32 +201,6 @@ export default function (pi: ExtensionAPI) {
         cwd: ctx.cwd,
         readFile: (path) => readFileSync(path, "utf8"),
         sessionEntries: ctx.sessionManager.getEntries(),
-      });
-    },
-  });
-
-  const spawnDefaultsHandler = new SpawnDefaultsHandler();
-
-  pi.registerCommand("spawn:model", {
-    description: "Set a spawned agent's default model and thinking level (built-in or .agents/agents/*.md)",
-    handler: async (_args, ctx) => {
-      if (!spawnEnabled) {
-        ctx.ui.notify(SPAWN_CHILD_MESSAGE, "warning");
-        return;
-      }
-      await spawnDefaultsHandler.handle({
-        ui: ctx.ui,
-        listAgents: () => registry.list(),
-        cwd: ctx.cwd,
-        models:
-          ctx.scopedModels.length > 0
-            ? ctx.scopedModels.map((scoped) => scoped.model)
-            : ctx.modelRegistry.getAvailable(),
-        getBuiltInModels: () => settings.agentModels,
-        getBuiltInThinking: () => settings.agentThinking,
-        setAgentModel: (agentName, modelId) => settings.applyAgentModel(agentName, modelId),
-        setAgentThinking: (agentName, thinking) => settings.applyAgentThinking(agentName, thinking),
-        reload: () => registry.reload(),
       });
     },
   });

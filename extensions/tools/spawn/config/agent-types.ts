@@ -1,5 +1,4 @@
 import { DEFAULT_AGENTS } from "./default-agents.ts";
-import { parseThinkingLevel } from "./thinking-level.ts";
 import { offloadPrompt, readUserPrompt } from "../../../../shared/user-prompts.ts";
 import type { AgentConfig } from "../types.ts";
 
@@ -17,11 +16,7 @@ export interface AgentConfigLookup {
 export class AgentTypeRegistry implements AgentConfigLookup {
   private agents = new Map<string, AgentConfig>();
 
-  constructor(
-    private readonly loadUserAgents: () => Map<string, AgentConfig>,
-    private readonly loadAgentModels: () => Record<string, string> = () => ({}),
-    private readonly loadAgentThinking: () => Record<string, string> = () => ({}),
-  ) {
+  constructor(private readonly loadUserAgents: () => Map<string, AgentConfig>) {
     this.reload();
   }
 
@@ -75,19 +70,6 @@ export class AgentTypeRegistry implements AgentConfigLookup {
     const key = this.resolveKey(type);
     const config = key ? this.agents.get(key) : undefined;
     if (config) {
-
-      const overrides = this.loadAgentModels()[config.name];
-      const thinkingOverride = parseThinkingLevel(this.loadAgentThinking()[config.name]);
-      if (
-        (overrides !== undefined || thinkingOverride !== undefined) &&
-        (config.source === undefined || config.source === "default")
-      ) {
-        return {
-          ...config,
-          ...(overrides !== undefined ? { model: overrides } : {}),
-          ...(thinkingOverride !== undefined ? { thinking: thinkingOverride } : {}),
-        };
-      }
       return config;
     }
 

@@ -96,28 +96,6 @@ describe("AgentTypeRegistry", () => {
 		expect(registry.getToolNamesForType("general-purpose")).toEqual(BUILTIN_TOOL_NAMES);
 	});
 
-	it("applies agent model and thinking loaders to default agents", () => {
-		const registry = new AgentTypeRegistry(
-			() => new Map(),
-			() => ({ "general-purpose": "openai/gpt-4o" }),
-			() => ({ "general-purpose": "high" }),
-		);
-		const config = registry.resolveAgentConfig("general-purpose");
-		expect(config.model).toBe("openai/gpt-4o");
-		expect(config.thinking).toBe("high");
-	});
-
-	it("does not apply model or thinking loaders to user agents", () => {
-		const registry = new AgentTypeRegistry(
-			userAgents([["helper", userAgent({ name: "helper" })]]),
-			() => ({ helper: "openai/gpt-4o" }),
-			() => ({ helper: "low" }),
-		);
-		const config = registry.resolveAgentConfig("helper");
-		expect(config.model).toBeUndefined();
-		expect(config.thinking).toBeUndefined();
-	});
-
 	it("falls back to general-purpose for unknown types", () => {
 		const registry = new AgentTypeRegistry(() => new Map());
 		expect(registry.resolveAgentConfig("whoever").name).toBe("general-purpose");

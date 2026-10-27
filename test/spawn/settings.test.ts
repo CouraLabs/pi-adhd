@@ -44,8 +44,6 @@ describe("loadSettings", () => {
 			unconsumedSessionRetentionMinutes: 60,
 			excludedExtensionPackages: [" foo ", "", "bar", "foo"],
 			promptInheritance: { openai: "portable", bad: "nope" as never },
-			agentModels: { scout: "haiku", junk: 7 as never },
-			agentThinking: { scout: "high", junk: "nope" },
 		});
 		expect(loadSettings()).toEqual({
 			defaultMaxTurns: 5,
@@ -54,8 +52,6 @@ describe("loadSettings", () => {
 			unconsumedSessionRetentionMinutes: 60,
 			excludedExtensionPackages: ["foo", "bar"],
 			promptInheritance: { openai: "portable" },
-			agentModels: { scout: "haiku" },
-			agentThinking: { scout: "high" },
 		});
 	});
 });
@@ -112,28 +108,6 @@ describe("SettingsManager", () => {
 		const stored = loadSettings();
 		expect(stored.consumedSessionRetentionMinutes).toBe(1);
 		expect(stored.unconsumedSessionRetentionMinutes).toBe(5);
-	});
-
-	it("applies and persists per-agent models and thinking levels", () => {
-		const manager = new SettingsManager({ emit: () => {} });
-		manager.applyAgentModel("scout", "haiku");
-		manager.applyAgentThinking("scout", "high");
-		const stored = loadSettings();
-		expect(stored.agentModels).toEqual({ scout: "haiku" });
-		expect(stored.agentThinking).toEqual({ scout: "high" });
-	});
-
-	it("keeps resets in memory but stale entries survive persistence (suspected bug)", () => {
-		const manager = new SettingsManager({ emit: () => {} });
-		manager.applyAgentModel("scout", "haiku");
-		manager.applyAgentThinking("scout", "high");
-		manager.applyAgentModel("scout", undefined);
-		manager.applyAgentThinking("scout", undefined);
-		expect(manager.agentModels).toEqual({});
-		expect(manager.agentThinking).toEqual({});
-		const stored = loadSettings();
-		expect(stored.agentModels).toEqual({ scout: "haiku" });
-		expect(stored.agentThinking).toEqual({ scout: "high" });
 	});
 
 	it("emits settings events on change and load", () => {
