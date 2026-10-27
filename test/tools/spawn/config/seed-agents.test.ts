@@ -89,6 +89,32 @@ describe("provisionDefaultAgents", () => {
 		provisionDefaultAgents(targetDir, loadPackagedSeedAgents(), legacyDir);
 		expect(readFileSync(join(targetDir, "qa.md"), "utf8")).toBe(seededContent("qa"));
 	});
+
+	it("deletes the legacy dir after provisioning with a legacyDir", () => {
+		const targetDir = freshDir();
+		const legacyDir = makeTempDir("legacy");
+		dirs.push(legacyDir);
+		writeFileSync(join(legacyDir, "general-purpose.md"), "My customized general prompt.", "utf8");
+		provisionDefaultAgents(targetDir, loadPackagedSeedAgents(), legacyDir);
+		expect(existsSync(legacyDir)).toBe(false);
+	});
+
+	it("leaves the legacy dir untouched when the marker already exists", () => {
+		const targetDir = freshDir();
+		provisionDefaultAgents(targetDir, loadPackagedSeedAgents());
+		const legacyDir = makeTempDir("legacy");
+		dirs.push(legacyDir);
+		writeFileSync(join(legacyDir, "qa.md"), "keep me", "utf8");
+		provisionDefaultAgents(targetDir, loadPackagedSeedAgents(), legacyDir);
+		expect(existsSync(legacyDir)).toBe(true);
+		expect(readFileSync(join(legacyDir, "qa.md"), "utf8")).toBe("keep me");
+	});
+
+	it("does nothing extra without a legacyDir", () => {
+		const targetDir = freshDir();
+		expect(() => provisionDefaultAgents(targetDir, loadPackagedSeedAgents(), undefined)).not.toThrow();
+		expect(existsSync(join(targetDir, AGENTS_INITIALIZED_MARKER))).toBe(true);
+	});
 });
 
 describe("loadPackagedSeedAgents", () => {

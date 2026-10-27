@@ -234,14 +234,14 @@ The model spawns agents with the `spawn` tool (`spawn_type`, `prompt`, `descript
 
 ### Agent definitions
 
-Every agent — packaged or your own — is a markdown file: `~/.pi/couralabs/agents/<name>.md` (global) and `<project>/.pi/couralabs/agents/<name>.md` (project). The filename without its extension is the agent name, and a project file with the same name replaces the global definition wholesale. The old locations — `~/.agents/agents/`, `<project>/.agents/agents/`, and `~/.pi/agent/agents/` — are no longer read.
+Every agent — packaged or your own — is a markdown file: `~/.pi/couralabs/subagents/<name>.md` (global) and `<project>/.pi/couralabs/subagents/<name>.md` (project). The filename without its extension is the agent name, and a project file with the same name replaces the global definition wholesale. The old locations — `~/.agents/agents/`, `<project>/.agents/agents/`, and `~/.pi/agent/agents/` — are no longer read.
 
-Six agents ship with the package — `general-purpose`, `plan-reviewer`, `Arquitect`, `Code-Review`, `qa`, and `Explore` — and the first load copies any that are missing into `~/.pi/couralabs/agents/`, then drops a `.initialized` marker there. The marker is what makes deletion stick: while it exists, missing packaged files are never recreated, so deleting an agent file removes it permanently. Deleting the whole directory resets seeding; deleting just the marker reseeds the files that are missing without overwriting the ones you edited.
+Six agents ship with the package — `general-purpose`, `plan-reviewer`, `Arquitect`, `Code-Review`, `qa`, and `Explore` — and the first load copies any that are missing into `~/.pi/couralabs/subagents/`, then drops a `.initialized` marker there. The marker is what makes deletion stick: while it exists, missing packaged files are never recreated, so deleting an agent file removes it permanently. Deleting the whole directory resets seeding; deleting just the marker reseeds the files that are missing without overwriting the ones you edited.
 
 An agent file is YAML frontmatter plus a markdown body, where the body is the agent's system prompt:
 
 ```
-── ~/.pi/couralabs/agents/Code-Review.md ──
+── ~/.pi/couralabs/subagents/Code-Review.md ──
 ---
 description: "Reviews code for correctness, style, and maintainability, providing detailed feedback and suggestions for improvement."
 display_name: "Review Code"
@@ -273,7 +273,7 @@ The `spawn` call's `model`, `thinking`, `max_turns`, and `inherit_context` param
 
 The spawn tool description lists every enabled agent, grouped as **Global agents** and **Project agents**, each with its description and current model, followed by the `tool_guideline` line of every agent that has one.
 
-If you had customized prompts under the retired `~/.pi/couralabs/prompts/subagents/`, the first initialization preserves them: a legacy prompt file with a non-empty body becomes the body of the corresponding new agent file (packaged frontmatter, your text); otherwise the packaged file is copied as-is. The legacy directory is not deleted automatically — move anything else you want to keep and remove it yourself.
+If you had customized prompts under the retired `~/.pi/couralabs/prompts/subagents/`, the first initialization preserves them: a legacy prompt file with a non-empty body becomes the body of the corresponding new agent file (packaged frontmatter, your text); otherwise the packaged file is copied as-is. Once the new agent files are written and the marker is in place, the legacy directory itself is deleted automatically (only `~/.pi/couralabs/prompts/subagents/` is removed; sibling folders such as `prompts/submodes/` and `prompts/modes/` are left untouched). If the marker already exists, nothing is deleted.
 
 Lifecycle events (`spawn:started`, `completed`, `failed`, `resuming`, `resumed`, `compacted`, `settings_loaded`, `settings_changed`) are emitted on `pi.events`, and a typed `SpawnService` is published for other extensions.
 
@@ -379,7 +379,7 @@ Registers a `claude` provider with `claude-opus-5-5`, `claude-sonnet-5-5`, and `
 - **Claude mode.** Selecting a `claude/*` model forces the Claude mode and disables `/mode pi` and `/mode work`. Plan, Grill, and Straight submodes keep working, with tool names mapped to the SDK's (`read` is `Read`, `find` is `Glob`, and so on). Switching to another model restores the previous mode and pi's tools.
 - **Tool ownership.** SDK built-ins (`Read`, `Write`, `Edit`, `Bash`, `Grep`, `Glob`, `WebFetch`, `WebSearch`, `Agent`, `AskUserQuestion`, `TaskStop`, `Skill`) run in the SDK and show up as mirror tools in pi's renderers. `codemode`, `plan-write`, and `submode-exit` run in pi and are reached by the SDK as `mcp__pi__*`. `AskUserQuestion` uses the `ask` dialog.
 - **Redirected commands.** `/compact`, `/new`, `/model`, `/job*`, and `/spawn:*` act on the SDK session while a Claude model is active. SDK slash commands appear as pass-through pi commands.
-- **Subagents.** The agent definitions in `~/.pi/couralabs/agents/*.md` and `<project>/.pi/couralabs/agents/*.md` become SDK agent definitions.
+- **Subagents.** The agent definitions in `~/.pi/couralabs/subagents/*.md` and `<project>/.pi/couralabs/subagents/*.md` become SDK agent definitions.
 - **MCP servers can appear twice.** The SDK loads your `~/.claude` settings, CLAUDE.md, hooks, and MCP servers, while pi's MCP servers are reachable through `codemode`. The same server may be available both ways; this is allowed.
 
 **Authentication.** pi-adhd never handles Claude credentials: no `/login` entry, no reading of `~/.claude`, nothing written to `auth.json`. The bundled `claude` binary uses your own `ANTHROPIC_API_KEY` or your own `claude /login` session.
@@ -523,7 +523,7 @@ pi --use-theme synthwave84
 | The ADHD output rules | `~/.pi/couralabs/prompts/modes/work.md` (offloaded from `extensions/agent/modes/prompts/work.md` on load) |
 | A `/cmd:<name>` prompt command | `extensions/agent/commands/index.ts` (scans `.agents/commands` + `.claude/commands`) |
 | A submode's prompt | `~/.pi/couralabs/prompts/submodes/<name>.md` (offloaded from `extensions/agent/submodes/prompts/<name>.md` on load) |
-| A spawned agent's prompt, model, or tools | `~/.pi/couralabs/agents/<name>.md` (project: `<project>/.pi/couralabs/agents/<name>.md`) |
+| A spawned agent's prompt, model, or tools | `~/.pi/couralabs/subagents/<name>.md` (project: `<project>/.pi/couralabs/subagents/<name>.md`) |
 | Submode tool whitelists | `extensions/agent/submodes/index.ts` |
 | Footer layout | `extensions/ui/footer/render.ts` |
 | Prompt box drawing | `extensions/ui/editor/field-editor.ts` |

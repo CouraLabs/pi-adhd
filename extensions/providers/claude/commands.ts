@@ -149,7 +149,7 @@ const spawnSessionsRedirect: CommandRedirect = async ({ context }) => {
 const spawnSettingsRedirect: CommandRedirect = async ({ context }) => {
 	report(
 		context,
-		"Pi spawn limits do not apply to Claude subagents. Edit max_turns and model in ~/.pi/couralabs/agents/*.md (project: .pi/couralabs/agents/*.md). " +
+		"Pi spawn limits do not apply to Claude subagents. Edit max_turns and model in ~/.pi/couralabs/subagents/*.md (project: .pi/couralabs/subagents/*.md). " +
 			SPAWN_CHANGES_NOTICE,
 		"warning",
 	);

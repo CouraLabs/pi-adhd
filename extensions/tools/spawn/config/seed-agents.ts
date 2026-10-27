@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
+import { debugLog } from "../debug.ts";
 import { AGENTS_INITIALIZED_MARKER } from "./agent-dirs.ts";
 
 export interface SeedFile {
@@ -18,6 +19,15 @@ export function provisionDefaultAgents(targetDir: string, seeds: readonly SeedFi
 		writeFileSync(destinationPath, resolveSeedContent(seed, legacyDir), "utf8");
 	}
 	writeFileSync(markerPath, "", "utf8");
+	if (legacyDir) deleteLegacyDir(legacyDir);
+}
+
+function deleteLegacyDir(legacyDir: string): void {
+	try {
+		rmSync(legacyDir, { recursive: true, force: true });
+	} catch (err) {
+		debugLog("deleteLegacyDir", err);
+	}
 }
 
 function resolveSeedContent(seed: SeedFile, legacyDir?: string): string {

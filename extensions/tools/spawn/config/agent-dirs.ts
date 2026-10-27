@@ -4,9 +4,9 @@ import { getAgentDir } from "@earendil-works/pi-coding-agent";
 export const AGENTS_INITIALIZED_MARKER = ".initialized";
 
 export function globalAgentsDir(): string {
-	return join(dirname(getAgentDir()), "couralabs", "agents");
+	return join(dirname(getAgentDir()), "couralabs", "subagents");
 }
 
 export function projectAgentsDir(cwd: string): string {
-	return join(cwd, ".pi", "couralabs", "agents");
+	return join(cwd, ".pi", "couralabs", "subagents");
 }

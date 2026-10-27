@@ -38,9 +38,9 @@ function load(): Map<string, AgentConfig> {
 beforeAll(() => {
 	rootDir = mkdtempSync(join(tmpdir(), "pi-adhd-agents-"));
 	agentDirState.dir = join(rootDir, "agent");
-	globalDir = join(dirname(agentDirState.dir), "couralabs", "agents");
+	globalDir = join(dirname(agentDirState.dir), "couralabs", "subagents");
 	projectDir = join(rootDir, "project");
-	projectAgentsDir = join(projectDir, ".pi", "couralabs", "agents");
+	projectAgentsDir = join(projectDir, ".pi", "couralabs", "subagents");
 	mkdirSync(globalDir, { recursive: true });
 	mkdirSync(projectAgentsDir, { recursive: true });
 });
