@@ -1,28 +1,12 @@
-/**
- * Wraps the built-in tool renderers so each call is framed inline: a
- * status-colored pick glyph, the tool name in PascalCase, and a dim rule
- * under the glyph down the body rows — no background box.
- */
-
 import { getLanguageFromPath, highlightCode, type Theme, type ThemeColor, type ToolRenderers } from "@earendil-works/pi-coding-agent";
 import { getKeybindings, mixColors, type Color, type Component } from "@earendil-works/pi-tui";
 import { stripStyling } from "../../../shared/format.ts";
 import { ToolFrame, pascalCase } from "./tool-frame.ts";
 
-/** Tool render context type, derived because the package does not re-export it. */
 export type ToolRenderContext = Parameters<NonNullable<ToolRenderers["renderCall"]>>[2];
 
-/** Lifecycle of one tool row, driving the status glyph's color. */
 export type ToolStatus = "called" | "running" | "error" | "finished";
 
-/**
- * Status → semantic color token, driving both the glyph and the rule hanging
- * from it so the frame reads as one colored stem.
- *
- * `called` maps to `muted` — the call is mere paperwork until it runs — and
- * `running` to `warning`: pi has no `info` token, and the amber reads as
- * in-progress while success/error own their semantic slots.
- */
 const STATUS_TOKEN: Record<ToolStatus, ThemeColor> = {
 	called: "muted",
 	running: "warning",
@@ -30,57 +14,40 @@ const STATUS_TOKEN: Record<ToolStatus, ThemeColor> = {
 	finished: "success",
 };
 
-/**
- * The call header's status: `called` while only the streamed arguments exist,
- * `running` while executing, and `finished`/`error` once a final result exists.
- */
 export function callStatus(context: ToolRenderContext): ToolStatus {
 	if (!context.isPartial) return context.isError ? "error" : "finished";
 	return context.executionStarted ? "running" : "called";
 }
 
-/** Result-side status: streaming results run; final ones settle into success/error. */
 export function resultStatus(options: { isPartial: boolean }, context: ToolRenderContext): ToolStatus {
 	return options.isPartial || context.isPartial ? "running" : context.isError ? "error" : "finished";
 }
 
-/** The status's semantic color as a Color value from the theme. */
 function statusColor(theme: Theme, status: ToolStatus): Color {
 	return theme.colors[STATUS_TOKEN[status]];
 }
 
-/** Paint the status icon in the status's semantic color. */
 function statusPaint(theme: Theme, status: ToolStatus): (text: string) => string {
 	const color = statusColor(theme, status);
 	return (text) => theme.style(text, { fg: color });
 }
 
-/**
- * Restyle the rewritten tool-name token: default text color, bold.
- * Applied only to the spliced token, so the rest of the header keeps the
- * renderer's own styling — and a renderer not carrying the tool name verbatim
- * (bash's `$` prompt) simply skips the restyle with its text untouched.
- */
 function nameStyle(theme: Theme): (text: string) => string {
 	return (text) => theme.style(text, { fg: "text", bold: true });
 }
 
-/** The rule below the icon, painted with the status color so the stem matches the glyph. */
 function ruleStyle(theme: Theme, status: ToolStatus): (text: string) => string {
 	return statusPaint(theme, status);
 }
 
-/** Shell renderers lead their header with the raw command — highlight it in the shell's language. */
 const SHELL_LANG: Record<string, string> = { bash: "bash", powershell: "powershell" };
 
-/** Timer fields parked on the render context's `state`, mirroring pi's tool timer. */
 interface TimerState {
 	startedAt?: number;
 	endedAt?: number;
 	interval?: ReturnType<typeof setInterval>;
 }
 
-/** Duration as `4.2s` below a minute, then `1m 30s` and `2h 3m 4s`. */
 function formatDuration(ms: number): string {
 	const totalSeconds = Math.floor(ms / 1000);
 	const minutes = Math.floor(totalSeconds / 60);
@@ -89,13 +56,6 @@ function formatDuration(ms: number): string {
 	return `${Math.floor(minutes / 60)}h ${minutes % 60}m ${remainder}s`;
 }
 
-/**
- * The call header's right-aligned time: `Elapsed 4.2s` while executing —
- * redrawn every second via `invalidate` — and `Took 4.2s` once settled,
- * preferring the result's recorded duration. Undefined before the call
- * starts. Mirrors pi's internal `toolTimerText`, which the package does not
- * re-export; shell tools skip it (bash renders its own timer in its body).
- */
 function headerTimer(context: ToolRenderContext): string | undefined {
 	const state = (context.state ??= {}) as TimerState;
 	if (context.executionStarted && state.startedAt === undefined) {
@@ -119,15 +79,8 @@ function headerTimer(context: ToolRenderContext): string | undefined {
 	return `${running ? "Elapsed" : "Took"} ${formatDuration(end - state.startedAt)}`;
 }
 
-/** Highlight runs per render frame while arguments stream; memoize per command. */
 const commandCache = new Map<string, string>();
 
-/**
- * Rewrite a shell header's command in place with syntax colors, keeping the
- * renderer's component identity — and with it pi's tool timer and component
- * reuse — intact. Malformed arguments (no string `command`) leave pi's own
- * header, invalid-arg glyph and all, untouched.
- */
 function highlightShellCommand(component: unknown, args: unknown, theme: Theme, title: string, lang: string): void {
 	const typed = args as { command?: unknown; timeout?: unknown } | undefined;
 	if (typeof typed?.command !== "string") return;
@@ -144,19 +97,9 @@ function highlightShellCommand(component: unknown, args: unknown, theme: Theme, 
 	);
 }
 
-/** The diff rows' syntax colors ride the theme; the row memo invalidates on theme change. */
 const diffRowCache = new Map<string, string>();
 let diffRowCacheTheme: Theme | undefined;
 
-/**
- * Restyle one rendered diff row with the file's syntax colors.
- *
- * pi's diff renderer paints whole lines (added green, removed red, context
- * dim) and inverse-highlights intra-line changes; this replaces the line wash
- * with real syntax colors while keeping the sign-and-line-number gutter in
- * the renderer's semantic colors. Rows that do not parse as diff lines —
- * elision markers, empty gutters — pass through untouched.
- */
 function restyleDiffRow(row: string, lang: string, theme: Theme): string {
 	if (diffRowCacheTheme !== theme) {
 		diffRowCache.clear();
@@ -165,20 +108,14 @@ function restyleDiffRow(row: string, lang: string, theme: Theme): string {
 	const cached = diffRowCache.get(row);
 	if (cached !== undefined) return cached;
 	let styled = row;
-	// The gutter round-trips verbatim — sign, pad, and number exactly as the
-	// renderer wrote them — so every row's code column stays aligned. The
-	// number is required and the separator is exactly one space (pi's format),
-	// so bare-number rows from empty source lines and elision markers fail the
-	// parse and pass through untouched instead of their digits styling as code.
+
 	const match = /^([+-]?\s*\d+)( .*)$/.exec(stripStyling(row));
 	const gutter = match?.[1] ?? "";
 	const content = match ? match[2].slice(1) : "";
 	if (match && content.trim() !== "") {
 		const sign = gutter.startsWith("+") ? "toolDiffAdded" : gutter.startsWith("-") ? "toolDiffRemoved" : undefined;
 		if (sign) {
-			// Terminals have no alpha: the wash blends the row's own diff color
-			// toward the theme's panel background, reading as a transparent tint
-			// over the transcript.
+
 			const wash = mixColors(theme.colors["toolPendingBg"], theme.colors[sign], 0.2);
 			styled = `${theme.style(theme.fg(sign, `${gutter} `), { bg: wash })}${theme.style(highlightCode(content, lang)[0] ?? content, { bg: wash })}`;
 		} else {
@@ -190,14 +127,12 @@ function restyleDiffRow(row: string, lang: string, theme: Theme): string {
 	return styled;
 }
 
-/** The edit diff's language, from the edited file's extension; undefined when unknown. */
 function editLanguage(args: unknown): string | undefined {
 	const typed = args as { path?: unknown; file_path?: unknown } | undefined;
 	const path = typeof typed?.file_path === "string" ? typed.file_path : typeof typed?.path === "string" ? typed.path : undefined;
 	return path ? getLanguageFromPath(path) : undefined;
 }
 
-/** The expand keybinding's display text (`ctrl+o`), for the collapse hint. */
 function expandKey(): string {
 	const keys = getKeybindings().getKeys("app.tools.expand") ?? [];
 	return keys
@@ -210,12 +145,6 @@ function expandKey(): string {
 		.join("/");
 }
 
-/**
- * Collapsed edit rows: the header plus the changed lines. Unchanged context
- * rows (` 123 …`) drop out — the +/- hunks and the diff's own elision markers
- * survive, with a muted count of what was hidden and the expand key. Rows that
- * parse as neither diff lines nor context (error text) pass through.
- */
 function collapseEditRows(rows: string[], theme: Theme): string[] {
 	const [header, ...body] = rows;
 	let hidden = 0;
@@ -224,28 +153,21 @@ function collapseEditRows(rows: string[], theme: Theme): string[] {
 		if (bare === "") return false;
 		if (bare.startsWith("+") || bare.startsWith("-")) return true;
 		if (/^\d/.test(bare)) {
-			// Hidden context line — counted, not shown.
+
 			hidden++;
 			return false;
 		}
-		// The diff's own elision markers (`     ...`) are noise between hunks.
+
 		if (bare === "...") return false;
 		return true;
 	});
 	if (hidden > 0) {
-		// The lead ellipsis keeps the row out of the diff restyler's gutter parse —
-		// a leading digit would read as a context line's line number.
+
 		kept.push(theme.fg("muted", `… ${hidden} context line${hidden === 1 ? "" : "s"} hidden · ${expandKey()} to expand`));
 	}
 	return header === undefined ? kept : [header, ...kept];
 }
 
-/**
- * Stable collapse wrapper around pi's reused edit call Box: pi's edit renderer
- * reuses its Box via `state.callComponent`, and this wrapper must not disturb
- * that identity, so it holds the Box rather than replacing it and renders
- * through it each frame — filtering rows only while the tool view is collapsed.
- */
 class EditBody implements Component {
 	collapsed = false;
 	private inner: Component | undefined;
@@ -267,7 +189,6 @@ class EditBody implements Component {
 	}
 }
 
-/** One collapse wrapper per frame, so the reused Box stays wrapped across frames. */
 const editBodies = new WeakMap<ToolFrame, EditBody>();
 
 function editBodyFor(frame: ToolFrame): EditBody {
@@ -279,13 +200,6 @@ function editBodyFor(frame: ToolFrame): EditBody {
 	return body;
 }
 
-/**
- * Muted summary for a result body that renders nothing, so the frame keeps a
- * second row. Two built-ins do this: `read` hides its body when collapsed
- * (summary counts the lines the result carried) and `write` renders no body
- * on success at all (summary counts the lines its `content` argument wrote).
- * Every other empty body falls back to a generic line count, or `no output`.
- */
 function resultSummary(
 	toolName: string,
 	result: Parameters<NonNullable<ToolRenderers["renderResult"]>>[0],
@@ -306,11 +220,6 @@ function resultSummary(
 	return theme.fg("muted", lines > 0 ? plural(lines) : "no output");
 }
 
-/**
- * The `edit` renderer paints its own background box; strip it so calls render
- * flat like every other tool. Duck-typed so it works even when the host and
- * extension resolve different copies of pi-tui.
- */
 function neutralise(component: unknown): void {
 	if (!component || typeof component !== "object") return;
 	const box = component as {
@@ -325,10 +234,6 @@ function frameFor(context: ToolRenderContext): ToolFrame {
 	return context.lastComponent instanceof ToolFrame ? context.lastComponent : new ToolFrame();
 }
 
-/**
- * Wrap a tool's renderers, seeding the frame with the PascalCase tool name so
- * the header line can be rewritten in place.
- */
 export function wrapRenderers(toolName: string, renderers: ToolRenderers): ToolRenderers {
 	const originalCall = renderers.renderCall;
 	const originalResult = renderers.renderResult;
@@ -344,8 +249,7 @@ export function wrapRenderers(toolName: string, renderers: ToolRenderers): ToolR
 				neutralise(context.state?.callComponent);
 				const lang = toolName === "edit" ? editLanguage(args) : undefined;
 				const status = callStatus(context);
-				// Edit collapses to its changed lines while the tool view is collapsed:
-				// pi's renderer ignores `expanded` and always paints the full diff.
+
 				let body: Component = inner;
 				if (toolName === "edit") {
 					const editBody = editBodyFor(frame);
@@ -374,9 +278,7 @@ export function wrapRenderers(toolName: string, renderers: ToolRenderers): ToolR
 				const inner = originalResult(result, options, theme, { ...context, lastComponent: frame.inner });
 				neutralise(inner);
 				neutralise(context.state?.callComponent);
-				// Result bodies render plain — the call header above carries the icon —
-				// but the stem keeps the status color, settling with the result. A
-				// settled body that renders nothing falls back to its summary row.
+
 				const lang = toolName === "edit" ? editLanguage(context.args) : undefined;
 				frame.set(
 					inner,

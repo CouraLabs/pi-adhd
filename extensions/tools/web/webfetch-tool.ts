@@ -1,7 +1,3 @@
-/**
- * webfetch-tool.ts — the `webfetch` tool: fetch a URL as plain text.
- */
-
 import { StringEnum } from "@earendil-works/pi-ai";
 import type {
 	AgentToolResult,
@@ -51,7 +47,6 @@ function errorResult(error: unknown, target: string, signal?: AbortSignal): Tool
 	};
 }
 
-/** The first `max` lines of `text`, for the inline result preview. */
 function previewLines(text: string, max: number): string[] {
 	const lines = text.split("\n");
 	const shown = lines.slice(0, max).map((line) => `  ${line}`);

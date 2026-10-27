@@ -1,17 +1,3 @@
-/**
- * pomodoro — the `/pomodoro` command: a work/break session built on the shared
- * timer registry.
- *
- * `/pomodoro` opens a config dialog (work, short break, long break, rounds) and
- * starts the first work phase. Each phase is a normal countdown in the shared
- * `timers` registry, so the footer shows the current phase exactly like a plain
- * `/timer`. When a work phase ends the next break is scheduled automatically,
- * and the session ends after the long break that follows the last round.
- *
- * The session is session-scoped: the pending phase timer is cancelled by the
- * idempotent `session_shutdown` handler. `/pomodoro stop` cancels early.
- */
-
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import { POMODORO_BREAK, POMODORO_WORK } from "../../../shared/glyphs.ts";
@@ -28,7 +14,7 @@ import { showPomodoroConfig } from "./pane.ts";
 
 interface Session {
 	config: PomodoroConfig;
-	/** Current work round, 1-based. */
+
 	round: number;
 	phase: PomodoroPhase;
 	handle?: TimerHandle;
@@ -50,7 +36,6 @@ function durationMsFor(phase: PomodoroPhase, config: PomodoroConfig): number {
 	return minutes * 60_000;
 }
 
-/** Headless-safe output: notify in dialog-capable UIs, stderr text elsewhere. */
 function emit(ctx: ExtensionCommandContext, text: string, severity: "info" | "warning" | "error" = "info"): void {
 	if (ctx.hasUI) {
 		ctx.ui.notify(text, severity);
@@ -63,7 +48,6 @@ export default function pomodoroExtension(pi: ExtensionAPI): void {
 	markExtensionLoaded("pomodoro");
 	let session: Session | undefined;
 
-	/** Bell + in-app + OS announcement for a phase boundary. */
 	const announce = (ctx: ExtensionCommandContext, message: string): void => {
 		ringTerminalBell();
 		emit(ctx, `${POMODORO_WORK} ${message}`);
@@ -107,7 +91,6 @@ export default function pomodoroExtension(pi: ExtensionAPI): void {
 			return;
 		}
 
-		// Long break: the session is complete.
 		announce(ctx, `Pomodoro complete — ${config.rounds} work sessions done.`);
 		session = undefined;
 	};
@@ -145,8 +128,7 @@ export default function pomodoroExtension(pi: ExtensionAPI): void {
 			}
 
 			const defaults = loadSettings().pomodoro;
-			// The config dialog needs the TUI; RPC and headless hosts start with the
-			// saved configuration.
+
 			const config = ctx.mode === "tui" ? await showPomodoroConfig(ctx.ui, defaults) : defaults;
 			if (!config) {
 				emit(ctx, "Pomodoro cancelled.");

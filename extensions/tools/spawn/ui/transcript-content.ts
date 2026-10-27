@@ -1,16 +1,3 @@
-/**
- * transcript-content.ts — the rows the `/spawn:sessions` overlay paints.
- *
- * Owns the transcript's content model: the `SessionMessage` → Pi-component
- * mapping (mirroring Pi's own interactive-mode `renderSessionContext`), and the
- * rendered rows those components produce at a given width. The overlay
- * (`session-navigator.ts`) owns scroll state, chrome, and key handling, and
- * asks this collaborator only for rows — it never reaches into the components.
- *
- * Lives in the SDK/TUI layer rather than the pure `session-navigation.ts` core
- * because Pi's per-entry components require a `TUI`, `cwd`, and markdown theme.
- */
-
 import {
   AssistantMessageComponent,
   BashExecutionComponent,
@@ -27,9 +14,6 @@ import { describeActivity } from "./display.ts";
 import { GLYPHS } from "./glyphs.ts";
 import type { TranscriptSource } from "./session-navigation.ts";
 
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** The SDK/TUI environment Pi's per-entry components need, plus the transcript's source. */
 export interface TranscriptContentOptions {
   tui: TUI;
   cwd: string;
@@ -37,45 +21,25 @@ export interface TranscriptContentOptions {
   source: TranscriptSource;
 }
 
-/**
- * The transcript's renderable rows: settled history rendered through Pi's
- * per-entry components, followed by the running agent's activity row.
- *
- * Settled rows are rendered once per width and cached, so a paint or a scroll
- * costs a slice rather than a walk of the whole component tree. The activity
- * row is recomputed per call — it is two rows, and it tracks live state the
- * source updates without a rebuild.
- *
- * Settled history is held as one block of components per message, so a message
- * that settles appends a block and a tool result touches only its own — neither
- * discards the rest of the transcript's rendering. This is sound because the
- * agent core pushes a finished message into its message array before notifying
- * listeners, so at event time the settled prefix is already visible.
- *
- * The message currently being streamed is held as its own component, updated
- * per delta exactly as Pi's interactive mode does, so a token never touches
- * settled history. The two provably cannot overlap: the agent core keeps the
- * in-flight message outside its message array until it settles.
- */
 export class TranscriptContent {
   private readonly options: TranscriptContentOptions;
-  /** Settled history, one block per message that produced components. */
+
   private blocks: SettledBlock[] = [];
-  /** How many source messages have been consumed into `blocks`. */
+
   private consumedCount = 0;
-  /** The last consumed message; a mismatch means history was rewritten. */
+
   private lastConsumed: SessionMessage | undefined;
-  /** Whether any consumed block holds components, driving user-message spacing. */
+
   private hasVisibleContent = false;
-  /** In-flight tool components by tool-call id, pairing a later result to its block. */
+
   private readonly pendingTools = new Map<string, PendingTool>();
-  /** Width `blocks` and `settledRows` were rendered at. */
+
   private settledWidth: number | undefined;
-  /** Concatenation of every block's rows, or undefined when the cache is cold. */
+
   private settledRows: readonly string[] | undefined;
-  /** The message being streamed right now, rendered below settled history. */
+
   private inFlight: AssistantMessageComponent | undefined;
-  /** Width `inFlightRows` was rendered at. */
+
   private inFlightWidth: number | undefined;
   private inFlightRows: readonly string[] | undefined;
 
@@ -84,13 +48,11 @@ export class TranscriptContent {
     this.consumeSettled();
   }
 
-  /** Total content rows at `width`: settled history plus the live tail. */
   lineCount(width: number): number {
     if (width <= 0) return 0;
     return this.settled(width).length + this.tail(width).length;
   }
 
-  /** Rows `[start, start + count)` at `width`, clamped to what exists. */
   slice(width: number, start: number, count: number): string[] {
     if (width <= 0) return [];
     const settled = this.settled(width);
@@ -103,12 +65,6 @@ export class TranscriptContent {
     return rows;
   }
 
-  /**
-   * Route one session event to the narrowest update it allows. A delta on the
-   * in-flight message touches only that component. A run or compaction boundary
-   * may have rewritten or mutated history in place, so it rebuilds wholesale.
-   * Everything else consumes whatever settled since the last check.
-   */
   apply(event?: AgentSessionEvent): void {
     const partial = inFlightAssistantMessage(event);
     if (partial) {
@@ -123,7 +79,6 @@ export class TranscriptContent {
     this.consumeSettled();
   }
 
-  /** Drop cached rendering held by the mounted components and by this object. */
   invalidate(): void {
     for (const block of this.blocks) {
       block.container.invalidate();
@@ -134,9 +89,6 @@ export class TranscriptContent {
     this.inFlightRows = undefined;
   }
 
-  // ---- Private ----
-
-  /** Settled rows at `width`; each block renders once per width and content change. */
   private settled(width: number): readonly string[] {
     if (this.settledWidth !== width) {
       this.settledWidth = width;
@@ -153,7 +105,6 @@ export class TranscriptContent {
     return rows;
   }
 
-  /** Rows below settled history: the in-flight message, then the activity row. */
   private tail(width: number): readonly string[] {
     const rows = [...this.inFlightRendered(width)];
     const streaming = this.options.source.streaming();
@@ -164,7 +115,6 @@ export class TranscriptContent {
     return rows;
   }
 
-  /** The in-flight message's rows, re-rendered independently of settled history. */
   private inFlightRendered(width: number): readonly string[] {
     if (!this.inFlight) return [];
     if (this.inFlightWidth !== width) {
@@ -186,7 +136,6 @@ export class TranscriptContent {
     this.inFlightRows = undefined;
   }
 
-  /** Discard all settled state, so the next consume rebuilds from scratch. */
   private reset(): void {
     this.blocks = [];
     this.consumedCount = 0;
@@ -197,11 +146,6 @@ export class TranscriptContent {
     this.clearInFlight();
   }
 
-  /**
-   * Append blocks for every message that settled since the last check. When the
-   * consumed prefix no longer mirrors the source — history replaced wholesale by
-   * compaction or branching — start over rather than appending onto stale blocks.
-   */
   private consumeSettled(): void {
     const messages = this.options.source.getMessages();
     if (this.hasRewrittenHistory(messages)) this.reset();
@@ -217,12 +161,6 @@ export class TranscriptContent {
     return this.consumedCount > 0 && messages[this.consumedCount - 1] !== this.lastConsumed;
   }
 
-  /**
-   * Map one settled message onto its own block of Pi's per-entry components,
-   * mirroring Pi's own interactive-mode `renderSessionContext` mapping.
-   * `custom`-role messages produce no block — rendering them needs the child
-   * session's message-renderer registry, which the navigator does not hold.
-   */
   private consumeMessage(message: SessionMessage): void {
     switch (message.role) {
       case "assistant":
@@ -267,7 +205,6 @@ export class TranscriptContent {
     this.hasVisibleContent = true;
   }
 
-  /** A tool result mutates the block holding its call; no other block changes. */
   private consumeToolResult(message: Extract<SessionMessage, { role: "toolResult" }>): void {
     const pending = this.pendingTools.get(message.toolCallId);
     if (!pending) return;
@@ -292,7 +229,6 @@ export class TranscriptContent {
     this.hasVisibleContent = true;
   }
 
-  /** Compaction and branch summaries share the same spacer-plus-expanded shape. */
   private consumeSummary(
     summary: CompactionSummaryMessageComponent | BranchSummaryMessageComponent,
   ): void {
@@ -310,36 +246,23 @@ export class TranscriptContent {
   }
 }
 
-/** One settled message's components plus its rows at the current width. */
 interface SettledBlock {
   readonly container: Container;
   rows: readonly string[] | undefined;
 }
 
-/** A tool call awaiting its result, and the block whose rows it will invalidate. */
 interface PendingTool {
   readonly component: ToolExecutionComponent;
   readonly block: SettledBlock;
 }
 
-/** The assistant variant of a session message, as Pi's components consume it. */
 type AssistantSessionMessage = Extract<SessionMessage, { role: "assistant" }>;
 
-/**
- * The in-flight assistant message a partial event carries, or undefined when the
- * event is anything else. A partial for another role means a message settled
- * elsewhere in the history, which only a rebuild can pick up.
- */
 function inFlightAssistantMessage(event?: AgentSessionEvent): AssistantSessionMessage | undefined {
   if (event?.type !== "message_start" && event?.type !== "message_update") return undefined;
   return event.message.role === "assistant" ? event.message : undefined;
 }
 
-/**
- * Render a user message (skill block + text) into the block, mirroring Pi.
- * Whether a leading spacer is needed is a whole-transcript property, so the
- * caller — which alone knows what precedes this block — supplies it.
- */
 function addUserComponents(
   container: Container,
   content: string | readonly { type: string; text?: string }[],
@@ -364,7 +287,6 @@ function addUserComponents(
   }
 }
 
-/** Concatenate the text blocks of a user message's content (mirrors Pi). */
 function userMessageText(content: string | readonly { type: string; text?: string }[]): string {
   if (typeof content === "string") return content;
   return content

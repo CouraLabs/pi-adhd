@@ -1,21 +1,3 @@
-/**
- * plan-review.ts — the fullscreen, line-addressable plan review pane.
- *
- * `plan-write` blocks the agent run and mounts this pane through `ui.custom`.
- * It renders the plan as line-numbered markdown, lets the reviewer scroll the
- * plan and attach a comment to any source line, and settles with one of three
- * verdicts:
- *
- *   - approve          → exit the submode and implement the plan
- *   - approve-compact  → compact the session, then implement the plan
- *   - reject           → stop the run and hand control back to the user
- *
- * Comments are keyed by source line, so a rejection carries the exact line and
- * its text back to the model. The pane follows the session-navigator mount
- * strategy: docked in regular mode, a focused fullscreen overlay in fullscreen
- * mode (pi's viewport claims PgUp/PgDn/Home/End from docked components).
- */
-
 import type { ExtensionUIContext, KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import { getMarkdownTheme } from "@earendil-works/pi-coding-agent";
 import {
@@ -37,16 +19,13 @@ import { labeledRule } from "../../../shared/labeled-rule.ts";
 import { probeTuiMode } from "../../../shared/tui-mode.ts";
 import { REVIEW_COMMENT, REVIEW_COMMENT_MARK, REVIEW_CURSOR } from "../../../shared/glyphs.ts";
 
-/** The three ways a reviewer can settle a plan. */
 export type PlanVerdict = "approve" | "approve-compact" | "reject";
 
-/** A comment anchored to a 1-based source line of the plan. */
 export interface PlanLineComment {
 	line: number;
 	text: string;
 }
 
-/** What the review pane returns to `plan-write`. */
 export interface PlanReviewResult {
 	verdict: PlanVerdict;
 	comments: PlanLineComment[];
@@ -62,7 +41,7 @@ interface PlanReviewPaneOptions {
 }
 
 interface Row {
-	/** 0-based source line the row belongs to. */
+
 	line: number;
 	text: string;
 	kind: "code" | "comment";
@@ -73,7 +52,6 @@ interface RowsCache {
 	rows: Row[];
 }
 
-/** Mount the fullscreen (fullscreen mode) or docked (regular mode) review pane. */
 export async function showPlanReview(
 	ui: ExtensionUIContext,
 	plan: string,
@@ -250,14 +228,11 @@ export class PlanReviewPane implements Component {
 		return [header, ...body, ...footer];
 	}
 
-	/** Cancel from outside the pane (agent turn aborted). */
 	cancel(): void {
 		if (this.#closed) return;
 		this.#closed = true;
 		this.#done(undefined);
 	}
-
-	// ---- Private ----
 
 	#requestRender(): void {
 		this.#tui.requestRender();
@@ -340,7 +315,7 @@ export class PlanReviewPane implements Component {
 
 	#viewportHeight(totalRows: number, editorRows: number): number {
 		const terminalRows = this.#tui.terminal.rows || 40;
-		// Fullscreen fills the terminal; docked sizes to content, capped.
+
 		if (this.#fullscreen) return Math.max(3, terminalRows - 2 - editorRows);
 		const cap = Math.max(3, Math.floor(terminalRows * 0.7) - 2 - editorRows);
 		return Math.max(3, Math.min(totalRows, cap));

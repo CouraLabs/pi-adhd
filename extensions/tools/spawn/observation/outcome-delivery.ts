@@ -1,60 +1,22 @@
-/**
- * outcome-delivery.ts — Shared rendering for a spawn outcome.
- *
- * A terminated child's outcome reaches the parent model through exactly one
- * carrier: the foreground tool return or the resume tool return. Each carrier
- * owns its own framing (spawn notes, status header) and its own truncation,
- * but the body they wrap is the same fact, so it is rendered here rather than
- * twice.
- *
- * A workspace notice rides the same carriers without being part of the
- * outcome: it reports where a teardown put the child's work, which the parent
- * needs whether the run succeeded or failed.
- *
- * The notice and the ask-back affordance are appended in one fixed order by
- * `renderOutcomeAddenda`, so the carriers that compose them cannot disagree
- * about what follows the body. The affordance is the one addendum that asks
- * the parent to call back, so it is also the one that has to know whether that
- * call would be accepted.
- *
- * Pure functions only: no SDK types, no record types, no side effects.
- */
-
 import type { ResumeRefusal } from "../lifecycle/spawn.ts";
 import type { SpawnStatus } from "../lifecycle/spawn-state.ts";
 import { type TurnBudget, wrappedUpAtTurnLimit } from "../lifecycle/turn-limits.ts";
 
-/**
- * What a terminal status means, independent of how a carrier renders it.
- *
- * One source of truth for the facts, because the carriers disagreed on them:
- * the nudge reported an abort as "max turns exceeded" while the foreground
- * result added "output may be incomplete", and the pull and resume carriers
- * reported nothing at all. Presentation still differs — see the two renderers
- * below — because a standalone label and a mid-sentence parenthetical are
- * different grammar, not different facts.
- */
 interface StatusMeaning {
-	/** Sentence-initial label, e.g. "Wrapped up". */
+
 	label: string;
-	/** Why, without terminal punctuation, e.g. "after turn-budget warning". */
+
 	detail: string;
 }
 
 const STATUS_MEANINGS: Partial<Record<SpawnStatus, StatusMeaning>> = {
 	aborted: { label: "Aborted", detail: "turn limit reached, output may be incomplete" },
-	// "user request" rather than "stopped by user": the detail must stand on its
-	// own after the label, which both presentations already supply.
+
 	stopped: { label: "Stopped", detail: "user request" },
 };
 
-/** A run that finished on its own after the harness warned it about its turn limit. */
 const WRAPPED_UP: StatusMeaning = { label: "Wrapped up", detail: "after turn-budget warning" };
 
-/**
- * Only what the status presentations read: the status, the error an error
- * label names, and the budget that qualifies a completed run.
- */
 export interface StatusOutcome {
 	status: SpawnStatus;
 	error?: string;
@@ -65,58 +27,25 @@ function statusMeaning(outcome: StatusOutcome): StatusMeaning | undefined {
 	return wrappedUpAtTurnLimit(outcome) ? WRAPPED_UP : STATUS_MEANINGS[outcome.status];
 }
 
-/**
- * Why a resume is unavailable *for good*, worded as a subordinate clause.
- *
- * The resume door words the same three facts as standalone refusals; a clause
- * that continues someone else's sentence is different grammar, not a different
- * fact — the split `STATUS_MEANINGS` makes between `label` and `detail`.
- *
- * `still-running` is excluded by type rather than by omission: a refusal that
- * lifts when the run settles asks the parent to wait, where these three ask it
- * to give up, so it gets its own sentence in the renderer below.
- */
 const RESUME_REFUSAL_CLAUSES: Record<Exclude<ResumeRefusal, "still-running">, string> = {
-	// Deliberately not "...no session to resume": the clause is followed by a
-	// colon, and "resume:" is the exact token the parent must not see here.
+
 	"no-session": "it has no active session",
 	"session-released": "its session was released after its retention window",
 	"workspace-disposed": "it ran in an isolated workspace that has since been removed",
 };
 
-/**
- * Parenthetical suffix form, e.g. " (wrapped up — after turn-budget warning)", for a
- * carrier appending to its own sentence. Empty when the status is unremarkable
- * or when the body already carries the explanation, as an error's does.
- */
 export function renderStatusNote(outcome: StatusOutcome): string {
 	const meaning = statusMeaning(outcome);
 	if (!meaning) return "";
 	return ` (${meaning.label.toLowerCase()} \u2014 ${meaning.detail})`;
 }
 
-/**
- * Only what the body formatter reads. Narrower than any record type so a
- * caller cannot come to depend on fields this module does not use.
- */
 export interface OutcomeBody {
 	status: SpawnStatus;
 	result: string | undefined;
 	error: string | undefined;
 }
 
-/**
- * The trailing affordance for a child that ended its turn with a question.
- * Empty when the child asked nothing.
- *
- * Names the exact call that answers it when a resume would be accepted, why it
- * cannot be answered when one would be refused for good, and what to wait for
- * when the child is simply not finished — the parent is never told to make a
- * call this extension declines.
- *
- * Takes the id, question, and refusal rather than a record: the three facts it
- * needs, so a carrier holding any shape can call it.
- */
 export function renderQuestionAffordance(
 	agentId: string,
 	question: string | undefined,
@@ -147,62 +76,29 @@ export function renderQuestionAffordance(
 	);
 }
 
-/**
- * The provider's own wording for where a teardown left the child's work, for a
- * carrier appending it after the outcome body. Empty when no teardown reported
- * anything — including every run whose addendum rode the result text instead.
- *
- * Takes the notice rather than a record, so a carrier holding any shape can
- * call it, and so the framing has one home if a carrier ever needs its own.
- */
 export function renderWorkspaceNotice(notice: string | undefined): string {
 	return notice ?? "";
 }
 
-/**
- * What a carrier appends after the outcome body: where the work went, then the
- * call to action that follows it.
- *
- * The fields rather than a record, so a carrier holding any shape can call it
- * — both `Spawn` and `AgentReport` satisfy this structurally.
- */
 export interface OutcomeAddenda {
 	id: string;
 	workspaceNotice?: string;
 	pendingQuestion?: string;
-	/**
-	 * Why a resume would be refused; undefined when one would be accepted.
-	 *
-	 * Required rather than optional so a carrier that forgets it fails to
-	 * compile. An omitted optional would silently mean "resumable", which is the
-	 * fail-open this field exists to close.
-	 */
+
 	resumeRefusal: ResumeRefusal | undefined;
 }
 
-/** The addenda tail every outcome carrier appends, in one order. */
 export function renderOutcomeAddenda(outcome: OutcomeAddenda): string {
 	return (
-		// Where the work went, then the call to action that follows it.
+
 		renderWorkspaceNotice(outcome.workspaceNotice) +
 		renderQuestionAffordance(outcome.id, outcome.pendingQuestion, outcome.resumeRefusal)
 	);
 }
 
-/**
- * The outcome body every carrier reports: a running note, an error line, a
- * never-started note, or the trimmed result.
- *
- * The empty-result fallback tests truthiness rather than nullishness. A `??`
- * here passed an empty string through, which is exactly what a run whose
- * provider errored carries — so the parent received a completion header
- * followed by nothing and confabulated the child's work. The two renderers in
- * `notification.ts` always guarded this by truthiness; this is the third
- * agreeing with them (#889).
- */
 export function renderOutcomeBody(outcome: OutcomeBody): string {
 	if (outcome.status === "error") return `Error: ${outcome.error}`;
 	const trimmed = outcome.result?.trim();
-	// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- || intentional: converts falsy values to fallback
+
 	return trimmed || "No output.";
 }

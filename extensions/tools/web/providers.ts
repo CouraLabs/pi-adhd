@@ -17,7 +17,7 @@ export interface FetchProvider {
 	id: string;
 	fetch: (request: FetchRequest) => Promise<FetchResponse>;
 	isConfigured?: () => boolean;
-	/** Env var names this provider reads, shown in the /web settings view. */
+
 	env?: string[];
 }
 
@@ -42,7 +42,6 @@ export function listFetchProviders(): FetchProvider[] {
 	return [...providers().values()].filter((provider) => provider.isConfigured?.() ?? true);
 }
 
-/** Every provider with its configured state and env var names — for the settings picker. */
 export function listAllFetchProviders(): Array<{
 	id: string;
 	configured: boolean;

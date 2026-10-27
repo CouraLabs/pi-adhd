@@ -194,7 +194,6 @@ function formatStats(snapshot: AgentRunSnapshot): string {
 	return parts.join(STATS_SEPARATOR);
 }
 
-/** Strips the harness hand-back frame, agentId line and <usage> block, leaving the subagent's report. */
 export function cleanAgentReport(text: string): string {
 	const lines = text.split("\n");
 	const frameEnd = lines.findIndex((line) => line.trimEnd().endsWith("The report follows:"));

@@ -26,28 +26,21 @@ import {
 import type { ParentSessionInfo, Spawn } from "../types.ts";
 import { type AgentDetails, getDisplayName, type Theme } from "../ui/display.ts";
 
-// ---- Deps interfaces ----
-
-/** Narrow manager interface — only the methods the Agent tool calls. */
 export interface AgentToolManager {
 	spawnAndWait: (snapshot: ParentSnapshot, type: string, prompt: string, opts: AgentSpawnConfig) => Promise<Spawn>;
 	startResume: (id: string, prompt: string, options: ResumeCallOptions) => ResumeStart;
 	getRecord: (id: string) => Spawn | undefined;
 }
 
-/** Narrow runtime interface — the Agent tool's slice of SpawnRuntime. */
 export interface AgentToolRuntime {
 	buildSnapshot(inheritContext: boolean): ParentSnapshot;
 	getModelInfo(): ModelInfo;
 	getSessionInfo(): { parentSessionFile: string; parentSessionId: string };
 }
 
-/** Narrow settings accessor — only the fields the Agent tool reads. */
 export type AgentToolSettings = {
 	readonly defaultMaxTurns: number | undefined;
 };
-
-// ---- Class ----
 
 export class AgentTool {
 	private readonly typeListText: string;
@@ -72,10 +65,9 @@ export class AgentTool {
 		onUpdate: ((update: AgentToolResult<AgentDetails>) => void) | undefined,
 		_ctx: ExtensionContext,
 	) {
-		// Reload custom agents so new .agents/agents/*.md files are picked up without restart
+
 		this.registry.reload();
 
-		// ---- Config resolution (pure) ----
 		const config = resolveSpawnConfig(
 			params,
 			this.registry,
@@ -84,19 +76,16 @@ export class AgentTool {
 		);
 		if ("error" in config) return textResult(config.error);
 
-		// ---- Boundary extraction (after config so inheritContext is resolved) ----
 		const snapshot = this.runtime.buildSnapshot(config.execution.inheritContext);
 		const { parentSessionFile, parentSessionId } = this.runtime.getSessionInfo();
 		const parentSession: ParentSessionInfo = { parentSessionFile, parentSessionId, toolCallId };
 
-		// ---- Resume existing agent ----
 		if (params.resume) {
 			const id = params.resume as string;
 			const prompt = params.prompt as string;
 			return this.resumeExisting(id, prompt, signal, config.presentation.detailBase, onUpdate);
 		}
 
-		// ---- Foreground execution — stream progress via onUpdate ----
 		return runForeground(
 			this.manager,
 			{ config, snapshot, parentSession },
@@ -105,10 +94,6 @@ export class AgentTool {
 		);
 	}
 
-	/**
-	 * Continue an existing agent's session with a new prompt, returning its
-	 * resumed outcome directly to the parent.
-	 */
 	private async resumeExisting(
 		id: string,
 		prompt: string,
@@ -116,13 +101,7 @@ export class AgentTool {
 		detailBase: SpawnPresentation["detailBase"],
 		onUpdate: ((update: AgentToolResult<AgentDetails>) => void) | undefined,
 	) {
-		// The manager owns whether a resume happens; this door owns only how the
-		// answer is worded. Resuming commits this call to delivering the outcome,
-		// so it claims it — nothing else announces what is already being returned.
-		//
-		// startResume rather than resume so the record is in hand while the run is
-		// still going: the streaming spinner reads it live, exactly as the
-		// foreground spawn path does. resume would return only once it had settled.
+
 		const start = this.manager.startResume(id, prompt, {
 			signal: signal ?? new AbortController().signal,
 			claimOutcome: true,
@@ -142,7 +121,7 @@ export class AgentTool {
 		} finally {
 			stopStream();
 		}
-		// Resume-return delivery edge: the resumed outcome is returned directly.
+
 		record.markConsumed();
 		return textResult(
 			`Agent ID: ${record.id}${renderStatusNote(record)}\n\n` +
@@ -225,8 +204,6 @@ ${guidelines}
 				),
 			}),
 
-			// ---- Custom rendering: inline spawn results ----
-
 			renderCall(args: Record<string, unknown>, theme: Theme) {
 				const displayName = args.spawn_type
 					? getDisplayName(args.spawn_type as string, registry)
@@ -269,12 +246,6 @@ ${guidelines}
 	}
 }
 
-/**
- * The operator-facing sentence for each reason a resume is refused.
- *
- * Exhaustive over `ResumeRefusalReason`, so a reason added later fails to
- * compile here rather than falling through to an attempted resume.
- */
 function resumeRefusalMessage(refusal: ResumeRefusalReason, id: string): string {
 	switch (refusal) {
 		case "unknown-agent":

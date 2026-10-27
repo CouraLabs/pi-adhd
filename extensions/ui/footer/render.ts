@@ -1,10 +1,3 @@
-/**
- * Pure rendering for the pi-adhd footer: a single stats line with the agent
- * mode, submode, model, thinking level, context gauge, and cumulative
- * token/cost usage, followed by extension statuses on their own line and any
- * registered sections (see `shared/footer-sections.ts`) last of all.
- */
-
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { mixColors, truncateToWidth, type Color } from "@earendil-works/pi-tui";
 import { formatTokens } from "../../../shared/format.ts";
@@ -32,40 +25,26 @@ type ModelInfo = NonNullable<ExtensionContext["model"]>;
 type ContextUsage = ReturnType<ExtensionContext["getContextUsage"]>;
 type ThinkingLevel = ReturnType<ExtensionAPI["getThinkingLevel"]>;
 
-/** Everything the footer needs to draw one frame. */
 export interface FooterState {
-	/** Active agent mode, shown before the provider/model; undefined when the `modes` extension is not loaded. */
+
 	mode?: AgentMode;
-	/**
-	 * Active submode, shown right after the mode; "none" renders nothing and
-	 * undefined (the `submodes` extension not loaded) renders nothing either.
-	 */
+
 	submode?: Submode;
 	model: ModelInfo | undefined;
 	thinkingLevel: ThinkingLevel;
 	contextUsage: ContextUsage | undefined;
 	usage: UsageTotals;
-	/** Cumulative cost of the session's spawn runs, shown parenthesized after the session cost. */
+
 	spawnCost: number;
-	/** Running countdowns, shown before the agent mode; the earliest timer wins. */
+
 	timers: readonly ActiveTimer[];
-	/** Latest plan rate-limit windows; drawn only in `claude` mode. */
+
 	rateLimits: RateLimits;
 	statuses: ReadonlyMap<string, string>;
-	/**
-	 * Pre-rendered lines contributed by other extensions (see
-	 * `shared/footer-sections.ts`). Drawn last, after the stats and statuses
-	 * lines, so the footer's final block is always the last thing on screen.
-	 */
+
 	sections: readonly string[];
 }
 
-/**
- * A five-position gauge — each position 20% of the window — drawn with the
- * `GAUGE_GLYPHS` shading ramp: consumed positions shade up (░ empty → █ full),
- * the partially-consumed position picks its glyph from the leftover fraction,
- * and untouched positions stay empty and dim. No brackets.
- */
 export function contextBar(theme: Theme, percent: number, positions = 5): string {
 	const clamped = Math.max(0, Math.min(100, percent));
 	const consumed = (clamped / 100) * positions;
@@ -92,15 +71,13 @@ export function contextBar(theme: Theme, percent: number, positions = 5): string
 						: GAUGE_GLYPHS[3],
 		);
 	}
-	// Positions that carry fill (including a partial one) ride the usage
-	// gradient; untouched ones are dim, like the old brackets were.
+
 	const lit = full + (full < positions && consumed - full > 0 ? 1 : 0);
 	const colored = glyphs
 		.map((glyph, position) => (position < lit ? theme.style(glyph, { fg: color }) : theme.fg("dim", glyph)));
 	return colored.join("");
 }
 
-/** Color context text along the same teal→red gradient as the gauge. */
 function contextColor(theme: Theme, percent: number, text: string): string {
 	const amount = Math.max(0, Math.min(1, percent / 100));
 	return theme.style(text, { fg: mixColors(theme.colors.success, theme.colors.error, amount) });
@@ -109,10 +86,6 @@ function contextColor(theme: Theme, percent: number, text: string): string {
 const PLAN_GAUGE_POSITIONS = 5;
 const PLAN_GAUGE_PARTIAL_THRESHOLD = 0.5;
 
-/**
- * Color along evenly spaced `stops` at `amount` (0-1). Falls back to the
- * nearest stop when the theme's colors cannot be mixed.
- */
 function gradientColor(stops: readonly Color[], amount: number): Color {
 	const clamped = Math.max(0, Math.min(1, amount));
 	const scaled = clamped * (stops.length - 1);
@@ -128,7 +101,6 @@ function planGaugeColor(theme: Theme, percent: number): Color {
 	return gradientColor([theme.colors.text, theme.colors.warning, theme.colors.error], percent / 100);
 }
 
-/** Five-cell gauge: full cells, a ▓ once the next cell is half used, then dim ░. */
 function planGauge(theme: Theme, percent: number): string {
 	const consumed = (Math.max(0, Math.min(100, percent)) / 100) * PLAN_GAUGE_POSITIONS;
 	const full = Math.floor(consumed);
@@ -154,7 +126,6 @@ function planWindowSegment(theme: Theme, label: string, window: RateLimitWindow 
 	].join(" ");
 }
 
-/** The `🯵h 92% ████▓ in 1h50m ⋅ 🯷d 62% ███░░ in 1d11h` segment; empty when no window is known. */
 function planRateLimitSegment(theme: Theme, limits: RateLimits): string {
 	const windows = [
 		planWindowSegment(theme, RATE_LIMIT_FIVE_HOUR_LABEL, limits.fiveHour),
@@ -174,11 +145,6 @@ function joinSegments(parts: string[], theme: Theme): string {
 	return parts.filter((part) => part.length > 0).join(theme.fg("dim", SEPARATOR));
 }
 
-/**
- * The countdown segments drawn before the agent mode: the earliest plain timer
- * and, when one is running, the current pomodoro phase. Both read the shared
- * timer registry and recompute on every frame, so they tick down live.
- */
 function timerSegments(theme: Theme, timers: readonly ActiveTimer[]): string[] {
 	const parts: string[] = [];
 	const timer = earliestTimer(timers, "timer");
@@ -198,14 +164,8 @@ export function renderFooter(state: FooterState, width: number, theme: Theme): s
 	if (width <= 0) return [];
 	const lines: string[] = [];
 
-	// ── One line: timers, agent mode, model, thinking, context, and cumulative usage ──
 	const parts: string[] = timerSegments(theme, state.timers);
-	// A segment renders only when the extension that owns its state is loaded:
-	// `getAgentMode()`/`getSubmode()` always return a stored value, so an absent
-	// owner must be signaled with undefined rather than read as a real mode.
-	// The submode segment is independent of the mode segment: `submodes` loads
-	// and enforces its toolset without `modes`, so it renders on its own when
-	// the mode extension is absent.
+
 	const submodeLabel =
 		state.submode && state.submode !== "none"
 			? theme.fg(submodeColor(state.submode), SUBMODE_LABEL[state.submode])
@@ -246,7 +206,6 @@ export function renderFooter(state: FooterState, width: number, theme: Theme): s
 
 	lines.push(truncateToWidth(` ${joinSegments(parts, theme)}`, width, ELLIPSIS));
 
-	// ── Statuses from other extensions ──
 	if (state.statuses.size > 0) {
 		const text = Array.from(state.statuses.entries())
 			.sort(([a], [b]) => a.localeCompare(b))
@@ -256,7 +215,6 @@ export function renderFooter(state: FooterState, width: number, theme: Theme): s
 		if (text.length > 0) lines.push(truncateToWidth(`  ${text}`, width, theme.fg("dim", ELLIPSIS)));
 	}
 
-	// ── Sections contributed by other extensions, drawn last ──
 	for (const line of state.sections) {
 		lines.push(truncateToWidth(line, width, theme.fg("dim", ELLIPSIS)));
 	}

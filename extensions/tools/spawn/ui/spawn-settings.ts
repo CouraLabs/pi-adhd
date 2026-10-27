@@ -1,12 +1,8 @@
-// ---- Narrow interfaces ----
-
-/** The toast a settings mutation returns for the UI to display. */
 export interface SettingsToast {
   message: string;
   level: "info" | "warning";
 }
 
-/** Narrow settings interface required by the spawn:settings command. */
 export interface SpawnSettingsManager {
   readonly defaultMaxTurns: number | undefined;
   readonly wrapUpTurns: number;
@@ -18,35 +14,30 @@ export interface SpawnSettingsManager {
   applyUnconsumedSessionRetentionMinutes(n: number): SettingsToast;
 }
 
-/** Narrow UI interface — only the ctx.ui methods the settings handler calls. */
 export interface SpawnSettingsUI {
   select(title: string, options: string[]): Promise<string | undefined>;
   input(title: string, defaultValue?: string): Promise<string | undefined>;
   notify(message: string, level: "info" | "warning" | "error"): void;
 }
 
-// ---- Descriptor table ----
-
-/** Fields every setting needs to render its line in the select list. */
 interface SettingDescriptorBase {
-  /** Prefix used both to build the select option and to match the user's choice. */
+
   label: string;
-  /** Current value rendered in the select option (e.g. "unlimited" for an unset default). */
+
   currentDisplay: (settings: SpawnSettingsManager) => string | number;
 }
 
-/** Describes one numeric setting's prompt, validation, and apply behavior. */
 interface NumericSettingDescriptor extends SettingDescriptorBase {
   kind: "numeric";
-  /** Title shown on the input prompt. */
+
   inputTitle: string;
-  /** Value pre-filled into the input box. */
+
   inputDefault: (settings: SpawnSettingsManager) => string;
-  /** Minimum accepted integer, inclusive. */
+
   minimum: number;
-  /** Warning shown when the parsed value is below the minimum. */
+
   validationMessage: string;
-  /** Applies the validated value and returns the toast to display. */
+
   apply: (settings: SpawnSettingsManager, n: number) => SettingsToast;
 }
 
@@ -95,14 +86,6 @@ const SETTINGS: readonly SettingDescriptor[] = [
   },
 ];
 
-// ---- Class ----
-
-/**
- * Handler for the `/spawn:settings` slash command.
- *
- * Call `handle({ ui })` from the Pi command registration to open the interactive
- * settings list. Lifted from `AgentsMenuHandler.showSettings`.
- */
 export class SpawnSettingsHandler {
   constructor(private readonly settings: SpawnSettingsManager) {}
 
@@ -122,7 +105,6 @@ export class SpawnSettingsHandler {
     }
   }
 
-  /** Ask for a number, validate it against the descriptor, apply it, and notify. */
   private async promptNumeric(
     ui: SpawnSettingsUI,
     descriptor: NumericSettingDescriptor,

@@ -1,17 +1,6 @@
-/**
- * thinking/preview — the compact reasoning block and duration formatting.
- *
- * `StrictThinkingPreview` renders the styled heading and the tail of the
- * reasoning text. When the text is longer than the configured budget it appends
- * a hint naming how many lines are hidden and the keybinding that expands the
- * full block to the heading line. Output is cached per (heading, text, width)
- * because the component is re-rendered on every animation frame.
- */
-
 import { getKeybindings, Text, type Component } from "@earendil-works/pi-tui";
 import { thinkingConfig } from "./config.ts";
 
-/** Format a duration as `ms`, `Ns`, `Nm`, or `Nm Ns`. */
 export function formatThoughtDuration(durationMs: number): string {
 	if (durationMs < 1_000) {
 		return `${Math.max(1, Math.round(durationMs))}ms`;
@@ -24,13 +13,11 @@ export function formatThoughtDuration(durationMs: number): string {
 	return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
 }
 
-/** The keybinding hint that expands a collapsed thinking block, if bound. */
 export function getThinkingToggleHint(): string | undefined {
 	const keys = getKeybindings().getKeys("app.thinking.toggle");
 	return keys.length > 0 ? `${keys.join("/")} to expand` : undefined;
 }
 
-/** A compact reasoning block: heading with an optional hidden-line hint, then the tail of the body. */
 export class StrictThinkingPreview implements Component {
 	private heading: string;
 	private text: string;

@@ -1,18 +1,8 @@
-/**
- * thinking/durations — persistence for completed reasoning runs.
- *
- * A run's elapsed time is measured live and then written as a custom session
- * entry so resumed sessions can show `Thought for 3s` without re-deriving it.
- * Entries are validated on restore because the session file is user-editable
- * and may predate the current shape.
- */
-
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import type { DurationEntryData } from "./types.ts";
 
 export const DURATION_ENTRY_TYPE = "compact-thinking-duration";
 
-/** Rebuild the per-message duration map from a branch's custom entries. */
 export function restoreDurationEntries(
 	entries: readonly SessionEntry[],
 	completedDurations: Map<number, Map<number, number>>,

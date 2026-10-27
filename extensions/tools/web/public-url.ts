@@ -83,7 +83,7 @@ export async function fetchPublic(
 	maxRedirects = 5,
 ): Promise<Response> {
 	let current = url;
-	// One deadline for the whole redirect chain, from the io.timeoutSec setting.
+
 	const signal = ioTimeoutSignal(init.signal ?? undefined);
 	for (let hop = 0; ; hop++) {
 		await assertPublicUrl(current);

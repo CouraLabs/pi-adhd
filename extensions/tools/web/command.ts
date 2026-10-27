@@ -1,8 +1,3 @@
-/**
- * command.ts — the `/web` command: pick the default fetch and search providers,
- * persisted in the pi-adhd settings file.
- */
-
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { getFetchConfig, getSearchConfig, saveFetchConfig, saveSearchConfig, type WebProviderConfig } from "./config.ts";
 import { listAllFetchProviders } from "./providers.ts";
@@ -52,7 +47,6 @@ const SERVICES: Service[] = [
 	},
 ];
 
-/** The "auto" pseudo-provider plus every registered one, in display order. */
 function providerRows(service: Service): ProviderRow[] {
 	const rank = (id: string) => {
 		const index = service.order.indexOf(id);
@@ -62,7 +56,6 @@ function providerRows(service: Service): ProviderRow[] {
 	return [{ id: "auto", configured: true, env: [] }, ...providers];
 }
 
-/** One select option: the id, with the missing env vars named when unconfigured. */
 function optionLabel(row: ProviderRow): string {
 	return row.configured || row.id === "auto" ? row.id : `${row.id} · set ${row.env.join(", ")}`;
 }
@@ -70,7 +63,6 @@ function optionLabel(row: ProviderRow): string {
 async function editService(ctx: ExtensionContext, service: Service): Promise<void> {
 	const config = service.getConfig();
 
-	// Provider: every registered provider, plus "auto" (first configured wins).
 	const rows = providerRows(service);
 	const labels = rows.map(optionLabel);
 	const current = rows.findIndex((row) => row.id === config.provider);

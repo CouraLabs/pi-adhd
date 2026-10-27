@@ -1,13 +1,3 @@
-/**
- * job — background terminal jobs for pi.
- *
- * Four tools (`job`, `job-kill`, `job-read`, `job-list`) and their matching
- * commands share one in-memory {@link JobManager}. The manager holds no state
- * until the first job starts, so constructing it in the factory is safe; the
- * idempotent `session_shutdown` handler kills every running job and empties the
- * registry, so a reload or session replacement never leaks a process.
- */
-
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import { registerJobCommands } from "./commands.ts";

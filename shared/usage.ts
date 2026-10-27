@@ -4,10 +4,8 @@ import { formatTokens } from "./format.ts";
 import { CACHE_GLYPH, INPUT, OUTPUT } from "./glyphs.ts";
 import { readSubagentUsage } from "./subagent-usage.ts";
 
-/** The session entries a branch exposes; used to walk usage records. */
 export type SessionEntries = ReturnType<ExtensionContext["sessionManager"]["getEntries"]>;
 
-/** Cumulative token and cost totals for a session. */
 export interface UsageTotals {
 	input: number;
 	output: number;
@@ -16,7 +14,7 @@ export interface UsageTotals {
 	cost: number;
 	cacheHitRate: number;
 	entries: number;
-	/** Cumulative cost of the session's terminal spawn runs, read from the `subagent-usage` entries. */
+
 	subagentCost: number;
 }
 
@@ -26,10 +24,7 @@ export function emptyUsage(): UsageTotals {
 
 export function addUsage(totals: UsageTotals, usage: Usage | undefined): void {
 	if (!usage) return;
-	// `usage.input` is fresh input only: pi-ai subtracts cache read/write from
-	// providers that fold them into their prompt count (OpenAI, Google, Mistral)
-	// and Anthropic/Bedrock report them as separate fields. Do not subtract
-	// cache again here.
+
 	totals.input += usage.input;
 	totals.output += usage.output;
 	totals.cacheRead += usage.cacheRead;
@@ -37,7 +32,6 @@ export function addUsage(totals: UsageTotals, usage: Usage | undefined): void {
 	totals.cost += usage.cost?.total ?? 0;
 }
 
-/** Walk a session branch and sum every usage record it contains. */
 export function computeUsage(entries: SessionEntries): UsageTotals {
 	let latestCacheHitRate: number | undefined;
 	const totals = emptyUsage();
@@ -57,32 +51,16 @@ export function computeUsage(entries: SessionEntries): UsageTotals {
 	}
 
 	return {
-		...totals, 
+		...totals,
 		subagentCost: readSubagentUsage(entries).cost,
 		cacheHitRate: latestCacheHitRate ?? 0
 	};
 }
 
-/** The theme slice the usage segments need. */
 export interface UsageTheme {
 	fg(color: ThemeColor, text: string): string;
 }
 
-/**
- * The usage group the footer and the spawn renderers share:
- * `↑ 120k ↓ 8.4k ⮏ 87%` — fresh input, output, and the cache-hit rate, joined
- * by spaces. Returns "" when there is nothing to show.
- *
- * Icon colors follow the semantic map: the input arrow is `success`, the
- * output arrow is `accent` (the info blue — pi has no dedicated `info`
- * token), and the cache glyph is `warning`.
- *
- * `↑` counts fresh input only: pi-ai already reports `usage.input` as fresh
- * input — it subtracts cache reads and writes for providers that fold them
- * into a single prompt count — so nothing is subtracted again here. The
- * cache-hit denominator is the whole prompt — fresh input plus cache reads
- * plus cache writes.
- */
 export function usageGroup(totals: UsageTotals, theme: UsageTheme): string {
 	const parts: string[] = [];
 	if (totals.input > 0) {
@@ -98,10 +76,6 @@ export function usageGroup(totals: UsageTotals, theme: UsageTheme): string {
 	return parts.join(" ");
 }
 
-/**
- * The cost segment, `$0.842`, with an optional parenthesised spawn total.
- * Returns "" when there is no cost to show.
- */
 export function usageCost(totals: UsageTotals, theme: UsageTheme, extraCost = 0): string {
 	if (totals.cost <= 0 && extraCost <= 0) return "";
 	const current = theme.fg("warning", `$${totals.cost.toFixed(3)}`);

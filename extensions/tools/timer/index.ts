@@ -1,17 +1,3 @@
-/**
- * timer — the `/timer` command: one or more named countdowns.
- *
- * Every timer is scheduled through the shared `timers` registry, so several can
- * run at once and the footer shows the one that expires first. A timer fires
- * the terminal bell, an in-app notification, and (unless disabled) a native OS
- * notification titled `Pi ADHD`.
- *
- * Timers are session-scoped: they are created by the command (never in the
- * factory, per the extension lifecycle contract) and cancelled by the
- * idempotent `session_shutdown` handler, so a reload or session replacement
- * never leaves a timer behind that would fire into a dead context.
- */
-
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import { notifyOperatingSystem, ringTerminalBell } from "../../../shared/os-notify.ts";
@@ -38,7 +24,6 @@ const USAGE = [
 	"  /timer clear          Cancel every timer",
 ].join("\n");
 
-/** Strip one pair of matching surrounding quotes from a label. */
 function unquote(text: string): string {
 	const trimmed = text.trim();
 	const quoted =
@@ -47,7 +32,6 @@ function unquote(text: string): string {
 	return quoted ? trimmed.slice(1, -1).trim() : trimmed;
 }
 
-/** Headless-safe output: notify in dialog-capable UIs, stderr text elsewhere. */
 function emit(ctx: ExtensionCommandContext, text: string, severity: "info" | "warning" | "error" = "info"): void {
 	if (ctx.hasUI) {
 		ctx.ui.notify(text, severity);
@@ -60,7 +44,6 @@ export default function timerExtension(pi: ExtensionAPI): void {
 	markExtensionLoaded("timer");
 	const handles = new Map<string, TimerHandle>();
 
-	/** Schedule a countdown and wire its completion announcement. */
 	const start = (ctx: ExtensionCommandContext, durationMs: number, name: string): void => {
 		const label = name || formatDuration(durationMs);
 		const handle = scheduleTimer(
@@ -113,9 +96,7 @@ export default function timerExtension(pi: ExtensionAPI): void {
 			emit(ctx, `"${query}" matches ${matches.length} timers; use the id.`, "warning");
 			return;
 		}
-		// Cancel through the shared handle registry: after a reload this
-		// instance's local map no longer holds the scheduled timeout, and
-		// claiming success without clearing it would let the timer still fire.
+
 		const cancelled = cancelTimerById(matches[0].id);
 		handles.delete(matches[0].id);
 		emit(

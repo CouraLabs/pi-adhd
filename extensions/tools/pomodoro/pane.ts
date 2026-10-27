@@ -1,12 +1,3 @@
-/**
- * pomodoro/pane — the `/pomodoro` configuration dialog.
- *
- * A pi-tui `SettingsList`: each row cycles through presets with Enter/Space and
- * the selected row's description is shown beneath the list. The last row starts
- * the session. Esc cancels, so nothing is saved unless Start is chosen — the
- * command persists the returned config only on Start.
- */
-
 import type { ExtensionUIContext, Theme } from "@earendil-works/pi-coding-agent";
 import { getSettingsListTheme } from "@earendil-works/pi-coding-agent";
 import { type Component, type OverlayOptions, SettingsList, type SettingItem, type TUI } from "@earendil-works/pi-tui";
@@ -19,7 +10,6 @@ const BREAK_VALUES = ["3m", "5m", "10m"];
 const LONG_BREAK_VALUES = ["10m", "15m", "20m", "30m"];
 const ROUND_VALUES = ["2", "3", "4", "5", "6"];
 
-/** The preset list, with the current value prepended when it is not a preset. */
 function valuesFor(current: string, presets: readonly string[]): string[] {
 	return presets.includes(current) ? [...presets] : [current, ...presets];
 }
@@ -31,7 +21,6 @@ interface PaneOptions {
 	done: (config: PomodoroConfig | undefined) => void;
 }
 
-/** Mount the config dialog. Resolves to the chosen config, or `undefined` on cancel. */
 export async function showPomodoroConfig(
 	ui: ExtensionUIContext,
 	defaults: PomodoroConfig,

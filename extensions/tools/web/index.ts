@@ -1,7 +1,3 @@
-/**
- * web — provider-neutral `webfetch` and `websearch` tools for pi.
- */
-
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import { registerBuiltinProviders } from "./builtin.ts";

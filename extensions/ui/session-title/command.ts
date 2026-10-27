@@ -1,23 +1,9 @@
-/**
- * command — the `/couralabs:session-title` command.
- *
- * The command reports the feature's state — enabled or disabled, and the
- * model that writes the titles — then opens a model picker for what runs the
- * next naming call. The picker offers every auth-configured model plus a
- * "session model" entry that clears the stored override; picking any model
- * also enables the feature, so one selection both configures and turns it on.
- * Disabling is `/couralabs:toggle session-title`.
- */
-
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import type { Model } from "@earendil-works/pi-ai";
 import { loadSessionTitleConfig, saveSessionTitleConfig } from "./config.ts";
 
-/** The picker entry that clears the stored override; the session's current
- *  model then writes titles at generation time. */
 const SESSION_MODEL_OPTION = "Session model (no override)";
 
-/** `provider/id`, the same spelling `/spawn:model` and the settings file use. */
 function modelId(model: Model<any>): string {
 	return `${model.provider}/${model.id}`;
 }
@@ -40,7 +26,6 @@ export function registerSessionTitleCommand(pi: ExtensionAPI): void {
 				return;
 			}
 
-			// Current override first, so the pick that is in force is one keystroke away.
 			const options: { label: string; value: string | undefined }[] = [];
 			if (config.enabled) options.push({ label: "Turn off", value: "off" });
 			else options.push({ label: "Turn on", value: "on" });
@@ -51,7 +36,7 @@ export function registerSessionTitleCommand(pi: ExtensionAPI): void {
 			}
 
 			const choice = await ctx.ui.select(`Session title — ${status}, model: ${modelLabel}`, options.map((option) => option.label));
-			if (!choice) return; // esc leaves everything as it was
+			if (!choice) return;
 			const picked = options.find((option) => option.label === choice);
 			if (!picked) return;
 
@@ -65,8 +50,7 @@ export function registerSessionTitleCommand(pi: ExtensionAPI): void {
 				ctx.ui.notify("Session titles enabled", "info");
 				return;
 			}
-			// A model pick (or the clear-override entry): persist, and make sure the
-			// feature is on so the selection takes effect this session.
+
 			const saved = saveSessionTitleConfig({ model: picked.value, enabled: true });
 			ctx.ui.notify(
 				`Session titles ${saved.enabled ? "enabled" : "disabled"} · model: ${saved.model ?? "session model"}`,

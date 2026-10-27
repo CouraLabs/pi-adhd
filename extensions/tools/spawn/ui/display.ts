@@ -1,19 +1,9 @@
-/**
- * display.ts — Pure formatting helpers and display utilities for agent UI.
- *
- * All functions are stateless and dependency-free (no SDK runtime imports, no widget lifecycle).
- * Consumed by the widget, the menu, tool modules, and the notification renderer.
- */
-
 import type { ThemeColor } from "@earendil-works/pi-coding-agent";
 import type { AgentConfigLookup } from "../config/agent-types.ts";
 import type { TurnBudget } from "../lifecycle/turn-limits.ts";
 import type { AgentInvocation, SpawnType } from "../types.ts";
 import type { UsageTotals } from "../../../../shared/usage.ts";
 
-// ---- Types ----
-
-/** A model as the UI names it. The SDK's `Model` satisfies it structurally. */
 export interface ModelIdentity {
   readonly provider: string;
   readonly id: string;
@@ -24,7 +14,6 @@ export type Theme = {
   bold(text: string): string;
 };
 
-/** Metadata attached to Agent tool results for custom rendering. */
 export interface AgentDetails {
   displayName: string;
   description: string;
@@ -33,25 +22,22 @@ export interface AgentDetails {
   tokens: string;
   durationMs: number;
   status: "running" | "completed" | "aborted" | "stopped" | "error";
-  /** Human-readable description of what the agent is currently doing. */
+
   activity?: string;
-  /** Current spinner frame index (for animated running indicator). */
+
   spinnerFrame?: number;
-  /** The `provider/id` of the model the agent runs (e.g. "anthropic/claude-haiku-4-5"). */
+
   modelName?: string;
-  /** Notable config tags (e.g. ["thinking: high", "inherit context"]). */
+
   tags?: string[];
   agentId?: string;
   error?: string;
-  /** The run's turn budget; absent until its turn loop starts. */
+
   turnBudget?: TurnBudget;
-  /** Raw usage totals, for the shared footer-vocabulary usage segments. */
+
   usage?: UsageTotals;
 }
 
-// ---- Constants ----
-
-/** Tool name → human-readable action for activity descriptions. */
 const TOOL_DISPLAY: Record<string, string> = {
   read: "reading",
   bash: "running command",
@@ -62,51 +48,39 @@ const TOOL_DISPLAY: Record<string, string> = {
   ls: "listing",
 };
 
-// ---- Pure formatters ----
-
-/** Format a token count compactly: "33.8k token", "1.2M token". */
 export function formatTokens(count: number): string {
   if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M token`;
   if (count >= 1_000) return `${(count / 1_000).toFixed(1)}k token`;
   return `${count} token`;
 }
 
-/** Format milliseconds as human-readable duration. */
 export function formatMs(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-/** A model as `provider/id`, the syntax the Agent tool's `model` argument accepts. */
 export function formatModel(model: ModelIdentity): string {
   return `${model.provider}/${model.id}`;
 }
 
-/** A model's `provider/id` label, or undefined while the model is unknown. */
 export function modelLabel(model: ModelIdentity | undefined): string | undefined {
   return model ? formatModel(model) : undefined;
 }
 
-/** Format duration from start/completed timestamps. */
 export function formatDuration(startedAt: number, completedAt?: number): string {
   if (completedAt) return formatMs(completedAt - startedAt);
   return `${formatMs(Date.now() - startedAt)} (running)`;
 }
 
-// ---- Display helpers ----
-
-/** Get display name for any agent type (built-in or custom). */
 export function getDisplayName(type: SpawnType, registry: AgentConfigLookup): string {
   const config = registry.resolveAgentConfig(type);
   return config.displayName ?? config.name;
 }
 
-/** Short label for prompt mode: "twin" for append, nothing for replace (the default). */
 export function getPromptModeLabel(type: SpawnType, registry: AgentConfigLookup): string | undefined {
   const config = registry.resolveAgentConfig(type);
   return config.promptMode === "append" ? "twin" : undefined;
 }
 
-/** Mode label is not included — callers add it where they want it. */
 export function buildInvocationTags(
   invocation: AgentInvocation | undefined,
 ): { tags: string[] } {
@@ -118,14 +92,12 @@ export function buildInvocationTags(
   return { tags };
 }
 
-/** Truncate text to a single line, max `len` chars. */
 function truncateLine(text: string, len = 60): string {
   const line = text.split("\n").find(l => l.trim())?.trim() ?? "";
   if (line.length <= len) return line;
   return line.slice(0, len) + "…";
 }
 
-/** Build a human-readable activity string from currently-running tools or response text. */
 export function describeActivity(activeTools: ReadonlyMap<string, string>, responseText?: string): string {
   if (activeTools.size > 0) {
     const groups = new Map<string, number>();
@@ -145,7 +117,6 @@ export function describeActivity(activeTools: ReadonlyMap<string, string>, respo
     return parts.join(", ") + "…";
   }
 
-  // No tools active — show truncated response text if available
   if (responseText && responseText.trim().length > 0) {
     return truncateLine(responseText);
   }

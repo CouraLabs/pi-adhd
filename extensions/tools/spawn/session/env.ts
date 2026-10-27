@@ -1,7 +1,3 @@
-/**
- * env.ts — Detect environment info (git, platform) for spawn system prompts.
- */
-
 import { debugLog } from "../debug.ts";
 import type { ShellExec } from "../types.ts";
 

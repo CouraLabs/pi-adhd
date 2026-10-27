@@ -1,33 +1,3 @@
-/**
- * session-navigator.ts — The `/spawn:sessions` command: pick a spawned agent and
- * read its transcript through Pi's own per-entry session components.
- *
- * SDK/TUI consumer half of native session navigation. The unit-testable core
- * (selection, sourcing) lives in `session-navigation.ts`; this module wires that
- * core to the command picker and a read-only scrollable pane, and owns the
- * renderer — it mounts Pi's interactive components (`AssistantMessageComponent`,
- * `ToolExecutionComponent`, …) into a `Container`, mirroring Pi's own
- * `renderSessionContext` mapping. Rendering lives here, not in the pure module,
- * because the components require a `TUI`, `cwd`, and markdown theme.
- *
- * Its chrome is two labeled rules in the style of Pi's editor border: the top
- * names the agent, its task, model, and thinking level; the bottom carries the
- * scroll position and key hints. Both take the thinking level's border colour,
- * read from the source on every render, so a live child's change repaints them.
- *
- * The pane is strictly read-only. It consumes a `TranscriptSource`, so a released agent's disk
- * snapshot (`fileSnapshotSource`) swaps in without touching the renderer or the pane.
- *
- * In regular mode it mounts through `ui.custom`'s non-overlay path deliberately:
- * Pi's regular-mode renderer composites overlays into the buffer that backs
- * scrollback, so an overlay mount bakes this pane's chrome into terminal history
- * (`docs/decisions/0007-transcript-viewer-is-not-an-overlay.md`). In fullscreen
- * mode it floats as an overlay over the bottom of the screen, because Pi's
- * fullscreen viewport claims PgUp/PgDn/Home/End before any docked component and
- * defers them only to a focused overlay
- * (`docs/decisions/0012-fullscreen-viewer-is-an-overlay.md`).
- */
-
 import { getMarkdownTheme } from "@earendil-works/pi-coding-agent";
 import {
   type Component,
@@ -57,21 +27,12 @@ import {
 } from "./session-navigation.ts";
 import { TranscriptContent } from "./transcript-content.ts";
 
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Chrome lines: the header rule and the footer rule. The pane sits on Pi's own chrome, so it needs no frame. */
 const CHROME_LINES = 2;
 const MIN_VIEWPORT = 3;
 const VIEWPORT_HEIGHT_PCT = 70;
 
-/**
- * Rows Pi's default footer takes: the cwd and stats rows. An extension status
- * adds a third, which the pane covers while open; reserving it instead would
- * expose the editor's bottom border whenever no status is set.
- */
 const PI_FOOTER_ROWS = 2;
 
-/** Where the fullscreen pane floats: the region the docked pane fills in regular mode, above Pi's footer. */
 const FULLSCREEN_OVERLAY: OverlayOptions = {
   anchor: "bottom-center",
   width: "100%",
@@ -79,26 +40,16 @@ const FULLSCREEN_OVERLAY: OverlayOptions = {
   margin: { bottom: PI_FOOTER_ROWS },
 };
 
-/**
- * The pane's theme: the shared narrow `Theme` plus the one method only the pane
- * needs. Pi's own `Theme` satisfies it; the widening stays here so the other
- * render sites' theme stubs do not grow.
- */
 export type TranscriptTheme = Theme & {
-  /** Pi's editor-border colour for a thinking level; an unknown level paints as `off`. */
+
   getThinkingBorderColor(level: string): (text: string) => string;
 };
 
-/**
- * The `KeybindingsManager` surface the pane reads. Pi passes its manager to
- * every `ui.custom` factory, so the pane honours the operator's remaps.
- */
 export interface PaneKeys {
   matches(data: string, keybinding: Keybinding): boolean;
   getKeys(keybinding: Keybinding): KeyId[];
 }
 
-/** Component factory shape Pi's `ui.custom` invokes to mount a component. */
 export type CustomComponentFactory<R> = (
   tui: TUI,
   theme: TranscriptTheme,
@@ -106,60 +57,46 @@ export type CustomComponentFactory<R> = (
   done: (result: R) => void,
 ) => Component;
 
-/** Narrow UI interface — only the `ctx.ui` methods the navigator calls. */
 export interface SessionNavigatorUI {
   select(title: string, options: string[]): Promise<string | undefined>;
   notify(message: string, level: "info" | "warning" | "error"): void;
   custom<R>(component: CustomComponentFactory<R>, options?: ViewerMountOptions): Promise<R>;
 }
 
-/** How `ui.custom` mounts a component: Pi's options, narrowed to what the navigator sets. */
 export interface ViewerMountOptions {
   overlay: boolean;
   overlayOptions?: OverlayOptions;
 }
 
-/** Parameters for one `/spawn:sessions` invocation. */
 export interface SessionNavigatorParams {
   ui: SessionNavigatorUI;
   agents: readonly NavigableSpawn[];
   registry: AgentConfigLookup;
-  /** Working directory for tool-call rendering (relative path display). */
+
   cwd: string;
-  /** Reads a persisted session file for the file-snapshot source. */
+
   readFile: (path: string) => string;
-  /** The parent session's entries, whose run records outlive the manager's. */
+
   sessionEntries: readonly SessionEntryLike[];
 }
 
-/** How a scroll move treats following new output; by default it follows when it lands on the bottom. */
 interface ScrollOptions {
   follow?: boolean;
 }
 
-/** Options for the read-only transcript pane. */
 export interface TranscriptPaneOptions {
   tui: TUI;
   theme: TranscriptTheme;
-  /** Paging and top/bottom follow Pi's viewport bindings (`tui.altScreen.*`). */
+
   keys: PaneKeys;
   source: TranscriptSource;
-  /** Who produced the transcript, named in the header rule. */
+
   heading: EntryHeading;
   done: (result: undefined) => void;
   cwd: string;
   markdownTheme: MarkdownTheme;
 }
 
-/**
- * Handler for the `/spawn:sessions` slash command.
- *
- * Lists navigable spawn, lets the operator pick one, and opens its transcript
- * read-only. Receives the agent snapshot (`manager.listAgents()`) rather than the
- * manager, so it stays a reactive consumer with no inbound call into the core.
- * The session's entries add the runs it recorded that the manager no longer
- * holds, such as those from before a `/reload`.
- */
 export class SessionNavigatorHandler {
   async handle({ ui, agents, registry, cwd, readFile, sessionEntries }: SessionNavigatorParams): Promise<void> {
     const entries = listNavigableAgents(agents, registry, readPersistedRuns(sessionEntries));
@@ -192,22 +129,10 @@ export class SessionNavigatorHandler {
   }
 }
 
-/**
- * The TUI's render mode, read before the pane mounts (see `shared/tui-mode.ts`).
- */
-
-/** Docked in regular mode (ADR 0007); a focused overlay in fullscreen mode, so the viewport keys reach it (ADR 0012). */
 function viewerMountOptions(mode: TuiMode): ViewerMountOptions {
   return mode === "fullscreen" ? { overlay: true, overlayOptions: FULLSCREEN_OVERLAY } : { overlay: false };
 }
 
-/**
- * Read-only scrollable transcript pane.
- *
- * Owns scroll state, chrome, and key handling; the rows it paints come from a
- * `TranscriptContent` collaborator, which holds the transcript's components and
- * refreshes them when the source changes (live agents).
- */
 export class TranscriptPane implements Component {
   private scrollOffset = 0;
   private autoScroll = true;
@@ -221,7 +146,7 @@ export class TranscriptPane implements Component {
   private readonly heading: EntryHeading;
   private readonly done: (result: undefined) => void;
   private readonly content: TranscriptContent;
-  /** Width the host last rendered at; input must use the same layout. */
+
   private renderedWidth: number | undefined;
 
   constructor({ tui, theme, keys, source, heading, done, cwd, markdownTheme }: TranscriptPaneOptions) {
@@ -263,7 +188,6 @@ export class TranscriptPane implements Component {
     }
   }
 
-  /** The wheel scrolls the transcript; every other mouse event is left to the host. */
   handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
     if (event.type !== "wheel") return undefined;
     this.scrollBy(event.wheelDelta ?? 0);
@@ -276,7 +200,6 @@ export class TranscriptPane implements Component {
     this.renderedWidth = width;
     const lines: string[] = [];
 
-    // Rows span at most the width the host supplied: pi-tui rejects a wider one.
     const fit = (content: string): string => truncateToWidth(content, width);
     const { model, thinkingLevel } = this.source.sessionModel();
     const paint = th.getThinkingBorderColor(thinkingLevel ?? "off");
@@ -300,7 +223,6 @@ export class TranscriptPane implements Component {
     return lines;
   }
 
-  // fallow-ignore-next-line unused-class-member
   invalidate(): void {
     this.content.invalidate();
   }
@@ -313,20 +235,12 @@ export class TranscriptPane implements Component {
     }
   }
 
-  // ---- Private ----
-
-  /**
-   * The key hints the footer rule carries on its right, naming the keys the
-   * operator actually bound: the first key of each binding, and no segment
-   * for a pair left wholly unbound.
-   */
   private footerHint(): string {
     const page = this.keyPair("tui.altScreen.pageUp", "tui.altScreen.pageDown");
     const ends = this.keyPair("tui.altScreen.top", "tui.altScreen.bottom");
     return ["↑↓ scroll", page, ends, "Esc close"].filter((segment) => segment !== "").join(" · ");
   }
 
-  /** `PageUp/PageDown` for a pair of bindings; the bound side alone when the other is unbound. */
   private keyPair(first: Keybinding, second: Keybinding): string {
     return [first, second]
       .flatMap((keybinding) => this.keys.getKeys(keybinding).slice(0, 1))
@@ -334,10 +248,6 @@ export class TranscriptPane implements Component {
       .join("/");
   }
 
-  /**
-   * Header labels, most to least informative: the rule drops the task first,
-   * then the model and thinking level, before it truncates the agent's name.
-   */
   private headerLabels(model: ModelIdentity | undefined, thinkingLevel: string | undefined): string[] {
     const th = this.theme;
     const { name, modeLabel, description } = this.heading;
@@ -351,50 +261,28 @@ export class TranscriptPane implements Component {
     this.scrollTo(this.scrollOffset + delta, options);
   }
 
-  /**
-   * Move to `offset`, clamped to the transcript. The pane follows new output
-   * when it lands on the bottom, unless the move says otherwise: paging up or
-   * jumping to the top stops following even on a transcript that fits.
-   */
   private scrollTo(offset: number, { follow }: ScrollOptions = {}): void {
     const { maxScroll } = this.scrollBounds(this.inputWidth());
     this.scrollOffset = Math.min(maxScroll, Math.max(0, offset));
     this.autoScroll = follow ?? this.scrollOffset >= maxScroll;
   }
 
-  /**
-   * Scroll geometry at a given layout width.
-   *
-   * The single place a width becomes a viewport height, so `render` and
-   * `handleInput` cannot disagree about how far the transcript scrolls.
-   */
   private scrollBounds(width: number): { totalLines: number; viewportHeight: number; maxScroll: number } {
     const totalLines = this.content.lineCount(width);
     const viewportHeight = this.viewportHeight(totalLines);
     return { totalLines, viewportHeight, maxScroll: Math.max(0, totalLines - viewportHeight) };
   }
 
-  /**
-   * The width `handleInput` must lay out at: the one the host actually supplied,
-   * so scroll bounds match the layout on screen. Before the first paint there is
-   * none, so fall back to the full terminal width.
-   */
   private inputWidth(): number {
     return this.renderedWidth ?? this.tui.terminal.columns;
   }
 
-  /**
-   * Rows the transcript gets: what it needs, capped at the pane's share of the
-   * terminal so a long or live transcript cannot crowd out the conversation, and
-   * floored so a short one still reads as a pane.
-   */
   private viewportHeight(totalLines: number): number {
     const cap = Math.floor((this.tui.terminal.rows * VIEWPORT_HEIGHT_PCT) / 100) - CHROME_LINES;
     return Math.max(MIN_VIEWPORT, Math.min(totalLines, cap));
   }
 }
 
-/** A key id in Pi's display style: `ctrl+b` → `Ctrl+B`, `pageUp` → `PageUp`. */
 function displayKey(key: KeyId): string {
   return key
     .split("+")
@@ -402,10 +290,6 @@ function displayKey(key: KeyId): string {
     .join("+");
 }
 
-/**
- * `anthropic/claude-sonnet-5 • high`, in Pi's footer wording: `thinking off` rather
- * than a bare `off`, and `thinking <level>` when no model is named to attach it to.
- */
 function describeRuntime(model: ModelIdentity | undefined, thinkingLevel: string | undefined): string {
   if (!model) return thinkingLevel ? `thinking ${thinkingLevel}` : "";
   if (!thinkingLevel) return formatModel(model);

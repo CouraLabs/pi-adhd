@@ -1,7 +1,3 @@
-/**
- * websearch-tool.ts — the `websearch` tool: search the web.
- */
-
 import { StringEnum } from "@earendil-works/pi-ai";
 import type {
 	AgentToolResult,

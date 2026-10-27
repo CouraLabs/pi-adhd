@@ -19,7 +19,6 @@ import { toUsageTotals } from "../lifecycle/usage.ts";
 import { type AgentDetails, describeActivity, formatMs, modelLabel } from "../ui/display.ts";
 import { SPINNER } from "../ui/glyphs.ts";
 
-/** Narrow manager interface for the foreground runner. */
 export interface ForegroundManagerDeps {
   spawnAndWait(
     snapshot: ParentSnapshot,
@@ -29,23 +28,12 @@ export interface ForegroundManagerDeps {
   ): Promise<Spawn>;
 }
 
-/** All values the foreground runner needs beyond the resolved config. */
 export interface ForegroundParams {
   config: ResolvedSpawnConfig;
   snapshot: ParentSnapshot;
   parentSession: ParentSessionInfo;
 }
 
-/**
- * Stream a running agent's live state through `onUpdate` on Pi's spinner
- * cadence, returning a stop function. Shared by the foreground spawn and
- * foreground resume paths, so both show the same live spinner, stats, and
- * activity line instead of a static row until the run settles.
- *
- * `getRecord` is read on every tick rather than captured, because the spawn
- * path only learns its record once `onSessionCreated` fires — after the stream
- * has already started.
- */
 export function startRunningStream(
   getRecord: () => Spawn | undefined,
   detailBase: SpawnPresentation["detailBase"],
@@ -64,7 +52,7 @@ export function startRunningStream(
       toolUses,
       tokens: record ? formatLifetimeTokens(record) : "",
       usage: record ? toUsageTotals(record.lifetimeUsage) : undefined,
-      // Read activity off the record; absent until the session reports it.
+
       turnBudget: record?.turnBudget,
       durationMs: Date.now() - startedAt,
       status: "running",
@@ -80,7 +68,6 @@ export function startRunningStream(
     });
   };
 
-  // Animate spinner at ~80ms (smooth rotation through 10 braille frames)
   const spinnerInterval = setInterval(() => {
     spinnerFrame++;
     streamUpdate();
@@ -91,10 +78,6 @@ export function startRunningStream(
   return () => clearInterval(spinnerInterval);
 }
 
-/**
- * Run an agent synchronously in the foreground, streaming spinner updates.
- * Owns: spinner interval, streaming onUpdate callbacks, cleanup, and result formatting.
- */
 export async function runForeground(
   manager: ForegroundManagerDeps,
   params: ForegroundParams,
@@ -140,8 +123,6 @@ export async function runForeground(
 
   stopStream();
 
-  // Foreground-return delivery edge: the result is handed back in this tool
-  // result, so the outcome is collected. Mark it consumed.
   record.markConsumed();
 
   const tokenText = formatLifetimeTokens(record);
@@ -150,14 +131,7 @@ export async function runForeground(
   const noteText = renderSpawnNotes(params.config.notes);
 
   if (record.status === "error") {
-    // A failed run has no result text, so this return is the only carrier that
-    // can say where its workspace saved the work — or what the child flagged
-    // before the failure, which is the one place those findings survive.
-    // The transcript pointer rides here for the same reason: with no result to
-    // read, it is the parent's only route to what the child did before it died.
-    // The success branch omits it deliberately — that return carries the result.
-    // The ask-back affordance is not composed here: a failed run answers no
-    // question, so this is the addenda tail minus the one that cannot apply.
+
     const transcriptLine = record.outputFile
       ? `\nFull transcript available at: ${record.outputFile}`
       : "";

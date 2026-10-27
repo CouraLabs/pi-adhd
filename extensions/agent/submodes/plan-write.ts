@@ -1,21 +1,9 @@
-/**
- * plan-write.ts — the `plan-write` tool.
- *
- * The Plan agent's terminal action: it submits the complete plan, which the
- * extension renders fullscreen for line-by-line review. The verdict returns as
- * the tool result:
- *
- *   - approve / approve-compact → the model calls `submode-exit` to hand off.
- *   - reject → the run ends and the user's line comments are returned.
- */
-
 import type { ExtensionToolContext, Theme, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Text, type Component } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { showPlanReview, type PlanLineComment, type PlanVerdict } from "./plan-review.ts";
 
-/** Callback the extension uses to remember the reviewed plan and its verdict. */
 export interface PlanWriteDeps {
 	store: (plan: string, verdict: PlanVerdict, comments: PlanLineComment[]) => void;
 }
@@ -34,21 +22,13 @@ The plan is rendered fullscreen, line by line. The user reads it, may attach com
 
 Do not also write the plan out in your reply; the tool renders it. Do not write or edit any file while you are still the Plan agent.`;
 
-/** Format line comments as a bullet list, one `- line N: text` per comment. */
 export function formatComments(comments: PlanLineComment[]): string {
 	if (comments.length === 0) return "";
 	return comments.map((comment) => `- line ${comment.line}: ${comment.text}`).join("\n");
 }
 
-/** Rendered plan lines shown inline while the plan streams (thinking-style tail). */
 const PLAN_PREVIEW_LINES = 10;
 
-/**
- * Inline plan preview for the tool call. Renders the heading and the tail of the
- * plan as it streams, capped at `PLAN_PREVIEW_LINES` rendered lines (all when
- * expanded), matching the compact-thinking preview. Reused across renders so the
- * TUI keeps one component identity.
- */
 class PlanCallComponent implements Component {
 	private plan = "";
 	private theme: Theme | undefined;

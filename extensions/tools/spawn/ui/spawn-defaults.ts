@@ -1,23 +1,3 @@
-/**
- * spawn-defaults.ts — the `/spawn:model` command: a looping picker that
- * sets a spawned agent's default model and thinking level, and shows what is already
- * set while it does.
- *
- * The dialog loops: pick an agent, choose what to set (model or thinking), and
- * the agent list comes back with the new value annotated, so the operator can
- * verify the write without reopening the command. Esc at the agent list exits.
- *
- * Built-in agents (`general-purpose`, `plan-reviewer`, `Arquitect`,
- * `Code-Review`, `Explore`) have no markdown file, so their choices are stored
- * in the pi-adhd settings file (`spawn.agentModels` / `spawn.agentThinking`).
- * A custom agent loaded from `.agents/agents/*.md` gets `model:` / `thinking:`
- * written into its own frontmatter instead, and the registry is reloaded so the
- * annotation reflects the file immediately.
- *
- * The handler takes a narrow injected UI (the same shape `SessionNavigatorHandler`
- * uses) so it stays unit-testable and free of the SDK surface.
- */
-
 import { readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -27,19 +7,16 @@ import { removeFrontmatterValue, writeFrontmatterValue } from "../config/agent-f
 import { THINKING_LEVELS } from "../config/thinking-level.ts";
 import type { AgentConfig } from "../types.ts";
 
-/** The slice of the extension UI the pickers need. */
 export interface SpawnDefaultsUI {
 	select(title: string, options: string[]): Promise<string | undefined>;
 	notify(message: string, type?: "info" | "warning" | "error"): void;
 }
 
-/** The toast a persistence helper returns; the handler displays it verbatim. */
 export interface DefaultsToast {
 	message: string;
 	level: "info" | "warning" | "error";
 }
 
-/** What an agent currently runs with, as the picker annotates it. */
 export interface AgentDefaults {
 	model?: string;
 	thinking?: string;
@@ -47,57 +24,44 @@ export interface AgentDefaults {
 
 export interface SpawnDefaultsParams {
 	ui: SpawnDefaultsUI;
-	/**
-	 * Every agent the registry knows, re-read each loop pass so a custom agent's
-	 * fresh frontmatter annotates immediately after a write + reload.
-	 */
+
 	listAgents: () => readonly AgentConfig[];
 	cwd: string;
-	/** Auth-configured models, already resolved by the caller. */
+
 	models: readonly Model<any>[];
-	/** Live view of the built-in agents' persisted model overrides. */
+
 	getBuiltInModels: () => Record<string, string>;
-	/** Live view of the built-in agents' persisted thinking overrides. */
+
 	getBuiltInThinking: () => Record<string, string>;
-	/** Persist a built-in agent's model; `undefined` clears the override. */
+
 	setAgentModel: (agentName: string, modelId: string | undefined) => DefaultsToast;
-	/** Persist a built-in agent's thinking level; `undefined` clears the override. */
+
 	setAgentThinking: (agentName: string, thinking: string | undefined) => DefaultsToast;
-	/**
-	 * Re-scan custom agent files after a frontmatter write, so the next pass
-	 * annotates from the file rather than a stale config.
-	 */
+
 	reload: () => void;
 }
 
-/** Where an agent came from, as the picker labels it. */
 type SourceLabel = "built-in" | "project" | "global";
 
-/** Display order of the source groups. */
 const SOURCE_RANK: Record<SourceLabel, number> = { "built-in": 0, project: 1, global: 2 };
 
-/** One selectable agent, with its group-qualified, defaults-annotated label. */
 interface AgentEntry {
 	label: string;
 	agent: AgentConfig;
 }
 
-/** `source` narrows to the picker's three groups; anything else reads as a built-in. */
 function sourceLabel(agent: AgentConfig): SourceLabel {
 	if (agent.source === "project") return "project";
 	if (agent.source === "global") return "global";
 	return "built-in";
 }
 
-/** A built-in has no file of its own, so its choices live in the settings maps. */
 function isBuiltIn(agent: AgentConfig): boolean {
 	return agent.source === undefined || agent.source === "default";
 }
 
-/** The picker entry that clears an override instead of naming a value. */
 const INHERIT_OPTION = "Inherit (clear override)";
 
-/** Annotate an agent's label with the defaults it currently runs with. */
 function annotate(agent: AgentConfig, defaults: AgentDefaults): string {
 	const parts: string[] = [];
 	if (defaults.model) parts.push(`model: ${defaults.model}`);
@@ -110,8 +74,6 @@ export class SpawnDefaultsHandler {
 	async handle(params: SpawnDefaultsParams): Promise<void> {
 		const { ui } = params;
 
-		// The loop IS the feature: after every set, the list re-renders with the
-		// fresh values, so the operator sees the write land without reopening.
 		for (;;) {
 			const agents = [...params.listAgents()]
 				.sort((a, b) => {
@@ -143,7 +105,6 @@ export class SpawnDefaultsHandler {
 			const entry = entries.find((candidate) => candidate.label === agentChoice);
 			if (!entry) return;
 
-			// Inner loop: one agent's action menu, until Done or esc returns to the list.
 			for (;;) {
 				const current = isBuiltIn(entry.agent)
 					? {
@@ -166,7 +127,7 @@ export class SpawnDefaultsHandler {
 						ui.notify(toast.message, toast.level);
 						break;
 					}
-					if (!chosen) break; // esc or nothing available changes nothing
+					if (!chosen) break;
 
 					const toast = this.persist(
 						params,
@@ -175,9 +136,7 @@ export class SpawnDefaultsHandler {
 						`${chosen.provider}/${chosen.id}`,
 					);
 					ui.notify(toast.message, toast.level);
-					// Straight to the thinking picker, filtered to what the chosen
-					// model supports. Esc there keeps the model and leaves thinking
-					// untouched.
+
 					const thinkingToast = await this.pickThinking(
 						params,
 						entry.agent,
@@ -189,8 +148,7 @@ export class SpawnDefaultsHandler {
 				}
 
 				if (action.startsWith("Thinking:")) {
-					// Filter to what the agent's already-set model supports, when that
-					// model resolves among the available ones; otherwise all levels.
+
 					const model = current.model
 						? params.models.find((m) => `${m.provider}/${m.id}` === current.model)
 						: undefined;
@@ -199,17 +157,10 @@ export class SpawnDefaultsHandler {
 					break;
 				}
 
-				// An unrecognized label (a future option) reopens the menu rather
-				// than silently exiting.
 			}
 		}
 	}
 
-	/**
-	 * Show the model picker for one agent. Returns the chosen model (persisted by
-	 * the caller), the string "inherit" when the override was cleared, or
-	 * undefined when esc was pressed or nothing is available.
-	 */
 	private async pickModel(
 		params: SpawnDefaultsParams,
 		agent: AgentConfig,
@@ -234,20 +185,13 @@ export class SpawnDefaultsHandler {
 		}
 
 		const choice = await ui.select(`Model for ${agent.name}`, options.map((o) => o.label));
-		if (!choice) return undefined; // esc changes nothing; the agent list returns
+		if (!choice) return undefined;
 		const picked = options.find((o) => o.label === choice);
 		if (!picked) return undefined;
 
 		return picked.value;
 	}
 
-	/**
-	 * Show the thinking-level picker for one agent; a choice persists and returns its toast.
-	 *
-	 * When `model` is given, only the levels that model supports are offered —
-	 * `getSupportedThinkingLevels` reads the model's `reasoning` flag and
-	 * `thinkingLevelMap`, so a level the model cannot express is never offered.
-	 */
 	private async pickThinking(
 		params: SpawnDefaultsParams,
 		agent: AgentConfig,
@@ -265,17 +209,13 @@ export class SpawnDefaultsHandler {
 		}
 
 		const choice = await ui.select(`Thinking level for ${agent.name}`, options.map((o) => o.label));
-		if (!choice) return undefined; // esc changes nothing; the agent list returns
+		if (!choice) return undefined;
 		const picked = options.find((o) => o.label === choice);
 		if (!picked) return undefined;
 
 		return this.persist(params, agent, "thinking", picked.value);
 	}
 
-	/**
-	 * Route one picked value to its store: the settings maps for a built-in, the
-	 * agent's own frontmatter file for a custom one. Returns the toast to display.
-	 */
 	private persist(
 		params: SpawnDefaultsParams,
 		agent: AgentConfig,
@@ -310,7 +250,6 @@ export class SpawnDefaultsHandler {
 	}
 }
 
-/** A caught value's message, for an error notification. */
 function errorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }

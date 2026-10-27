@@ -1,17 +1,3 @@
-/**
- * submode-exit.ts — the `submode-exit` tool.
- *
- * A single transition tool for the submode system:
- *
- *   - `mode: "exit"`  → leave the submode (back to the normal coder agent)
- *   - `mode: "plan"`  → switch to the Plan submode
- *   - `mode: "grill"` → switch to the Grill submode
- *   - `mode: "straight"` → switch to the Straight submode
- *
- * Switching ends the current run so the next `before_agent_start` applies the
- * target submode's prompt and tool set.
- */
-
 import type { ExtensionToolContext, ThemeColor, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
@@ -19,10 +5,8 @@ import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { SUBMODE_LABEL } from "../../../shared/submodes.ts";
 
-/** The submode transition the tool requests. */
 export type SubmodeExitMode = "exit" | "plan" | "grill" | "straight";
 
-/** Callback the extension uses to perform the transition and describe it. */
 export interface SubmodeExitDeps {
 	transition: (mode: SubmodeExitMode, ctx: ExtensionToolContext) => string;
 }
@@ -36,10 +20,8 @@ const DESCRIPTION = `Exit the current submode or switch to another one.
 
 Call this only when the current submode's work is done or the user asked to switch. The current run ends so the target submode takes effect.`;
 
-/** Arrow shown before the target label in the tool call/result render. */
 const SWITCH_ARROW = "→";
 
-/** Display label and theme color for each transition target. */
 const MODE_LABEL: Record<SubmodeExitMode, string> = {
 	exit: "exit",
 	plan: `${SWITCH_ARROW} ${SUBMODE_LABEL.plan}`,

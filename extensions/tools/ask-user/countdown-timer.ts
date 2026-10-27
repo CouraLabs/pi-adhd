@@ -1,11 +1,3 @@
-/**
- * Reusable countdown timer for dialog components — migrated verbatim from
- * oh-my-pi (packages/coding-agent/src/modes/components/countdown-timer.ts).
- *
- * Adaptation: the `tui` parameter is narrowed to the only member omp uses
- * (`requestRender`), so tests can pass a plain object.
- */
-
 export interface TuiRenderHandle {
 	requestRender(): void;
 }
@@ -64,7 +56,6 @@ export class CountdownTimer {
 		}, 1000);
 	}
 
-	/** Reset the countdown to its initial value */
 	reset(): void {
 		this.dispose();
 		this.#start();

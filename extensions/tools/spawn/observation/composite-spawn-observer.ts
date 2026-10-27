@@ -2,13 +2,6 @@ import { debugLog } from "../debug.ts";
 import type { SpawnManagerObserver } from "../lifecycle/spawn-manager.ts";
 import type { CompactionInfo, Spawn } from "../types.ts";
 
-/**
- * Fans out SpawnManager lifecycle notifications to multiple observers.
- *
- * Lets the manager keep its single-observer contract while several independent
- * consumers (event dispatch, session persistence) subscribe.
- * Each delegate is isolated: a throw in one does not suppress the others.
- */
 export class CompositeSpawnObserver implements SpawnManagerObserver {
   private readonly delegates: SpawnManagerObserver[];
 
@@ -16,7 +9,6 @@ export class CompositeSpawnObserver implements SpawnManagerObserver {
     this.delegates = [...delegates];
   }
 
-  /** Register an additional observer. */
   add(observer: SpawnManagerObserver): void {
     this.delegates.push(observer);
   }
@@ -37,12 +29,6 @@ export class CompositeSpawnObserver implements SpawnManagerObserver {
     this.dispatch((o) => o.onSpawnResumed(record), "onSpawnResumed");
   }
 
-  /**
-   * Required here even though `SpawnManagerObserver` declares it optional:
-   * the manager's observer is always this composite, so a member it does not
-   * enumerate is dropped silently — no compiler error, no runtime error, and
-   * the announcement simply never fires.
-   */
   onSpawnWorkspaceNotice(record: Spawn, notice: string): void {
     this.dispatch(
       (o) => o.onSpawnWorkspaceNotice?.(record, notice),

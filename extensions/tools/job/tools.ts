@@ -1,21 +1,8 @@
-/**
- * job/tools — the four model-callable job tools: `job`, `job-kill`,
- * `job-read`, and `job-list`.
- *
- * All four share the in-memory {@link JobManager}, so they run sequentially
- * (`executionMode: "sequential"`): a read that interleaved with a start could
- * observe a half-built entry. Failures come back as `isError: true` results
- * with the reason in `content`, rather than throws, so a failed lookup still
- * carries structured details for the transcript and programmatic callers.
- */
-
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { ExtensionAPI, Theme, ToolDefinition, ToolRenderResultOptions } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type, type Static } from "typebox";
 import { DEFAULT_READ_LINES, MAX_READ_LINES, type JobManager, type JobStatus } from "./manager.ts";
-
-// ── schemas ─────────────────────────────────────────────────────────────────
 
 const StartSchema = Type.Object({
 	name: Type.String({ description: "Short label for the job, shown by job-list" }),
@@ -74,12 +61,10 @@ type StartParams = Static<typeof StartSchema>;
 type KillParams = Static<typeof KillSchema>;
 type ReadParams = Static<typeof ReadSchema>;
 
-// ── shared result plumbing ──────────────────────────────────────────────────
-
 interface JobDetails {
 	jobId?: string;
 	status: JobStatus | "error";
-	/** One-line summary for the compact transcript row. */
+
 	line: string;
 }
 
@@ -102,7 +87,6 @@ function failure(message: string, details?: Partial<JobDetails>): AgentToolResul
 	};
 }
 
-/** Compact transcript renderer shared by every job tool: one summary line. */
 function renderJobResult(
 	result: AgentToolResult<JobDetails>,
 	theme: Theme,
@@ -112,8 +96,6 @@ function renderJobResult(
 	const line = result.details?.line ?? textOf(result);
 	return new Text(theme.fg("success", `✓ ${successPrefix} ${line}`), 0, 0);
 }
-
-// ── tool definitions ────────────────────────────────────────────────────────
 
 function startTool(manager: JobManager): ToolDefinition<typeof StartSchema, JobDetails> {
 	return {
@@ -283,7 +265,6 @@ function listTool(manager: JobManager): ToolDefinition<typeof ListSchema, JobDet
 	};
 }
 
-/** Register `job`, `job-kill`, `job-read`, and `job-list`. */
 export function registerJobTools(pi: ExtensionAPI, manager: JobManager): void {
 	pi.registerTool(startTool(manager));
 	pi.registerTool(killTool(manager));

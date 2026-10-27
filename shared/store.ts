@@ -1,35 +1,17 @@
-/**
- * store — a process-global value with change notifications.
- *
- * pi-adhd extension instances are not guaranteed to share module state (jiti
- * reloads, child sessions, duplicate installs), so cross-extension state lives
- * on `globalThis` under a registered symbol. This helper owns that pattern: the
- * value and its listeners are created lazily on first use, and the first caller
- * with a given key wins so every module that calls it shares one store.
- */
-
 interface StoreState<T> {
 	value: T;
 	listeners: Set<(value: T) => void>;
 }
 
 export interface GlobalStore<T> {
-	/** The current value. */
+
 	get(): T;
-	/** Set the value and notify subscribers. No-op when unchanged. */
+
 	set(value: T): void;
-	/** Subscribe to changes; returns an unsubscribe function. Listeners live on
- *  `globalThis` and survive module reloads, so a subscriber that is torn down
- *  (extension unload, session end) must call the unsubscriber or its closure
- *  fires forever. */
+
 	subscribe(listener: (value: T) => void): () => void;
 }
 
-/**
- * Create (or recover) the process-global store registered under `key`. Callers
- * that pass the same key share the value even when their modules are loaded
- * more than once.
- */
 export function createGlobalStore<T>(key: symbol, initial: T): GlobalStore<T> {
 	const root = globalThis as Record<symbol, unknown>;
 	const state = (): StoreState<T> => {

@@ -1,11 +1,3 @@
-/**
- * record-observer.ts — Subscribes to session events and accumulates SpawnState stats.
- *
- * The observer targets the SpawnState value object directly, so it carries
- * no dependency on Spawn; the caller forwards itself to its own lifecycle
- * observer via onCompact.
- */
-
 import type { SpawnState } from "./spawn-state.ts";
 import type { CompactionInfo, SubscribableSession } from "../types.ts";
 
@@ -13,20 +5,6 @@ export interface SpawnObserverOptions {
   onCompact?: (info: CompactionInfo) => void;
 }
 
-/**
- * Subscribe to session events and accumulate stats on the spawn state.
- *
- * Handles:
- * - every event → `state.markProgress()`, so a run whose events stop reads as stalled
- * - `tool_execution_start` → `state.addActiveTool(name)`
- * - `tool_execution_end` → `state.removeActiveTool(name)`, `state.incrementToolUses()`
- * - `message_start` → `state.resetResponseText()`
- * - `message_update` (text_delta) → `state.appendResponseText(delta)`
- * - `message_end` (assistant, with usage) → `state.addUsage(…)`
- * - `compaction_end` (not aborted) → `state.incrementCompactions()`, call `onCompact`
- *
- * @returns An unsubscribe function.
- */
 export function subscribeSpawnObserver(
   session: SubscribableSession,
   state: SpawnState,

@@ -1,11 +1,3 @@
-/**
- * result-renderer.ts — Pure per-status rendering functions for Agent tool results.
- *
- * All functions are stateless: they receive AgentDetails and a Theme, returning
- * formatted strings. No SDK types, no timers, no side effects.
- * Consumed by the renderResult hook in agent-tool.ts.
- */
-
 import type { SpawnStatus } from "../lifecycle/spawn-state.ts";
 import { wrappedUpAtTurnLimit } from "../lifecycle/turn-limits.ts";
 import type { AgentDetails, Theme } from "../ui/display.ts";
@@ -13,9 +5,6 @@ import { formatMs } from "../ui/display.ts";
 import { GLYPHS, SPINNER } from "../ui/glyphs.ts";
 import { emptyUsage, usageCost, usageGroup } from "../../../../shared/usage.ts";
 
-// ---- Dispatcher ----
-
-/** Dispatch to the per-status renderer based on details.status and isPartial. */
 export function renderAgentResult(
 	details: AgentDetails,
 	resultText: string,
@@ -30,9 +19,6 @@ export function renderAgentResult(
 	return renderFailed(details, theme);
 }
 
-// ---- Per-status renderers ----
-
-/** Render running/partial status: spinner + stats + activity line. */
 export function renderRunning(details: AgentDetails, theme: Theme): string {
 	const frame = SPINNER[details.spinnerFrame ?? 0];
 	const s = renderStats(details, theme);
@@ -41,7 +27,6 @@ export function renderRunning(details: AgentDetails, theme: Theme): string {
 	return line;
 }
 
-/** Render completed status, with a turn-limit caveat when it wrapped up, and optional expanded result text. */
 export function renderCompleted(
 	details: AgentDetails,
 	resultText: string,
@@ -77,7 +62,6 @@ export function renderCompleted(
 	return line;
 }
 
-/** Render stopped status: dim stop icon + stats + "Stopped". */
 export function renderStopped(details: AgentDetails, theme: Theme): string {
 	const s = renderStats(details, theme);
 	let line = renderStatusIcon("stopped", theme) + (s ? " " + s : "");
@@ -85,7 +69,6 @@ export function renderStopped(details: AgentDetails, theme: Theme): string {
 	return line;
 }
 
-/** Render error or aborted status: error icon + stats + status message. */
 export function renderFailed(details: AgentDetails, theme: Theme): string {
 	const s = renderStats(details, theme);
 	let line = renderStatusIcon(details.status === "error" ? "error" : "aborted", theme) + (s ? " " + s : "");
@@ -102,19 +85,10 @@ export function renderFailed(details: AgentDetails, theme: Theme): string {
 	return line;
 }
 
-// ---- Shared helpers ----
-
-/** A success glyph in the warning color: finished, with a turn-limit caveat. */
 function renderWrappedUpIcon(theme: Theme): string {
 	return theme.fg("warning", GLYPHS.success);
 }
 
-/**
- * The themed status glyph for a settled or pending agent.
- *
- * Exhaustive over `SpawnStatus`, so a status added later fails to compile
- * here rather than falling through to an unmarked icon.
- */
 export function renderStatusIcon(status: SpawnStatus, theme: Theme): string {
 	switch (status) {
 		case "completed":
@@ -129,10 +103,6 @@ export function renderStatusIcon(status: SpawnStatus, theme: Theme): string {
 	}
 }
 
-/**
- * Build the stats string: "anthropic/claude-haiku-4-5 · thinking: high · ↑ 120k ↓ 8.4k ⭍ 87% · $0.842".
- * Returns an empty string when all fields are absent or zero.
- */
 export function renderStats(details: AgentDetails, theme: Theme): string {
 	const parts: string[] = [];
 	if (details.modelName) parts.push(theme.fg("dim", details.modelName));

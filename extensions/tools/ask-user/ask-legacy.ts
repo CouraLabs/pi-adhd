@@ -1,33 +1,3 @@
-/**
- * Legacy per-question ask path — migrated from oh-my-pi
- * (packages/coding-agent/src/tools/ask.ts, askSingleQuestion and its
- * custom-input title helpers).
- *
- * This path serves hosts without rich dialog support (RPC mode). Questions are
- * asked one at a time through native select/input dialogs, mirroring omp's
- * legacy selector flow: recommended suffixes, a multi-select toggle loop with
- * a "Done selecting" terminal option, "Other" free-text via the editor, the
- * timeout auto-selection with the TIMEOUT_DETECTION_TOLERANCE heuristic, and
- * (i/n) progress titles.
- *
- * Adaptations for pi's extension API:
- * - pi's ui.select accepts only `{ signal, timeout }` dialog options. The omp
- *   options (initialIndex, onTimeout*, onLeft/onRight, helpText,
- *   selectionMarker, checkedIndices, markableCount, outline) are still part
- *   of UIContext and still honored by selectOption()'s bookkeeping, but the
- *   pi adapter layer cannot forward them, so surfaces render without radio/
- *   checkbox markers, initial cursor placement, and ←/→ question navigation.
- *   The logic is kept 1:1 so hosts that do support the options (tests, future
- *   pi) light them up automatically.
- * - Option descriptions cannot ride along in pi's string[] select; they are
- *   dropped from the visible list (labels stay).
- * - omp's ui.editor(title, prefill, {signal}, {promptStyle}) maps to pi's
- *   ui.editor(title, prefill) (multi-line, no signal) with a fallback to
- *   ui.input on hosts without an editor; the signal race moves to a local
- *   untilAborted equivalent.
- * - omp's untilAborted / AbortSignal.any utilities are re-implemented locally.
- */
-
 import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { ELLIPSIS, SYMBOLS } from "./compat.ts";
@@ -51,22 +21,19 @@ const RECOMMENDED_SUFFIX = " (Recommended)";
 export const OTHER_OPTION = "Other (type your own)";
 const CHAT_ABOUT_THIS_OPTION = "Chat about this";
 export const NEXT_OPTION = "Next →";
-/** Reserved runtime labels the model must not collide with (omp ask.ts). */
+
 export const RESERVED_OPTION_LABELS: Record<string, true> = {
 	[OTHER_OPTION]: true,
 	[CHAT_ABOUT_THIS_OPTION]: true,
 	[NEXT_OPTION]: true,
 };
-// Window after the timeout deadline within which an `undefined` selection is
-// attributed to a UI-enforced timeout (for surfaces that close the dialog at
-// the deadline but never invoke `onTimeout`). Cancels beyond it are user Esc.
+
 const TIMEOUT_DETECTION_TOLERANCE_MS = 1_000;
 
 function getDoneOptionLabel(): string {
 	return `${SYMBOLS.status.success} Done selecting`;
 }
 
-/** Add "(Recommended)" suffix to the option at the given index if not already present */
 export function addRecommendedSuffix(options: AskOption[], recommendedIndex?: number): ExtensionUISelectItem[] {
 	if (recommendedIndex === undefined || recommendedIndex < 0 || recommendedIndex >= options.length) {
 		return options.map(option => toSelectOption(option));
@@ -88,12 +55,9 @@ export function getAutoSelectionOnTimeout(options: AskOption[], recommended?: nu
 	return [options[0]!.label];
 }
 
-/** Strip "(Recommended)" suffix from a label */
 export function stripRecommendedSuffix(label: string): string {
 	return label.endsWith(RECOMMENDED_SUFFIX) ? label.slice(0, -RECOMMENDED_SUFFIX.length) : label;
 }
-
-// --- untilAborted / signal composition (omp @oh-my-pi/pi-utils) ------------
 
 function composeSignals(a: AbortSignal | undefined, b: AbortSignal | undefined): AbortSignal | undefined {
 	if (!a) return b;
@@ -106,8 +70,6 @@ function composeSignals(a: AbortSignal | undefined, b: AbortSignal | undefined):
 	return controller.signal;
 }
 
-/** omp utils untilAborted: resolve `undefined` when the signal fires first,
- *  otherwise pass the wrapped promise's outcome through untouched. */
 export function untilAborted<T>(signal: AbortSignal | undefined, run: () => Promise<T>): Promise<T | undefined> {
 	if (!signal) return run();
 	if (signal.aborted) return Promise.resolve(undefined);
@@ -135,8 +97,6 @@ export function untilAborted<T>(signal: AbortSignal | undefined, run: () => Prom
 		);
 	});
 }
-
-// --- custom input title (omp buildCustomInputRows & friends) ----------------
 
 interface CustomInputContext {
 	selectionMarker: "radio" | "checkbox";
@@ -174,7 +134,6 @@ interface CustomInputOptionWindow {
 	gapBefore: Map<number, CustomInputOptionGap>;
 }
 
-/** Window the option list so the title stays bounded (omp pickCustomInputOptionWindow). */
 function pickCustomInputOptionWindow(
 	total: number,
 	selectedIndex: number,
@@ -319,8 +278,6 @@ export function formatCustomInputTitle(
 		.join("\n");
 }
 
-// --- askSingleQuestion (omp ask.ts) ----------------------------------------
-
 interface SelectionResult {
 	selectedOptions: string[];
 	customInput?: string;
@@ -367,7 +324,6 @@ export interface UIContext {
 	editor(title: string, prefill?: string, dialogOptions?: { signal?: AbortSignal }): Promise<string | undefined>;
 }
 
-/** Adapt pi's ExtensionUIContext to the omp UIContext surface. */
 export function uiContextFromExtension(extensionUi: Pick<ExtensionUIContext, "select" | "input" | "editor">): UIContext {
 	return {
 		select: (prompt, options, dialogOptions) =>
@@ -382,7 +338,7 @@ export function uiContextFromExtension(extensionUi: Pick<ExtensionUIContext, "se
 		editor: (title, prefill, dialogOptions) => {
 			const show = () => extensionUi.editor(title, prefill);
 			const input = () => extensionUi.input(title, prefill);
-			// Prefer pi's multi-line editor; fall back to input when absent.
+
 			const run = () => (typeof extensionUi.editor === "function" ? show() : input());
 			return dialogOptions?.signal ? untilAborted(dialogOptions.signal, run) : run();
 		},
@@ -462,10 +418,7 @@ export async function askSingleQuestion(
 			};
 			const choice = await (dialogSignal ? untilAborted(dialogSignal, runSelect) : runSelect());
 			if (!timeoutTriggered && choice === undefined && typeof timeout === "number") {
-				// Fallback for UI surfaces that enforce `timeout` without invoking
-				// `onTimeout`: their auto-cancel resolves right at the deadline. A
-				// cancel arriving well past the deadline is a deliberate user Esc on
-				// a surface that kept the dialog open — keep treating it as a cancel.
+
 				const elapsed = Date.now() - timeoutStartedMs;
 				timeoutTriggered = elapsed >= timeout && elapsed <= timeout + TIMEOUT_DETECTION_TOLERANCE_MS;
 			}

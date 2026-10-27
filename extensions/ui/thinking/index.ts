@@ -1,19 +1,3 @@
-/**
- * thinking — compact animated reasoning previews.
- *
- * A vendored, pi-adhd-adapted port of `pi-compact-thinking` (MIT). It replaces
- * pi's built-in hidden-thinking renderer with a single compact run: an animated
- * heading (the OpenAI summary title, or `Thinking...`), the elapsed time, and a
- * few preview lines. Visible mode is left exactly as pi renders it, so
- * `Shift+Tab` still expands the full reasoning block.
- *
- * The upstream extension patches `AssistantMessageComponent.prototype.updateContent`
- * — pi exposes no hook for the hidden-thinking body — and that internal API is
- * why the port keeps its touch surface in `types.ts`. The patch is installed on
- * `session_start` and removed on `session_shutdown`. Toggle it with
- * `/couralabs:toggle thinking`.
- */
-
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import {
 	AssistantMessageComponent,
@@ -43,13 +27,6 @@ import type {
 const WIDGET_ID = "compact-thinking-render-loop";
 type MarkdownOptions = NonNullable<ConstructorParameters<typeof Markdown>[5]>;
 
-/**
- * Rebuild the markdown-transform options pi normally passes for assistant text.
- *
- * `markdownTransformers` and Markdown's `transform` option are internal APIs,
- * so this is written to degrade to `undefined` when pi predates the transformer
- * pipeline instead of failing the render.
- */
 function getAssistantMarkdownOptions(
 	self: AssistantInternals,
 	isStreaming: boolean,
@@ -71,7 +48,7 @@ function getAssistantMarkdownOptions(
 						transformedMarkdown = transformed;
 					}
 				} catch {
-					// Match pi: one broken transformer must not stop the rest.
+
 				}
 			}
 			return transformedMarkdown;
@@ -79,7 +56,6 @@ function getAssistantMarkdownOptions(
 	} as unknown as MarkdownOptions;
 }
 
-/** True when a content block renders something a reader can actually see. */
 function isVisibleContent(content: AssistantMessage["content"][number]): boolean {
 	return (
 		(content.type === "text" && content.text.trim() !== "") ||
@@ -93,11 +69,7 @@ export default function thinkingExtension(pi: ExtensionAPI): void {
 	const originalUpdateContent = prototype.updateContent;
 
 	const completedDurations = new Map<number, Map<number, number>>();
-	// Weak refs: pi drops assistant components when a message is compacted or
-	// removed from the tree, and this set must not keep them (and their message
-	// payloads) alive for the rest of the session. `trackedComponents` dedupes
-	// because each `new WeakRef` is a distinct object and pi calls updateContent
-	// on every streaming delta.
+
 	const renderedComponents = new Set<WeakRef<AssistantMessageComponent>>();
 	const trackedComponents = new WeakSet<AssistantMessageComponent>();
 	const streamingComponents = new Set<AssistantMessageComponent>();
@@ -110,16 +82,14 @@ export default function thinkingExtension(pi: ExtensionAPI): void {
 	let animationFrame = 0;
 	let patchInstalled = false;
 
-	/** Force every tracked assistant message to re-render through the patch. */
 	function refreshRenderedComponents(): void {
-		// Prune components pi has already discarded before touching the rest.
+
 		for (const ref of renderedComponents) {
 			if (!ref.deref()) renderedComponents.delete(ref);
 		}
 
 		if (activeTui) {
-			// A resumed session renders before extensions rebind. Invalidate the
-			// tree so those prebuilt components run updateContent again.
+
 			activeTui.invalidate();
 			activeTui.requestRender(true);
 			return;
@@ -143,7 +113,6 @@ export default function thinkingExtension(pi: ExtensionAPI): void {
 			: text;
 	}
 
-	/** Sweep a bright highlight across `text` to signal an active run. */
 	function animatedText(
 		text: string,
 		baseStyle: (value: string) => string,
@@ -163,13 +132,12 @@ export default function thinkingExtension(pi: ExtensionAPI): void {
 		const after = characters.slice(Math.max(0, end)).join("");
 
 		return (
-			baseStyle(before) + 
-			(highlighted ? activeTheme.italic(activeTheme.bold(activeTheme.fg("text", highlighted))) : "") + 
+			baseStyle(before) +
+			(highlighted ? activeTheme.italic(activeTheme.bold(activeTheme.fg("text", highlighted))) : "") +
 			baseStyle(after)
 		);
 	}
 
-	/** The most recent completed duration in a run, used after the run ends. */
 	function getCompletedDuration(
 		messageTimestamp: number,
 		startIndex: number,
@@ -192,10 +160,6 @@ export default function thinkingExtension(pi: ExtensionAPI): void {
 		);
 	}
 
-	/**
-	 * The patched `updateContent`. Visible thinking falls straight through to
-	 * pi's original renderer; only hidden thinking is replaced.
-	 */
 	function patchedUpdateContent(
 		this: AssistantMessageComponent,
 		message: AssistantMessage,
@@ -209,15 +173,11 @@ export default function thinkingExtension(pi: ExtensionAPI): void {
 		latestComponent = component;
 		latestComponentTimestamp = message.timestamp;
 
-		// Visible mode is intentionally untouched: Shift+Tab restores pi's exact
-		// built-in Thinking Markdown renderer, including every OpenAI summary stage.
 		if (!self.hideThinkingBlock) {
 			originalUpdateContent.call(this, message);
 			return;
 		}
 
-		// Only hidden renders depend on this extension's state (durations, theme,
-		// animation), so only they need tracking for a forced re-render.
 		if (!trackedComponents.has(component)) {
 			trackedComponents.add(component);
 			renderedComponents.add(new WeakRef(component));
@@ -232,8 +192,7 @@ export default function thinkingExtension(pi: ExtensionAPI): void {
 			activeThinking?.messageTimestamp === message.timestamp &&
 			message.content.some((content) => content.type === "thinking");
 		const hasVisibleContent = hasActiveThinking || message.content.some(isVisibleContent);
-		// Reserve pi's normal leading spacer even before the first token, so the
-		// heading does not jump down a row once content starts streaming.
+
 		if (hasVisibleContent) self.contentContainer.addChild(new Spacer(1));
 
 		for (let index = 0; index < message.content.length; index += 1) {
@@ -284,9 +243,7 @@ export default function thinkingExtension(pi: ExtensionAPI): void {
 			const runEndIndex = index - 1;
 			index -= 1;
 			const active = isActiveRun(message, runStartIndex, runEndIndex);
-			// OpenAI can spend seconds reasoning before the first summary token.
-			// Keep an empty active block visible as animated "Thinking..." so that
-			// silent interval still shows progress.
+
 			if (thinkingBlocks.length === 0 && !active) continue;
 			if (hasVisibleContentBefore) {
 				self.contentContainer.addChild(new Spacer(1));
@@ -310,7 +267,7 @@ export default function thinkingExtension(pi: ExtensionAPI): void {
 				heading = animatedText(label, summaryTitleStyle, true) +
 					(durationText ? summaryTitleStyle(` · ${durationText}`) : "");
 			} else {
-				// Completed compact blocks use one provider-independent status line.
+
 				heading = summaryTitleStyle(
 					durationText ? `Thought for ${durationText}` : "Reasoning",
 				);
@@ -380,9 +337,6 @@ export default function thinkingExtension(pi: ExtensionAPI): void {
 		streamingComponents.clear();
 		animationFrame = 0;
 
-		// Depending on listener order, pi may have rendered the empty
-		// thinking_start partial just before this extension sees the event.
-		// Re-render it now so the animation appears with the first token.
 		if (latestComponent && latestComponentTimestamp === message.timestamp) {
 			streamingComponents.add(latestComponent);
 			const self = latestComponent as unknown as AssistantInternals;
@@ -437,16 +391,11 @@ export default function thinkingExtension(pi: ExtensionAPI): void {
 		restoreDurationEntries(ctx.sessionManager.getBranch(), completedDurations);
 		activeTheme = ctx.ui.theme;
 
-		// An empty widget gives the animation loop requestRender access without
-		// enabling terminal mouse reporting or intercepting native scrollback.
 		ctx.ui.setWidget(WIDGET_ID, (tui) => {
 			activeTui = tui;
 			return { render: () => [], invalidate() {} };
 		});
 
-		// On resume, pi may construct the chat before session_start is emitted.
-		// Rebuild those already-rendered components now that durations and the
-		// active theme are available.
 		refreshRenderedComponents();
 	}
 
@@ -475,9 +424,7 @@ export default function thinkingExtension(pi: ExtensionAPI): void {
 
 		if (update.type === "thinking_start") {
 			if (activeThinking?.messageTimestamp === event.message.timestamp) {
-				// Some Responses-compatible providers emit a fresh thinking_start
-				// for each summary item without a text/tool boundary ending the
-				// visible run. Follow the new block, keeping the original start time.
+
 				activeThinking.contentIndex = update.contentIndex;
 			} else {
 				if (activeThinking) finishThinking();
@@ -496,13 +443,9 @@ export default function thinkingExtension(pi: ExtensionAPI): void {
 		) {
 			finishThinking();
 		}
-		// Do not finalize on thinking_end alone: OpenAI Responses providers can
-		// close one reasoning item and immediately open another while pi still
-		// renders both as one contiguous run. A text/tool transition or message_end
-		// is the real visible boundary.
+
 	});
 
-	// OpenAI-compatible providers may not close reasoning until the response ends.
 	pi.on("tool_execution_start", finishThinking);
 	pi.on("message_end", (event) => {
 		if (event.message.role === "assistant") finishThinking();

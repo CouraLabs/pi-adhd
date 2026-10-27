@@ -142,10 +142,7 @@ export function buildQueryOptions(
 		agents: fromPiAgentDefinitions(cwd),
 		enableFileCheckpointing: true,
 		extraArgs: { "replay-user-messages": null },
-		// "auto" is the SDK's classifier mode: a model classifier approves or denies
-		// each call and falls back to `canUseTool` (the ask broker) when it cannot
-		// decide. Unlike `bypassPermissions` it needs no dangerous-skip flag and
-		// still routes undecidable calls past the operator.
+
 		permissionMode: "auto",
 		settings: SDK_SETTINGS,
 		settingSources: ["user", "project", "local"],

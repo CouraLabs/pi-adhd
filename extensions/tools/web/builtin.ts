@@ -97,7 +97,6 @@ const firecrawl: FetchProvider = {
 	},
 };
 
-// jina-reader returns text, not JSON, and works with or without a key.
 const jinaReader: FetchProvider = {
 	id: "jina-reader",
 	env: ["JINA_API_KEY"],

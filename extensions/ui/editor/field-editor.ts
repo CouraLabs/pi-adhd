@@ -1,15 +1,3 @@
-/**
- * The pi-adhd prompt editor: a closed field-style box drawn with terminal box
- * characters around the built-in editor, with a `❯` marker on the first input
- * line, and the working directory + git state embedded in the bottom border.
- * The box border color follows the active agent mode (Pi is accented, Work
- * keeps the default border) instead of tracking the thinking level.
- *
- * The box does not host pi's working indicator: the loading widget lives
- * above the prompt field (see `./loading.ts`), so this class passes no
- * `embedWorkingStatus` option and lets pi draw its own top border row.
- */
-
 import {
 	CustomEditor,
 	type KeybindingsManager,
@@ -38,7 +26,6 @@ import {
 } from "../../../shared/glyphs.ts";
 import type { GitInfo } from "./git.ts";
 
-/** Hidden-line count a built-in editor border reports (` ↑ 3 more `); 0 when none. */
 function scrollCount(border: string | undefined): number {
 	if (!border) return 0;
 	const plain = border.replace(/\x1b\[[0-9;]*m/g, "");
@@ -48,38 +35,31 @@ function scrollCount(border: string | undefined): number {
 	return down ? Number(down[1]) : 0;
 }
 
-/** Blank columns kept between the box and the terminal edges. */
 const BOX_MARGIN = 0;
 
-/** Fields the editor exposes at runtime but not through its public type. */
 interface EditorInternals {
 	renderedVisibleLineCount?: number;
 }
 
-/** Working directory plus git state, and the theme needed to draw the segment. */
 export interface EditorLocationInfo {
 	cwd: string;
 	git: GitInfo;
 	theme: Theme;
-	/** When true the full working directory is shown; otherwise only its last folder. */
+
 	fullCwd: boolean;
 }
 
 export type LocationProvider = () => EditorLocationInfo | undefined;
 
-/** The agent state the placeholder adapts to. */
 export type PromptStatus = "idle" | "running";
 export type StatusProvider = () => PromptStatus | undefined;
 
-/** Idle-prompt placeholder, shown while the field is empty. */
 const PLACEHOLDER_IDLE = "What are we going to build today?";
-/** Running-prompt placeholder; the queue keybinding resolves live. */
+
 const PLACEHOLDER_RUNNING = "Press {keys} to Queue or Enter to steer new request...";
 
-/** Grapheme segmenter for the placeholder's cursor cell. */
 const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
-/** The queue follow-up keybinding, formatted like pi's own hints (option on macOS). */
 function queueKeyText(): string {
 	const keys = getKeybindings().getKeys("app.message.followUp");
 	if (keys.length === 0) return "the queue key";
@@ -105,18 +85,16 @@ export class FieldEditor extends CustomEditor {
 		private readonly getStatus?: StatusProvider,
 	) {
 		super(tui, theme, keybindings);
-		// Keep the box's mode-colored border; the working indicator lives above.
+
 		this.borderColor = (text) => this.paint(text);
 	}
 
-	/** The status-adaptive placeholder, shown while the field is empty. */
 	private placeholder(): string | undefined {
 		const status = this.getStatus?.();
 		if (!status) return undefined;
 		return status === "running" ? PLACEHOLDER_RUNNING.replace("{keys}", queueKeyText()) : PLACEHOLDER_IDLE;
 	}
 
-	/** Paint a border fragment with the active agent mode's border color. */
 	private paint(text: string): string {
 		return this.getLocation()?.theme.fg(agentModeBorderColor(getAgentMode()), text) ?? text;
 	}
@@ -124,12 +102,10 @@ export class FieldEditor extends CustomEditor {
 	render(width: number): string[] {
 		if (width <= 0) return [];
 
-		// Shrink the side margin before giving up on the box.
 		const margin = width >= 8 + BOX_MARGIN * 2 ? BOX_MARGIN : 0;
 		const boxWidth = width - margin * 2;
 		if (boxWidth < 8) return super.render(width);
 
-		// Columns: `│ ` + `❯ ` + content + ` │`.
 		const contentWidth = Math.max(1, boxWidth - 6);
 		const lines = super.render(contentWidth);
 		if (lines.length < 2) return lines;
@@ -142,15 +118,12 @@ export class FieldEditor extends CustomEditor {
 
 		const info = this.getLocation();
 		const pad = " ".repeat(margin);
-		// The built-in editor embeds its scroll state in the borders this wrapper
-		// replaces; recover the counts so long multi-line input still says that
-		// lines are hidden above or below the box.
+
 		const hiddenAbove = scrollCount(lines[0]);
 		const hiddenBelow = scrollCount(lines[1 + visibleCount]);
 		const theme = info?.theme;
 		const dim = (text: string): string => theme ? theme.fg("dim", text) : text;
-		// An empty field shows the status-adaptive placeholder instead of a blank
-		// first row; typing pushes it out with the real text.
+
 		const placeholder = this.placeholder();
 		if (placeholder && this.getText() === "" && content.length > 0) {
 			content[0] = this.placeholderRow(truncateToWidth(placeholder, contentWidth), dim);
@@ -170,20 +143,12 @@ export class FieldEditor extends CustomEditor {
 		});
 		out.push(pad + this.borderLine(boxWidth, BOX_BOTTOM_LEFT, BOX_BOTTOM_RIGHT, bottomLabel) + pad);
 
-		// Autocomplete suggestions are rendered after the editor; keep them full width.
 		for (const line of trailing) {
 			out.push(pad + line + " ".repeat(Math.max(0, boxWidth - visibleWidth(line))) + pad);
 		}
 		return out;
 	}
 
-	/**
-	 * The placeholder row with the cursor kept: the first grapheme becomes a
-	 * fake cursor cell and a focused field emits the zero-width hardware cursor
-	 * marker before it, the way pi's `Input` renders placeholders. Swapping the
-	 * cursor-bearing first row for plain dim text drops the marker, and with it
-	 * the visible cursor.
-	 */
 	private placeholderRow(text: string, dim: (value: string) => string): string {
 		const graphemes = [...graphemeSegmenter.segment(text)];
 		const atCursor = graphemes[0]?.segment ?? " ";
@@ -192,11 +157,6 @@ export class FieldEditor extends CustomEditor {
 		return marker + renderFakeCursor(dim(atCursor)) + dim(after);
 	}
 
-	/**
-	 * Draw a full-width border with corners and an optional label. The label is
-	 * right-aligned by default; the top border passes `"left"` so the working
-	 * indicator sits at the start of the box, matching pi's built-in editor.
-	 */
 	private borderLine(
 		width: number,
 		leftCorner: string,
@@ -233,7 +193,6 @@ export class FieldEditor extends CustomEditor {
 		);
 	}
 
-	/** Working directory and git branch/diff, embedded in the bottom border. */
 	private locationSegment(): string {
 		const info = this.getLocation();
 		if (!info) return "";

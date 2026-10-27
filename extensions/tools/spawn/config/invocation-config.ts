@@ -1,9 +1,5 @@
 import type { AgentConfig, ThinkingLevel } from "../types.ts";
 
-/**
- * The fields a `spawn` tool caller may pass, spelled as the frontmatter key an
- * agent author writes rather than the camelCase `AgentConfig` property.
- */
 export const LOCKABLE_FIELDS = [
   "model",
   "thinking",
@@ -11,61 +7,33 @@ export const LOCKABLE_FIELDS = [
   "inherit_context",
 ] as const;
 
-/** One field an agent file may withhold from its callers. */
 export type LockableField = (typeof LOCKABLE_FIELDS)[number];
 
-/**
- * An agent file's claim over the fields a caller may not override.
- *
- * `true` locks every field the file sets, which is the pre-#829 blanket behavior. A
- * list locks exactly the fields it names, whether or not the file supplies a value —
- * so an author can deny an override without pinning one.
- */
 export type LockDeclaration = true | readonly LockableField[];
 
-/** True when `name` is a field an agent file may lock. */
 export function isLockableField(name: string): name is LockableField {
   return (LOCKABLE_FIELDS as readonly string[]).includes(name);
 }
 
 interface AgentInvocationParams {
   model?: string;
-  /** Already validated by the door — see `parseThinkingLevel`. */
+
   thinking?: ThinkingLevel;
   max_turns?: number;
   inherit_context?: boolean;
 }
 
-/** The per-call values the Agent tool door resolved from its caller and the agent file. */
 export interface AgentInvocationConfig {
   modelInput?: string;
-  /**
-   * True when the winning model string came from the caller.
-   *
-   * Decides whether an unresolvable string surfaces as an error or falls back to the
-   * parent model silently: the caller is present to read an error, an agent file's
-   * author is not.
-   */
+
   modelFromParams: boolean;
   thinking?: ThinkingLevel;
   maxTurns?: number;
   inheritContext: boolean;
-  /**
-   * Locked fields whose caller value was thrown away, in `LOCKABLE_FIELDS` order.
-   *
-   * A caller that passed the agent's own value discarded nothing and is absent here.
-   */
+
   discarded: LockableField[];
 }
 
-/**
- * Merge an agent file's frontmatter with the `spawn` tool call's parameters.
- *
- * The caller wins by default and the agent file fills what the caller left unset. The
- * upstream guard this inverts existed because the *model* guesses harness knobs it does
- * not understand — an agent author who wants that guard back declares `locked:`, which
- * is the only case where a caller's value is discarded (Refs #829).
- */
 export function resolveAgentInvocationConfig(
   agentConfig: AgentConfig,
   params: AgentInvocationParams,
@@ -93,16 +61,14 @@ export function resolveAgentInvocationConfig(
   };
 }
 
-/** One field's precedence outcome; `source` names the side that supplied the value. */
 interface FieldResolution<T> {
   field: LockableField;
   value: T | undefined;
   source: "caller" | "agent" | "none";
-  /** True when a lock threw away a caller value that differed from the agent's. */
+
   discarded: boolean;
 }
 
-/** Apply the precedence rule to a single field. */
 function resolveField<T>(
   field: LockableField,
   agentValue: T | undefined,
@@ -118,13 +84,6 @@ function resolveField<T>(
     : { field, value: undefined, source: "none", discarded };
 }
 
-/**
- * Whether an agent file withholds `field` from its callers.
- *
- * The two declaration forms differ deliberately on a field the file leaves unset:
- * `true` means "what I set is mine", so it locks nothing it did not supply, while a
- * list names fields outright and denies an override with no value of its own.
- */
 function isLocked(
   field: LockableField,
   agentValue: unknown,

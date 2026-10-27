@@ -1,17 +1,3 @@
-/**
- * extension-control — toggle pi-adhd extensions at runtime.
- *
- * The barrel (`extensions/index.ts`) reads the top-level `extensions` array in
- * `~/.pi/couralabs/settings.json` and calls only the listed factories. This
- * module owns that contract: it resolves the stored names (accepting aliases),
- * writes the array when a command changes it, and registers the
- * `/couralabs:toggle` command. The command flips one extension and reloads the
- * set so the change takes effect without restarting pi.
- *
- * The command is registered by the barrel itself, before any optional factory,
- * so it remains available no matter which extensions are enabled.
- */
-
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import { DEFAULT_EXTENSION_NAMES, EXTENSION_CATALOG, extensionNameList, resolveExtensionName } from "./extension-catalog.ts";
@@ -20,11 +6,9 @@ import type { ExtensionName } from "./extension-registry.ts";
 import { showExtensionToggle, toggleViaSelect } from "./extension-toggle.ts";
 import { loadSettings, updateSettings } from "./settings.ts";
 
-/** The extensions the settings file currently enables, resolved to canonical names. */
 export function loadEnabledExtensions(): Set<ExtensionName> {
 	const stored: unknown = loadSettings().extensions;
-	// A hand-edited file can replace the array with garbage; fall back to the
-	// full set rather than disabling everything by accident.
+
 	const entries = Array.isArray(stored) ? stored : DEFAULT_EXTENSION_NAMES;
 	const enabled = new Set<ExtensionName>();
 	for (const raw of entries) {
@@ -35,16 +19,10 @@ export function loadEnabledExtensions(): Set<ExtensionName> {
 	return enabled;
 }
 
-/** Whether the named extension is in the stored `extensions` array. */
 export function isExtensionEnabled(name: ExtensionName): boolean {
 	return loadEnabledExtensions().has(name);
 }
 
-/**
- * Add or remove an extension from the stored `extensions` array and persist it.
- * The array is rewritten in catalog order with canonical names, so aliases and
- * hand-edited ordering normalize on the first write.
- */
 export function setExtensionEnabled(name: ExtensionName, enabled: boolean): void {
 	const current = loadEnabledExtensions();
 	if (enabled) current.add(name);
@@ -76,8 +54,6 @@ function registerToggleCommand(pi: ExtensionAPI): void {
 		handler: async (args: string, ctx: ExtensionCommandContext): Promise<void> => {
 			const input = args.trim();
 
-			// An explicit name toggles directly, in every mode, so the command still
-			// works when there is no dialog to open.
 			if (input) {
 				const name = resolveExtensionName(input);
 				if (name) {
@@ -89,7 +65,7 @@ function registerToggleCommand(pi: ExtensionAPI): void {
 					const enabled = !feature.isEnabled();
 					feature.setEnabled(enabled);
 					emit(ctx, `pi-adhd ${feature.label} ${enabled ? "enabled" : "disabled"} — reloading extensions…`);
-					// Reload so the owning extension re-reads settings this session.
+
 					await ctx.reload();
 					return;
 				}
@@ -116,10 +92,6 @@ function registerToggleCommand(pi: ExtensionAPI): void {
 				},
 			};
 
-			// The interactive list: TUI mounts the component, RPC drives the same
-			// state through repeated selects. Changes are persisted as they happen
-			// and the set is reloaded once, after the dialog closes — reloading mid-
-			// dialog would replace the runtime and unmount the component.
 			if (ctx.mode === "tui") {
 				const changed = await showExtensionToggle(ctx.ui, deps);
 				if (changed) await reloadAfterToggle(ctx);
@@ -136,7 +108,6 @@ function registerToggleCommand(pi: ExtensionAPI): void {
 	});
 }
 
-/** Headless-safe output: notify in dialog-capable UIs, stderr text elsewhere. */
 function emit(ctx: ExtensionCommandContext, text: string, severity: "info" | "warning" | "error" = "info"): void {
 	if (ctx.hasUI) {
 		ctx.ui.notify(text, severity);
@@ -145,20 +116,17 @@ function emit(ctx: ExtensionCommandContext, text: string, severity: "info" | "wa
 	console.error(text);
 }
 
-/** Persist one extension's state, announce it, and reload the set. */
 async function applyAndReload(ctx: ExtensionCommandContext, name: ExtensionName, enabled: boolean): Promise<void> {
 	setExtensionEnabled(name, enabled);
 	emit(ctx, `pi-adhd ${name} ${enabled ? "enabled" : "disabled"} — reloading extensions…`);
 	await ctx.reload();
 }
 
-/** Announce a dialog's changes and reload once. */
 async function reloadAfterToggle(ctx: ExtensionCommandContext): Promise<void> {
 	emit(ctx, "pi-adhd extensions updated — reloading…");
 	await ctx.reload();
 }
 
-/** Register `/couralabs:toggle`. */
 export function registerExtensionControlCommands(pi: ExtensionAPI): void {
 	registerToggleCommand(pi);
 }

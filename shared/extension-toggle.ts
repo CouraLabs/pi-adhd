@@ -1,19 +1,3 @@
-/**
- * extension-toggle — the interactive `/couralabs:toggle` dialog.
- *
- * Lists every pi-adhd extension with its current state and lets the operator
- * flip one with Enter. Toggles are persisted as they happen, but the extension
- * set is **not** reloaded until the dialog closes: `ctx.reload()` replaces the
- * runtime, which would unmount the dialog mid-interaction. The command handler
- * reloads once afterwards when anything changed.
- *
- * In the TUI the list mounts through `ui.custom` (docked in regular mode, a
- * centered overlay in fullscreen mode, following the plan-review and
- * session-navigator mount strategy). RPC has no custom components, so
- * {@link toggleViaSelect} drives the same state through repeated `ui.select`
- * prompts instead.
- */
-
 import type { ExtensionUIContext, KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, type OverlayOptions, type TUI, matchesKey, truncateToWidth } from "@earendil-works/pi-tui";
 import { EXTENSION_CATALOG } from "./extension-catalog.ts";
@@ -24,42 +8,37 @@ import { labeledRule } from "./labeled-rule.ts";
 import { probeTuiMode } from "./tui-mode.ts";
 import { clamp } from "./util.ts";
 
-/** The settings surface the toggle dialog mutates. */
 export interface ExtensionToggleDeps {
-	/** Extensions enabled when the dialog opens. */
+
 	initialEnabled: ReadonlySet<ExtensionName>;
-	/** Persist one extension's new state. Called on every toggle. */
+
 	setEnabled: (name: ExtensionName, enabled: boolean) => void;
-	/** Feature toggles (settings-backed, not extensions) listed after the extensions. */
+
 	features: readonly { id: string; label: string; description: string; enabled: boolean }[];
-	/** Persist one feature toggle's new state. Called on every toggle. */
+
 	setFeature: (id: string, enabled: boolean) => void;
 }
 
-/** One togglable row: an extension or a feature toggle. */
 interface Entry {
-	/** How the row is persisted: `extension` goes through `setEnabled`, `feature` through `setFeature`. */
+
 	kind: "extension" | "feature";
-	/** Canonical extension name, for `kind: "extension"`. */
+
 	name?: ExtensionName;
-	/** Feature-toggle id, for `kind: "feature"`. */
+
 	featureId?: string;
-	/** Display name in the list. */
+
 	label: string;
 	description: string;
 	enabled: boolean;
 }
 
-/** Stable identity of an entry, used for change detection. The two id spaces
- *  (extension names and feature-toggle ids) are independent, so the kind is
- *  part of the key and a shared display label can never alias another row. */
 function entryKey(entry: Entry): string {
 	return entry.kind === "extension" ? `extension:${entry.name}` : `feature:${entry.featureId}`;
 }
 
 const DIALOG_TITLE = "pi-adhd extensions & toggles";
 const HINTS = "↑↓ move · Enter toggle · Esc close";
-/** Width of the name column, shared by every row so the descriptions align. */
+
 const NAME_COLUMN =
 	Math.max(
 		...EXTENSION_CATALOG.map((entry) => entry.name.length),
@@ -75,7 +54,6 @@ interface PaneOptions {
 	done: (changed: boolean) => void;
 }
 
-/** Mount the interactive list. Resolves to whether any extension changed. */
 export async function showExtensionToggle(ui: ExtensionUIContext, deps: ExtensionToggleDeps): Promise<boolean> {
 	const mode = await probeTuiMode(ui);
 	const fullscreen = mode === "fullscreen";
@@ -86,10 +64,6 @@ export async function showExtensionToggle(ui: ExtensionUIContext, deps: Extensio
 	);
 }
 
-/**
- * RPC fallback: no custom components, so drive the same toggles through
- * repeated single-choice prompts until the operator picks "Done" or cancels.
- */
 export async function toggleViaSelect(ui: ExtensionUIContext, deps: ExtensionToggleDeps): Promise<boolean> {
 	const entries: Entry[] = [
 		...EXTENSION_CATALOG.map(
@@ -113,16 +87,14 @@ export async function toggleViaSelect(ui: ExtensionUIContext, deps: ExtensionTog
 	];
 
 	let changed = false;
-	/** Indices toggled during this dialog, for disambiguating duplicate rows. */
+
 	const toggled = new Set<number>();
 	for (;;) {
 		const options = entries.map((entry) => `${entry.enabled ? "[x]" : "[ ]"} ${entry.label} — ${entry.description}`);
 		options.push("Done");
 		const choice = await ui.select(DIALOG_TITLE, options);
 		if (!choice || choice === "Done") break;
-		// ui.select hands back the option string. When two rows render identically
-		// (same label, state, and description) prefer the first not yet toggled so
-		// both stay reachable instead of always flipping the first.
+
 		let index = options.indexOf(choice);
 		while (index !== -1 && toggled.has(index)) {
 			const next = options.indexOf(choice, index + 1);
@@ -139,13 +111,11 @@ export async function toggleViaSelect(ui: ExtensionUIContext, deps: ExtensionTog
 	return changed;
 }
 
-/** Persist one entry's new state through the right surface. */
 function applyEntry(deps: ExtensionToggleDeps, entry: Entry): void {
 	if (entry.kind === "extension" && entry.name) deps.setEnabled(entry.name, entry.enabled);
 	else if (entry.kind === "feature" && entry.featureId) deps.setFeature(entry.featureId, entry.enabled);
 }
 
-/** The docked/overlay list component. */
 export class ExtensionTogglePane implements Component {
 	#focused = false;
 	get focused(): boolean {
@@ -199,7 +169,7 @@ export class ExtensionTogglePane implements Component {
 	}
 
 	invalidate(): void {
-		// Rendering is stateless; every line is rebuilt from live state.
+
 	}
 
 	dispose(): void {
@@ -278,8 +248,6 @@ export class ExtensionTogglePane implements Component {
 		const footer = labeledRule(width, paint, [theme.fg("dim", HINTS)]);
 		return [header, ...rows, footer];
 	}
-
-	// ---- Private ----
 
 	#renderRow(entry: Entry, index: number, width: number): string {
 		const theme = this.#theme;

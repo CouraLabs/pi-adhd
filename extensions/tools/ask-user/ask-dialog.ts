@@ -1,31 +1,3 @@
-/**
- * AskDialogComponent — migrated from oh-my-pi
- * (packages/coding-agent/src/modes/components/ask-dialog.ts).
- *
- * The multi-question tabbed ask dialog: one tab per question (plus a Submit
- * review tab for 3+ questions or any multi question), radio/checkbox markers,
- * markdown/code option previews, an inactivity countdown that auto-picks
- * recommended options, and an embedded single-line prompt for "Other" answers.
- *
- * Adaptations for pi's extension API (everything else is omp code):
- * - omp's global `theme` singleton and `getMarkdownTheme()` become a pi Theme
- *   instance injected via the constructor plus `markdownThemeFrom()`.
- * - omp's symbol table (theme.radio/checkbox/nav/boxRound) becomes SYMBOLS.
- * - omp's TabBar component becomes a self-drawn tab chip row (pi-tui has no
- *   TabBar), visually aligned with omp's chips.
- * - omp's ScrollView string window becomes windowLines + clipIndicator (pi's
- *   ScrollView is a layout container, not a string[] window).
- * - omp's global keybinding matchers (matchesSelectUp/…) and editorKey labels
- *   resolve through the KeybindingsManager pi injects into ui.custom().
- * - omp's nested HookEditorComponent prompts (onPrompt callback swapping the
- *   editor container) become an embedded prompt mode inside this component:
- *   pi extensions own a single custom component slot and cannot mount a
- *   second focused component, so the dialog itself renders the input row and
- *   handles its keystrokes while #promptActive.
- * - The inputGuard (draft editor proxy) is dropped: pi extensions cannot
- *   access the draft editor.
- */
-
 import type { KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import { getMarkdownTheme, highlightCode } from "@earendil-works/pi-coding-agent";
 import type { MarkdownTheme } from "@earendil-works/pi-tui";
@@ -52,22 +24,15 @@ import { bottomBorder, divider, fit, row, topBorder } from "./overlay-box.ts";im
 
 const SUBMIT_OPTION = "Submit";
 
-/** Fraction of the terminal the dialog may occupy. The box height is fixed
- *  at spawn from the tallest tab's content (re-measured only on viewport
- *  resize) and clamped to this ratio; it rises from the bottom as a stable
- *  panel that never resizes on tab switches or cursor moves. */
 const DIALOG_HEIGHT_RATIO = 0.7;
 const MIN_DIALOG_ROWS = 12;
 const MIN_BODY_ROWS = 5;
 const MAX_HEADER_CHIP_WIDTH = 16;
-/** Maximum number of wrapped lines for an in-body question header, so a long
- *  or multi-line question cannot push the option list off-screen. */
+
 const MAX_HEADER_ROWS = 4;
-/** Maximum rows of the embedded prompt view (title + input + hint) rendered
- *  inside the dialog frame while the user types an Other answer. */
+
 const MAX_PROMPT_TITLE_ROWS = 3;
 
-/** Minimum inner width for the side-by-side option/preview split. */
 const SPLIT_MIN_WIDTH = 80;
 
 interface AskDialogCallbacks {
@@ -113,19 +78,14 @@ interface PreviewSegment {
 
 type PreviewRenderCache = Map<string, Map<number, readonly string[]>>;
 
-/** Embedded prompt state (replaces omp's nested HookEditorComponent):
- *  a pi-tui Input instance owns the input line — cursor marker (IME
- *  positioning), horizontal scroll, grapheme edits, paste, undo — while the
- *  dialog keeps the question/state snapshot. */
 interface EmbeddedPrompt {
 	title: string;
 	input: Input;
 	prefill: string | undefined;
-	/** State snapshot of the question the prompt belongs to. */
+
 	question: ExtensionAskDialogQuestion;
 	state: QuestionState;
 }
-
 
 function questionTabLabel(question: ExtensionAskDialogQuestion, index: number): string {
 	const base = question.header?.trim() || question.id || `Q${index + 1}`;
@@ -203,8 +163,7 @@ function renderPreviewContent(theme: Theme, preview: string, width: number): str
 	const accentStyle = { color: (text: string) => theme.fg("muted", text) };
 	for (const segment of splitPreviewSegments(preview)) {
 		if (segment.kind === "code") {
-			// pi's highlightCode returns ANSI-styled lines (same signature as
-			// omp's); overflow is clipped by the surrounding row() fit().
+
 			out.push(...highlightCode(segment.text, segment.language));
 			continue;
 		}
@@ -214,9 +173,6 @@ function renderPreviewContent(theme: Theme, preview: string, width: number): str
 	return out;
 }
 
-/** Cached preview render at a given width. Returns raw lines; callers add
- *  their own gutter (inline mode indents under the option, split mode draws
- *  the right pane). */
 function renderCachedPreview(theme: Theme, cache: PreviewRenderCache, preview: string, width: number): readonly string[] {
 	let byWidth = cache.get(preview);
 	if (!byWidth) {
@@ -303,13 +259,6 @@ function renderRowLabel(
 	return lines;
 }
 
-/**
- * Coerce untrusted dialog questions into a render-safe shape. The live ask
- * dialog is reached from streamed tool args, where a question entry can arrive
- * with a missing or non-string `question` field. The render helpers assume
- * strings, so a malformed entry would throw and take down the whole TUI render
- * loop — normalize first. (omp ask-dialog.ts)
- */
 function normalizeDialogQuestions(questions: ExtensionAskDialogQuestion[]): ExtensionAskDialogQuestion[] {
 	if (!Array.isArray(questions)) return [];
 	const out: ExtensionAskDialogQuestion[] = [];
@@ -340,7 +289,6 @@ function normalizeDialogQuestions(questions: ExtensionAskDialogQuestion[]): Exte
 	return out;
 }
 
-/** Bound a prompt title to a fixed row budget (omp boundPromptTitle). */
 function boundPromptTitle(theme: Theme, prefix: string, question: string): string[] {
 	const cols = process.stdout.columns ?? 80;
 	const width = Math.max(1, cols - 4);
@@ -353,12 +301,7 @@ function boundPromptTitle(theme: Theme, prefix: string, question: string): strin
 }
 
 export class AskDialogComponent {
-	/** Focusable (IME support, pi-tui contract): the TUI sets `focused` when
-	 *  this component gains keyboard focus. While the embedded prompt is
-	 *  open, focus propagates to its pi-tui Input so CURSOR_MARKER (and with
-	 *  it the hardware cursor / IME candidate window) tracks the input point;
-	 *  outside the prompt the dialog renders no marker and keeps the cursor
-	 *  hidden. */
+
 	#focused = false;
 	get focused(): boolean {
 		return this.#focused;
@@ -439,8 +382,7 @@ export class AskDialogComponent {
 			this.#handleEmbeddedPromptInput(keyData);
 			return;
 		}
-		// Reset the inactivity countdown on any key that reaches past the
-		// closed/prompt guards, matching HookSelector/HookInput semantics.
+
 		this.#countdown?.reset();
 		if (this.#keybindings.matches(keyData, "tui.select.cancel")) {
 			this.#finishCancel();
@@ -460,10 +402,7 @@ export class AskDialogComponent {
 	render(width: number): string[] {
 		const theme = this.#theme;
 		const innerWidth = Math.max(1, width - 4);
-		// Fixed panel height: measured from the tallest tab at spawn and
-		// re-measured only when the viewport changes. Tab switches, cursor
-		// moves, and later answers never resize the box; content that
-		// outgrows it scrolls.
+
 		const totalRows = this.#dialogHeight(innerWidth, process.stdout.rows || 40);
 		const headerLines = this.#renderHeader(innerWidth);
 		const fixedRows = 1 + headerLines.length + 1 + 1 + 1 + 1;
@@ -494,13 +433,9 @@ export class AskDialogComponent {
 		return total;
 	}
 
-	/** Measure the tallest tab's natural content height, clamped to
-	 *  DIALOG_HEIGHT_RATIO of the terminal. Derived from questions and
-	 *  viewport only — never from cursor, tab, or answer state — so the box
-	 *  size is stable for the dialog's lifetime at a given terminal size. */
 	#measureHeight(width: number, termRows: number): number {
 		const maxHeight = Math.max(MIN_DIALOG_ROWS, Math.floor(termRows * DIALOG_HEIGHT_RATIO));
-		const chrome = 5; // topBorder + divider + divider + footer + bottomBorder
+		const chrome = 5;
 		const tabBarRows = this.#hasTabBar() ? 1 : 0;
 		let needed = MIN_DIALOG_ROWS;
 		for (let index = 0; index < this.#questions.length; index++) {
@@ -525,7 +460,7 @@ export class AskDialogComponent {
 				).length;
 			}
 			if (split) {
-				// The right pane must fit the tallest preview at its width.
+
 				let previewRows = 0;
 				for (const option of question.options) {
 					if (option.preview?.trim()) {
@@ -551,18 +486,12 @@ export class AskDialogComponent {
 	}
 
 	#hasTabBar(): boolean {
-		// Multi-question dialogs always get a tab bar for ←/→ navigation, even
-		// when there is no Submit review tab to switch to; a Submit tab alone
-		// (single multi question) also needs its chip row.
+
 		return this.#questions.length > 1 || this.#hasSubmitTab();
 	}
 
 	#hasSubmitTab(): boolean {
-		// The Submit review tab appears for 3+ questions or any multi question.
-		// Multi questions confirm on the Submit tab (Enter toggles, never
-		// submits), so any multi question forces the tab even when there is
-		// only one question. Fewer than three single-select questions advance
-		// Enter-to-submit without a review page.
+
 		return this.#questions.length >= 3 || this.#questions.some(question => question.multi);
 	}
 
@@ -599,7 +528,6 @@ export class AskDialogComponent {
 		return lines;
 	}
 
-	/** Self-drawn tab chip row standing in for omp's TabBar component. */
 	#renderTabBar(width: number): string[] {
 		const theme = this.#theme;
 		const chips: string[] = [];
@@ -632,8 +560,7 @@ export class AskDialogComponent {
 			return `Enter submit · ↑/↓ scroll ·${scroll} ${cancel}`;
 		}
 		const question = this.#questions[this.#currentQuestionIndex()];
-		// Enter advances in multi-question dialogs and submits on the last
-		// question when there is no review tab.
+
 		const isLast = this.#currentQuestionIndex() >= this.#questions.length - 1;
 		const enterAction = !this.#hasSubmitTab() && isLast ? "submit" : "next";
 		const action = question?.multi ? `Space toggle · Enter ${enterAction}` : "Enter select";
@@ -728,9 +655,7 @@ export class AskDialogComponent {
 		if (!option) return;
 		if (question.multi) {
 			if (isEnter) {
-				// Enter confirms the current selection without toggling the
-				// focused option; Space toggles. Advances to the next question
-				// (submitting only when no review tab remains).
+
 				this.#advanceAfterQuestion();
 				return;
 			}
@@ -754,7 +679,7 @@ export class AskDialogComponent {
 			return;
 		}
 		if (this.#keybindings.matches(keyData, "tui.select.down")) {
-			// Clamped against the rendered line count in #renderSubmitBody.
+
 			this.#submitScrollOffset += 1;
 			this.#requestRender();
 			return;
@@ -779,8 +704,6 @@ export class AskDialogComponent {
 		this.#finishSubmit();
 	}
 
-	// --- embedded prompt (replaces omp's nested HookEditorComponent) --------
-
 	#openEmbeddedPrompt(question: ExtensionAskDialogQuestion, state: QuestionState): void {
 		const prefix = "Custom answer: ";
 		const prefill = state.customInput;
@@ -801,9 +724,7 @@ export class AskDialogComponent {
 	}
 
 	#handleEmbeddedPromptInput(keyData: string): void {
-		// The embedded pi-tui Input owns the full input semantics (grapheme
-		// edits, paste buffering, kitty CSI-u, undo, kill ring) and emits
-		// CURSOR_MARKER at the cursor for IME candidate-window positioning.
+
 		this.#embeddedPrompt?.input.handleInput(keyData);
 	}
 
@@ -814,13 +735,10 @@ export class AskDialogComponent {
 		prompt.input.focused = false;
 		this.#promptActive = false;
 		this.#embeddedPrompt = undefined;
-		// omp ordering (#promptForCustomInput): the input is applied to state
-		// first — and Enter may advance/submit — with the deferred timeout only
-		// running afterwards, so a countdown that expired mid-prompt sees the
-		// just-typed answer instead of discarding it and force-picking.
+
 		try {
 			if (input.trim() === "") {
-				// Submitting an empty value unselects the custom answer.
+
 				state.customInput = undefined;
 				return;
 			}
@@ -852,10 +770,7 @@ export class AskDialogComponent {
 			lines.push(theme.fg("text", titleLine));
 		}
 		lines.push("");
-		// pi-tui Input renders the input line itself: "> " prompt, horizontal
-		// scrolling, reverse-video fake cursor, and CURSOR_MARKER at the input
-		// point (zero-width) so the TUI positions the hardware cursor there —
-		// that is what keeps the IME candidate window anchored.
+
 		lines.push(prompt.input.render(width)[0] ?? "");
 		if (prompt.prefill !== undefined) {
 			lines.push(theme.fg("dim", "Enter keeps the value above when unchanged; empty clears it"));
@@ -863,8 +778,6 @@ export class AskDialogComponent {
 		const window = windowLines(lines, 0, rows);
 		return { lines: window, scrollOffset: 0, indicator: "" };
 	}
-
-	// --- body rendering -----------------------------------------------------
 
 	#renderQuestionBody(width: number, maxRows: number): RenderedList {
 		const active = this.#activeQuestionState();
@@ -922,8 +835,7 @@ export class AskDialogComponent {
 				indicator: clipIndicator(state.scrollOffset, rows, allLines.length),
 			};
 		}
-		// Side-by-side: options on the left, the cursored option's preview on
-		// the right, sharing the body window and the cursor-following scroll.
+
 		const theme = this.#theme;
 		const { leftWidth: lw, rightWidth } = this.#splitWidths(width);
 		const divider = theme.fg("borderMuted", " │ ");
@@ -938,7 +850,6 @@ export class AskDialogComponent {
 		};
 	}
 
-	/** Split layout: wide terminal + at least one option carries a preview. */
 	#useSplitLayout(question: ExtensionAskDialogQuestion, width: number): boolean {
 		return width >= SPLIT_MIN_WIDTH && question.options.some(option => option.preview?.trim());
 	}
@@ -948,8 +859,6 @@ export class AskDialogComponent {
 		return { leftWidth, rightWidth: Math.max(1, width - leftWidth - 3) };
 	}
 
-	/** Raw preview lines for the right pane (cursored option, or the custom
-	 *  answer preview under Other). */
 	#previewLinesForRow(
 		question: ExtensionAskDialogQuestion,
 		state: QuestionState,
@@ -1016,7 +925,7 @@ export class AskDialogComponent {
 		let nextOffset = clamp(currentOffset, 0, maxOffset);
 		const cursorRows = cursorEnd - cursorStart;
 		if (manualScroll && cursorRows > rows) {
-			// A page must not expose another option while Enter still targets this one.
+
 			nextOffset = clamp(nextOffset, cursorStart, cursorEnd - rows);
 		} else if (cursorStart < nextOffset || cursorEnd > nextOffset + rows) {
 			nextOffset = cursorRows <= rows ? cursorEnd - rows : cursorStart;
@@ -1076,12 +985,6 @@ export class AskDialogComponent {
 		this.#callbacks.onCancel();
 	}
 
-	/**
-	 * Cancel from outside the component (agent turn aborted). Mirrors omp's
-	 * #presentDialog(signal) disposal path: pi's ui.custom() has no signal
-	 * option, so index.ts routes the agent abort signal here to close the
-	 * dialog and settle the custom() promise with undefined.
-	 */
 	externalCancel(): void {
 		this.#finishCancel();
 	}

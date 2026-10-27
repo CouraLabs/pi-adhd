@@ -1,24 +1,8 @@
-/**
- * job/manager — in-memory registry of background terminal commands.
- *
- * A job is a shell command started with `spawn(..., { shell: true })` whose
- * stdout and stderr are captured line by line while it runs. Nothing is
- * persisted: the registry lives in the extension factory's closure and is
- * emptied by `disposeAll()` from the idempotent `session_shutdown` handler, so
- * a reload or a session replacement never leaks a running process.
- *
- * The registry is deliberately small: a bounded number of jobs and a bounded
- * number of captured lines per job. `job-read` returns the tail, so the model
- * sees recent output without the extension growing without limit.
- */
-
 import { spawn, type ChildProcess } from "node:child_process";
 import { clamp } from "../../../shared/util.ts";
 
-/** Lifecycle state of a job. */
 export type JobStatus = "running" | "exited" | "failed" | "killed" | "timeout";
 
-/** A job as the tools and commands see it (no live process handle). */
 export interface JobView {
 	id: string;
 	name: string;
@@ -30,37 +14,35 @@ export interface JobView {
 	startedAt: number;
 	endedAt?: number;
 	error?: string;
-	/** Number of captured lines, including an unterminated trailing line. */
+
 	lineCount: number;
-	/** Most recent captured line, or "" before the command writes anything. */
+
 	lastLine: string;
 }
 
 interface Job extends JobView {
 	child: ChildProcess;
 	lines: string[];
-	/** Bytes after the last newline, not yet a complete line. */
+
 	partial: string;
 	timeoutHandle?: NodeJS.Timeout;
 }
 
-/** Arguments accepted by {@link JobManager.start}. */
 export interface StartJobInput {
 	name: string;
 	command: string;
-	/** Working directory the command runs in. */
+
 	cwd: string;
-	/** Kill the job after this many seconds. */
+
 	timeoutSeconds?: number;
 }
 
-/** Cap on live entries in the registry. Finished jobs are pruned first. */
 const MAX_JOBS = 100;
-/** Cap on captured lines per job; older lines are dropped. */
+
 const MAX_LINES = 2000;
-/** Lines returned by `job-read` when the caller does not ask for a count. */
+
 export const DEFAULT_READ_LINES = 50;
-/** Upper bound on the `lines` argument of `job-read`. */
+
 export const MAX_READ_LINES = 500;
 
 function now(): number {
@@ -71,11 +53,6 @@ export class JobManager {
 	private readonly jobs = new Map<string, Job>();
 	private counter = 0;
 
-	/**
-	 * Start a command and resolve once the process has actually spawned. A
-	 * spawn failure (missing cwd, no shell) rejects and leaves no entry behind;
-	 * a command that exits immediately still resolves, because it did start.
-	 */
 	async start(input: StartJobInput): Promise<JobView> {
 		this.prune();
 		if (this.jobs.size >= MAX_JOBS) {
@@ -85,16 +62,13 @@ export class JobManager {
 		}
 
 		const id = `job-${++this.counter}`;
-		// Validate the timeout before spawning: a rejected value must not leave a
-		// process running with no registry entry to reach it through.
+
 		const timeoutMs =
 			input.timeoutSeconds !== undefined ? Math.round(input.timeoutSeconds * 1000) : undefined;
 		if (timeoutMs !== undefined && (!Number.isFinite(timeoutMs) || timeoutMs <= 0)) {
 			throw new Error("Invalid timeout: must be a positive number of seconds");
 		}
-		// A detached process is its own process-group leader, so the whole
-		// command tree can be signalled with a negative pid. Windows has no
-		// process groups, so taskkill /T is used there instead.
+
 		const detached = process.platform !== "win32";
 		const child = spawn(input.command, {
 			shell: true,
@@ -137,7 +111,7 @@ export class JobManager {
 				job.status = "timeout";
 				this.killProcess(job);
 			}, timeoutMs);
-			// A pending job timeout must never keep the host process alive.
+
 			job.timeoutHandle.unref?.();
 		}
 
@@ -147,8 +121,7 @@ export class JobManager {
 				child.once("error", (error: Error) => reject(error));
 			});
 		} catch (error) {
-			// Disarm the timeout before forgetting the entry: an orphaned handle
-			// would later fire `killProcess` on a job object nothing tracks.
+
 			if (job.timeoutHandle) clearTimeout(job.timeoutHandle);
 			this.jobs.delete(id);
 			throw error;
@@ -157,7 +130,6 @@ export class JobManager {
 		return this.view(job);
 	}
 
-	/** Stop a job, close its process, and remove it from the registry. */
 	kill(jobId: string): JobView {
 		const job = this.jobs.get(jobId);
 		if (!job) throw new Error(this.unknownJobMessage(jobId));
@@ -165,8 +137,7 @@ export class JobManager {
 			job.status = "killed";
 			this.killProcess(job);
 		}
-		// Disarm the timeout: the entry leaves the registry, so the pending
-		// callback would fire on a dead object and signal a possibly recycled pid.
+
 		if (job.timeoutHandle) {
 			clearTimeout(job.timeoutHandle);
 			job.timeoutHandle = undefined;
@@ -176,7 +147,6 @@ export class JobManager {
 		return view;
 	}
 
-	/** The last `lines` captured lines of a job, plus its current state. */
 	read(jobId: string, lines?: number): { job: JobView; lines: string[] } {
 		const job = this.jobs.get(jobId);
 		if (!job) throw new Error(this.unknownJobMessage(jobId));
@@ -185,12 +155,10 @@ export class JobManager {
 		return { job: this.view(job), lines: all.slice(-count) };
 	}
 
-	/** Every job in the registry, oldest first. */
 	list(): JobView[] {
 		return [...this.jobs.values()].map((job) => this.view(job));
 	}
 
-	/** Kill every running job and forget them all. Idempotent. */
 	disposeAll(): void {
 		for (const job of this.jobs.values()) {
 			if (job.timeoutHandle) clearTimeout(job.timeoutHandle);
@@ -201,8 +169,6 @@ export class JobManager {
 		}
 		this.jobs.clear();
 	}
-
-	// ── internals ──────────────────────────────────────────────────────────
 
 	private append(job: Job, chunk: string): void {
 		const text = job.partial + chunk;
@@ -216,7 +182,6 @@ export class JobManager {
 		this.refresh(job);
 	}
 
-	/** Freeze a job's terminal state. Idempotent: the first event wins. */
 	private finalize(job: Job, code: number | null, signal: NodeJS.Signals | null): void {
 		if (job.endedAt !== undefined) return;
 		if (job.timeoutHandle) {
@@ -235,11 +200,6 @@ export class JobManager {
 		this.refresh(job);
 	}
 
-	/**
-	 * Signal the process group. SIGTERM first, then SIGKILL if the process is
-	 * still alive shortly after. A job that already exited makes the signal
-	 * throw ESRCH, which is the success case here.
-	 */
 	private killProcess(job: Job): void {
 		const pid = job.child.pid;
 		if (pid === undefined) return;
@@ -254,14 +214,14 @@ export class JobManager {
 		try {
 			process.kill(-pid, "SIGTERM");
 		} catch {
-			// Already gone.
+
 			return;
 		}
 		const escalation = setTimeout(() => {
 			try {
 				process.kill(-pid, "SIGKILL");
 			} catch {
-				// Already gone.
+
 			}
 		}, 2000);
 		escalation.unref?.();
@@ -289,7 +249,6 @@ export class JobManager {
 		};
 	}
 
-	/** Drop finished jobs, oldest first, to keep room under the cap. */
 	private prune(): void {
 		if (this.jobs.size < MAX_JOBS) return;
 		for (const [id, job] of this.jobs) {

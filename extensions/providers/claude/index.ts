@@ -1,11 +1,3 @@
-/**
- * claude — pi provider that drives the Claude Agent SDK.
- *
- * Auth guardrail: this provider registers no `oauth`, adds no `/login` entry,
- * never reads `~/.claude` credentials, and writes nothing to auth.json. The
- * bundled binary authenticates with the user's own API key or `claude /login`.
- */
-
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import type { Api, Model, SimpleStreamOptions, TranscriptContext } from "@earendil-works/pi-ai";

@@ -1,51 +1,3 @@
-/**
- * pi-ask-user — the oh-my-pi `ask` tool migrated to a pi extension
- *
- * Source: oh-my-pi (github.com/can1357/oh-my-pi, a fork of badlogic/pi-mono)
- *   - packages/coding-agent/src/tools/ask.ts        → execute + renderer (below)
- *   - packages/coding-agent/src/modes/components/ask-dialog.ts → ask-dialog.ts
- *   - packages/coding-agent/src/tools/ask.ts (askSingleQuestion) → ask-legacy.ts
- *   - packages/coding-agent/src/prompts/tools/ask.md → tool description
- *
- * The tool lets the LLM surface clarifying questions with selectable options
- * while it works. Multi questions render as a tabbed dialog with a Submit
- * review page; hosts without custom component support (RPC) degrade to
- * per-question native dialogs; hosts without any UI never see the tool.
- *
- * Adaptations for pi's extension API (each maps an omp-internal surface to
- * the public extension boundary):
- *
- *   omp surface                      → pi adaptation
- *   ─────────────────────────────────────────────────────────────────────────
- *   AgentTool class + createIf gate  → pi.registerTool + session_start strip
- *                                      (print/json hosts cannot prompt, so the
- *                                      tool is removed from the active set and
- *                                      execute() throws as a backstop)
- *   ArkType schema + narrow          → typebox schema; the reserved-label
- *                                      narrow runs at the top of execute()
- *   concurrency: "exclusive"         → executionMode: "sequential"
- *   settings ask.timeout/ask.notify  → timeoutSeconds tool parameter + BEL
- *                                      (pi extensions cannot read pi settings)
- *   plan-mode timeout suppression    → dropped (no plan-mode API on pi ctx)
- *   speech/TTS vocalizer             → dropped
- *   collab guest race, ACP
- *   elicitation, /tree re-answer     → dropped (host-internal surfaces)
- *   ToolAbortError + context.abort() → ctx.abort() + thrown Error
- *   ExtensionUIContext.askDialog     → ctx.ui.custom() mounting AskDialogComponent
- *   askToolRenderer (mergeCall+Result) → split pi renderCall/renderResult slots
- *                                      (call slot renders a summary line
- *                                      only; the merged question/options/
- *                                      answer block renders once from the
- *                                      result slot — pi appends result
- *                                      renders below call renders, so a
- *                                      full call block would duplicate the
- *                                      transcript)
- *
- * omp result semantics are kept verbatim: `User selected: X`, custom input
- * blocks, `User answers:` for multi-question, and
- * `(auto-selected after timeout)` markers; answers persist in `details`.
- */
-
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { showRichAskDialog } from "./present-dialog.ts";
@@ -65,10 +17,6 @@ import type {
 	ExtensionAskDialogResult,
 	QuestionResult,
 } from "./types.ts";
-
-// ---------------------------------------------------------------------------
-// Schema (omp askSchema; timeoutSeconds replaces omp's settings-driven budget)
-// ---------------------------------------------------------------------------
 
 const OptionSchema = Type.Object({
 	label: Type.String({ description: "display label" }),
@@ -136,10 +84,6 @@ const ASK_DESCRIPTION = `Ask user for clarification/input during task execution.
 - Do NOT include "Other"; UI automatically adds "Other (type your own)" to every question.
 </critical>`;
 
-// ---------------------------------------------------------------------------
-// Response formatting (omp ask.ts, verbatim)
-// ---------------------------------------------------------------------------
-
 function formatQuestionResult(result: QuestionResult): string {
 	if (result.customInput !== undefined) {
 		return `${result.id}: "${result.customInput}"`;
@@ -180,19 +124,13 @@ function formatSingleQuestionResponse(result: {
 	return result.multi ? "User did not select any options" : "User cancelled the selection";
 }
 
-// ---------------------------------------------------------------------------
-// Extension entry
-// ---------------------------------------------------------------------------
-
 export default function ompAskExtension(pi: ExtensionAPI): void {
 	markExtensionLoaded("ask-user");
 	pi.registerTool({
 		name: "ask",
 		label: "Ask",
 		description: ASK_DESCRIPTION,
-		// pi 0.99: model-only — declared to the model, unreachable from codemode
-		// scripts / nested tool execution (spec: ask-user-exposure). No
-		// outputSchema: model-only tools have no programmatic consumer.
+
 		exposure: "model-only",
 		promptSnippet: "Ask the user a clarifying question",
 		promptGuidelines: [
@@ -202,10 +140,7 @@ export default function ompAskExtension(pi: ExtensionAPI): void {
 		executionMode: "sequential",
 
 		async execute(_toolCallId, params: AskParams, signal, _onUpdate, ctx) {
-			// Headless fallback (omp: createIf gate + ToolAbortError). pi
-			// extension edition: the tool should already have been stripped at
-			// session_start; if it still runs, tell the model the question was
-			// never displayed instead of letting it read a cancel as an answer.
+
 			if (!ctx.hasUI || !ctx.ui) {
 				ctx.abort();
 				throw new Error(
@@ -214,7 +149,6 @@ export default function ompAskExtension(pi: ExtensionAPI): void {
 				);
 			}
 
-			// Reserved-label narrow (omp schema narrow, executed eagerly here).
 			for (const q of params.questions) {
 				const reserved = q.options.find(option => RESERVED_OPTION_LABELS[option.label] === true);
 				if (reserved) {
@@ -228,18 +162,11 @@ export default function ompAskExtension(pi: ExtensionAPI): void {
 			const extensionUi = ctx.ui;
 			const ui: UIContext = uiContextFromExtension(extensionUi);
 
-			// omp derives the timeout from settings (ask.timeout) and disables
-			// it in plan mode; pi extensions cannot read settings, so the
-			// budget arrives as a tool parameter.
 			const timeout =
 				typeof params.timeoutSeconds === "number" && params.timeoutSeconds > 0
 					? params.timeoutSeconds * 1000
 					: null;
 
-			// omp ask.notify → terminal bell (pi extensions cannot send desktop
-			// notifications or read settings). omp's setting is opt-out-able, so
-			// the bell stays configurable via PI_OMK_ASK_NOTIFY=0. Terminal-direct:
-			// TUI only — RPC stdout is the JSON protocol channel (Mode Behavior).
 			if (ctx.mode === "tui" && process.env.PI_OMK_ASK_NOTIFY !== "0") process.stdout.write("\x07");
 
 			const richQuestions: ExtensionAskDialogQuestion[] = params.questions.map(q => ({
@@ -255,7 +182,6 @@ export default function ompAskExtension(pi: ExtensionAPI): void {
 				...(q.recommended !== undefined ? { recommended: q.recommended } : {}),
 			}));
 
-			// Rich dialog path (omp ExtensionUIContext.askDialog → pi ui.custom).
 			if (ctx.mode === "tui") {
 				let richResult: ExtensionAskDialogResult | undefined;
 				try {
@@ -272,7 +198,7 @@ export default function ompAskExtension(pi: ExtensionAPI): void {
 				}
 
 				if (!richResult) {
-					// omp: cancel aborts the turn (ToolAbortError).
+
 					ctx.abort();
 					throw new Error("Ask tool was cancelled by the user");
 				}
@@ -298,9 +224,7 @@ export default function ompAskExtension(pi: ExtensionAPI): void {
 				}
 				if (params.questions.length === 1) {
 					const result = results[0];
-					// An empty multi-select submission is a valid "select none"
-					// answer (#8265 review); only a truly empty single-select
-					// result counts as cancellation.
+
 					if (
 						!result ||
 						(!result.timedOut &&
@@ -327,7 +251,6 @@ export default function ompAskExtension(pi: ExtensionAPI): void {
 				return { content: [{ type: "text" as const, text: responseText }], details };
 			}
 
-			// Legacy per-question path (omp ask.ts, verbatim flow).
 			const askQuestion = async (
 				q: AskParams["questions"][number],
 				options?: { previous?: QuestionResult; navigation?: NavigationControls },
@@ -454,8 +377,6 @@ export default function ompAskExtension(pi: ExtensionAPI): void {
 		renderResult: (result, _options, theme) => renderAskResult(result, theme),
 	});
 
-	// print/json hosts cannot prompt: hide the tool instead of letting the LLM
-	// discover the error at call time (omp's createIf gate, extension edition).
 	pi.on("session_start", (_event, ctx) => {
 		if (!ctx.hasUI) {
 			const active = pi.getActiveTools();
@@ -466,5 +387,3 @@ export default function ompAskExtension(pi: ExtensionAPI): void {
 	});
 }
 
-/** Resolve `undefined` when the signal aborts before the dialog settles;
- *  rejections propagate untouched (omp untilAborted semantics). */

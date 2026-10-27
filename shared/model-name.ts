@@ -1,10 +1,3 @@
-/**
- * model-name — human-readable model labels for the footer.
- *
- * Prefers the registry's display name when it is already prose, otherwise
- * derives one from the model id: `glm-5.3-flash` becomes `GLM 5.3 Flash`.
- */
-
 const ACRONYMS: ReadonlySet<string> = new Set(["gpt", "glm", "llm", "moe"]);
 const DATE_SUFFIX = /-(?:\d{8}|latest)$/;
 const VERSION_PART = /^\d{1,2}$/;

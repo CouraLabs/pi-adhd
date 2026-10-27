@@ -1,33 +1,16 @@
 import type { SessionContext } from "../types.ts";
 
-/**
- * Session lifecycle event handlers: session_start, session_before_switch, session_shutdown.
- *
- * Extracted from index.ts so each handler can be tested in isolation
- * with mocked narrow interfaces.
- */
-
-/** Narrow manager interface — only the methods lifecycle handlers call. */
 export interface LifecycleManager {
   clearCompleted(): Promise<void>;
   abortAllAndSettle(): Promise<number>;
   dispose(): Promise<void>;
 }
 
-/** Narrow runtime interface — only the methods lifecycle handlers call. */
 export interface LifecycleRuntime {
   setSessionContext(ctx: SessionContext): void;
   clearSessionContext(): void;
 }
 
-/**
- * Handles session lifecycle events.
- *
- * Constructor deps:
- * - `runtime` — owns session context state
- * - `manager` — manages agent lifecycle (clear, abort, dispose)
- * - `unpublishService` — unpublishes the SpawnService symbol on shutdown
- */
 export class SessionLifecycleHandler {
   constructor(
     private readonly runtime: LifecycleRuntime,
@@ -44,13 +27,6 @@ export class SessionLifecycleHandler {
     return this.manager.clearCompleted();
   }
 
-  // Cleanup order matters:
-  // 1. Unpublish service — prevent new cross-extension calls
-  // 2. Clear session context — no more session state
-  // 3. Abort all agents — stop running work, then give the in-flight turns a
-  //    bounded grace period to observe the abort
-  // 4. Dispose manager — final cleanup, awaited so each child's extensions get
-  //    their `session_shutdown` before Pi tears the parent down (#709)
   async handleSessionShutdown(): Promise<void> {
     this.unpublishService();
     this.runtime.clearSessionContext();

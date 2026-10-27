@@ -1,18 +1,7 @@
-/**
- * conversation.ts — Render a spawn session's messages as formatted text.
- *
- * Extracted from agent-runner.ts (issue #265) into the session domain, where the
- * other message-extraction helpers (content-items, context) live. Consumed by
- * the `/spawn:sessions` transcript viewer.
- */
-
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import { extractAssistantContent } from "./content-items.ts";
 import { extractText } from "./context.ts";
 
-/**
- * Get the spawn's conversation messages as formatted text.
- */
 export function getAgentConversation(session: AgentSession): string {
   const parts: string[] = [];
 
@@ -40,7 +29,6 @@ export function getAgentConversation(session: AgentSession): string {
   return parts.join("\n\n");
 }
 
-/** Build a `(provider/model)` attribution suffix for assistant messages. */
 function formatAttribution(msg: { provider?: string; model?: string }): string {
   const { provider, model } = msg;
   if (!provider && !model) return "";

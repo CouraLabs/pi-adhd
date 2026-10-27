@@ -24,7 +24,6 @@ function env(name: string): string {
 	return process.env[name] ?? "";
 }
 
-/** Map raw items to the unified result shape, reading configurable field names. */
 function normalize(
 	values: Array<Record<string, unknown>>,
 	fields: { url?: string; title?: string; snippet?: string; publishedAt?: string } = {},
@@ -39,8 +38,6 @@ function normalize(
 		};
 	});
 }
-
-// ── No API key ────────────────────────────────────────────────────────────
 
 const searxng: SearchProvider = {
 	id: "searxng",
@@ -61,8 +58,6 @@ const searxng: SearchProvider = {
 		}).slice(0, request.maxResults);
 	},
 };
-
-// ── POST + bearer / x-api-key ───────────────────────────────────────────────
 
 const exa: SearchProvider = {
 	id: "exa",
@@ -180,8 +175,6 @@ const linkup: SearchProvider = {
 	},
 };
 
-// ── GET + header / query auth ───────────────────────────────────────────────
-
 const braveSearch: SearchProvider = {
 	id: "brave-search",
 	env: ["BRAVE_API_KEY"],
@@ -298,8 +291,6 @@ const xquik: SearchProvider = {
 	},
 };
 
-// ── Ollama Cloud web search (reuses the Ollama chat key) ─────────────────────
-
 const ollamaSearch: SearchProvider = {
 	id: "ollama-search",
 	env: ["OLLAMA_API_KEY"],
@@ -317,8 +308,6 @@ const ollamaSearch: SearchProvider = {
 		return normalize(items(data.results), { snippet: "content", publishedAt: "published_at" });
 	},
 };
-
-// ── GLM Coding plan web search (MCP JSON-RPC, reuses the z.ai chat key) ────
 
 const glm: SearchProvider = {
 	id: "glm",
@@ -343,7 +332,7 @@ const glm: SearchProvider = {
 			}),
 			signal: request.signal,
 		});
-		// The MCP envelope carries the result list as JSON text in result.content[0].text.
+
 		const result = data.result as { content?: Array<{ text?: unknown }> } | undefined;
 		const raw = text(result?.content?.[0]?.text);
 		let payload: unknown = data;
@@ -364,8 +353,6 @@ const glm: SearchProvider = {
 		}));
 	},
 };
-
-// ── 9Router aggregator (provider IS the model) ──────────────────────────────
 
 function routerBaseUrl(): string {
 	const configured = process.env.NINEROUTER_URL || process.env.ROUTER_API_BASE;

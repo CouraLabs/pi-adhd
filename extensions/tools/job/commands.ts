@@ -1,18 +1,3 @@
-/**
- * job/commands — the `/job`, `/job-kill`, `/job-read`, and `/job-list`
- * commands. They are thin wrappers over the same {@link JobManager} the tools
- * use, so a job started from the prompt and one started from a command are
- * indistinguishable afterwards.
- *
- * `/job` takes the job name first and the command after it:
- *
- *   /job <name> <command...>
- *   /job --timeout <seconds> <name> <command...>
- *
- * `--timeout` is optional and only honored as the leading token, so a command
- * that itself begins with `--` is unaffected.
- */
-
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import { DEFAULT_READ_LINES, MAX_READ_LINES, type JobManager } from "./manager.ts";
@@ -26,7 +11,6 @@ const USAGE = [
 	"  /job-list                             List jobs in memory",
 ].join("\n");
 
-/** Headless-safe output: notify in dialog-capable UIs, stderr text elsewhere. */
 function emit(ctx: ExtensionCommandContext, text: string, severity: "info" | "warning" | "error" = "info"): void {
 	if (ctx.hasUI) {
 		ctx.ui.notify(text, severity);
@@ -41,7 +25,6 @@ interface StartArgs {
 	timeoutSeconds?: number;
 }
 
-/** Parse `/job [--timeout <sec>] <name> <command...>`. */
 function parseStart(rest: string): StartArgs | { error: string } {
 	let text = rest.trim();
 	if (!text) return { error: USAGE };
@@ -66,7 +49,6 @@ function parseStart(rest: string): StartArgs | { error: string } {
 	return { name, command, timeoutSeconds };
 }
 
-/** Complete job ids for the commands that take one. */
 function jobIdCompletions(manager: JobManager): (prefix: string) => AutocompleteItem[] {
 	return (prefix: string) => {
 		const needle = prefix.trim();

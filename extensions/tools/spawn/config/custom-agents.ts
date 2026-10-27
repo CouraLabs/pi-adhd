@@ -1,7 +1,3 @@
-/**
- * custom-agents.ts — Load user-defined agents from project (<cwd>/.agents/agents/) and global (~/.agents/agents/) locations.
- */
-
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
@@ -12,26 +8,16 @@ import { parseThinkingLevel, thinkingLevelError } from "./thinking-level.ts";
 import { debugLog } from "../debug.ts";
 import type { AgentConfig } from "../types.ts";
 
-/**
- * Scan for custom agent .md files from multiple locations.
- * Discovery hierarchy (higher priority wins):
- *   1. Project: <cwd>/.agents/agents/*.md
- *   2. Global:  ~/.agents/agents/*.md
- *
- * Project-level agents override global ones with the same name.
- * Any name is allowed — names matching defaults (e.g. "Explore") override them.
- */
 export function loadCustomAgents(cwd: string): Map<string, AgentConfig> {
   const globalDir = join(homedir(), ".agents", "agents");
   const projectDir = join(cwd, ".agents", "agents");
 
   const agents = new Map<string, AgentConfig>();
-  loadFromDir(globalDir, agents, "global");   // lower priority
-  loadFromDir(projectDir, agents, "project");  // higher priority (overwrites)
+  loadFromDir(globalDir, agents, "global");
+  loadFromDir(projectDir, agents, "project");
   return agents;
 }
 
-/** Load agent configs from a directory into the map. */
 function loadFromDir(dir: string, agents: Map<string, AgentConfig>, source: "project" | "global"): void {
   if (!existsSync(dir)) return;
 
@@ -68,27 +54,16 @@ function loadFromDir(dir: string, agents: Map<string, AgentConfig>, source: "pro
       promptMode: fm.prompt_mode === "replace" ? "replace" : "append",
       inheritContext: fm.inherit_context != null ? fm.inherit_context === true : undefined,
       locked: lockDeclaration(fm.locked, name),
-      enabled: fm.enabled !== false,  // default true; explicitly false disables
+      enabled: fm.enabled !== false,
       source,
     });
   }
 }
 
-// ---- Field parsers ----
-// All follow the same convention: omitted → default, "none"/empty → nothing, value → exact.
-
-/** Extract a string or undefined. */
 function str(val: unknown): string | undefined {
   return typeof val === "string" ? val : undefined;
 }
 
-/**
- * Parse the `locked:` key into a lock declaration, or undefined when it claims nothing.
- *
- * `true` is the whole-file form; anything else parses as a field list, so both YAML
- * spellings `tools:` accepts work here too. An entry naming no lockable field is
- * dropped rather than failing the agent's load.
- */
 function lockDeclaration(val: unknown, agentName: string): LockDeclaration | undefined {
   if (typeof val === "boolean") return val ? true : undefined;
 
@@ -103,13 +78,6 @@ function lockDeclaration(val: unknown, agentName: string): LockDeclaration | und
   return fields.length > 0 ? fields : undefined;
 }
 
-/**
- * Extract a thinking level, dropping an unrecognized one.
- *
- * Passing it through would not surface as an error: Pi clamps a level missing from
- * its own table down to `off`, silently disabling thinking for an agent whose author
- * asked for more of it. Inheriting the parent's level is the safer miss (Refs #834).
- */
 function thinkingLevel(val: unknown, agentName: string): AgentConfig["thinking"] {
   const level = parseThinkingLevel(val);
   if (val != null && level === undefined) {
@@ -118,33 +86,20 @@ function thinkingLevel(val: unknown, agentName: string): AgentConfig["thinking"]
   return level;
 }
 
-/** Extract a non-negative integer or undefined. 0 means unlimited for max_turns. */
 function nonNegativeInt(val: unknown): number | undefined {
   return typeof val === "number" && val >= 0 ? val : undefined;
 }
 
-/**
- * Parse a raw list field into items, or undefined if absent/empty/"none".
- *
- * Frontmatter is YAML, so a list field is written either as a comma-separated
- * scalar (`tools: read, grep`) or as a sequence (`tools: [read, grep]`). Both
- * are supported: a sequence keeps its entries intact, while a scalar is split
- * on commas.
- */
 function parseListField(val: unknown): string[] | undefined {
   if (val === undefined || val === null) return undefined;
   const items = Array.isArray(val)
     ? val.map(entry => String(entry).trim()).filter(Boolean)
-    // eslint-disable-next-line @typescript-eslint/no-base-to-string -- val is already narrowed past null/undefined; String() is the intended coercion here
+
     : String(val).trim().split(",").map(entry => entry.trim()).filter(Boolean);
   if (items.length === 0) return undefined;
   return items.length === 1 && items[0] === "none" ? undefined : items;
 }
 
-/**
- * Parse a list field with defaults.
- * omitted → defaults; "none"/empty → []; otherwise → listed items.
- */
 function listField(val: unknown, defaults: string[]): string[] {
   if (val === undefined || val === null) return defaults;
   return parseListField(val) ?? [];

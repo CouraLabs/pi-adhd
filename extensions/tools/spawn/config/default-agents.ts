@@ -1,9 +1,3 @@
-/**
- * default-agents.ts — Embedded default agent configurations.
- *
- * These are always available but can be overridden by user .md files with the same name.
- */
-
 import type { AgentConfig } from "../types.ts";
 
 const READ_ONLY_TOOLS = ["read", "bash", "grep", "find", "ls"];
@@ -16,10 +10,7 @@ export const DEFAULT_AGENTS: Map<string, AgentConfig> = new Map([
       displayName: "Agent",
       description: "General-purpose agent for complex, multi-step tasks",
       toolGuideline: "- Use general-purpose for complex tasks that need file editing.",
-      // toolNames omitted — means "all available tools" (resolved at lookup time)
-      // inheritContext omitted — strategy fields, callers decide per-call.
-      // No built-in declares `locked`: Explore's haiku is a cost default, not a
-      // correctness one, so a caller that knows better may override it (#829).
+
       systemPrompt: "",
       promptMode: "append",
       isDefault: true,
@@ -283,8 +274,7 @@ Structure your response for maximum actionability - developers should know exact
       displayName: "Quality Assurance",
       description: "Quality Assurance agent: executes UI test steps against a running application using the Playwright MCP. Call it with the implemented steps to verify.",
       toolGuideline: "- Use qa to test an application's UI steps based on what has been implemented. Requires the Playwright MCP server.",
-      // toolNames omitted — the agent needs MCP tools (Playwright), which the
-      // allowlist can't name reliably; behavior is constrained by the prompt.
+
       systemPrompt: `You are a Quality Assurance (QA) agent. Your job is to manually test an application's UI by executing the test steps provided by the caller, using the Playwright MCP tools.
 
 ## Requirements
