@@ -17,5 +17,5 @@ Publish a new pi-adhd version.
    ```
 
    Success is HTTP `204` (Discord returns an empty body). Retry once with the browser `User-Agent` if a first attempt fails with 403.
-4. Commit and push the version bump: run `git add package.json`, then `git commit -m "Bump version to <version>"` followed by the commit attribution lines, then `git push`. Stage only `package.json`; leave any other uncommitted changes alone. If the commit or push fails, report the exact error and do not force-push.
+4. Commit and push the version bump: run `git add package.json`, then `git commit -m "Bump version to <version>"`, then `git push`. Stage only `package.json`; leave any other uncommitted changes alone. Do not add attribution lines ("Generated with …" / `Co-Authored-By`) to the commit. If the commit or push fails, report the exact error and do not force-push.
 5. Report the published version, or the exact error if any step failed. Do not retry a failed publish without asking me.
