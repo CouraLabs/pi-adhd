@@ -1,104 +1,67 @@
-import { DEFAULT_AGENTS } from "./default-agents.ts";
-import { offloadPrompt, readUserPrompt } from "../../../../shared/user-prompts.ts";
 import type { AgentConfig } from "../types.ts";
 
-const DEFAULT_AGENT_NAMES = new Set(DEFAULT_AGENTS.keys());
-
-function withEditablePrompt(config: AgentConfig): AgentConfig {
-	if (!DEFAULT_AGENT_NAMES.has(config.name) || config.systemPrompt.length === 0) return config;
-	offloadPrompt("subagents", `${config.name}.md`, config.systemPrompt);
-	return { ...config, systemPrompt: readUserPrompt("subagents", `${config.name}.md`, config.systemPrompt) };
-}
-
 export interface AgentConfigLookup {
-  resolveAgentConfig(type: string): AgentConfig;
-  getToolNamesForType(type: string): string[];
+	resolveAgentConfig(type: string): AgentConfig | undefined;
+	getToolNamesForType(type: string, parentToolNames: readonly string[]): string[];
 }
 
 export class AgentTypeRegistry implements AgentConfigLookup {
-  private agents = new Map<string, AgentConfig>();
-  private userAgentNames = new Set<string>();
+	private agents = new Map<string, AgentConfig>();
 
-  constructor(private readonly loadUserAgents: () => Map<string, AgentConfig>) {
-    this.reload();
-  }
+	constructor(private readonly loadAgents: () => Map<string, AgentConfig>) {
+		this.reload();
+	}
 
-  reload(): void {
-    this.agents.clear();
-    this.userAgentNames.clear();
-    for (const [name, config] of DEFAULT_AGENTS) {
-      this.agents.set(name, withEditablePrompt(config));
-    }
-    for (const [name, config] of this.loadUserAgents()) {
-      this.userAgentNames.add(name);
-      this.agents.set(name, config);
-    }
-  }
+	reload(): void {
+		this.agents = new Map(this.loadAgents());
+	}
 
-  resolveType(name: string): string | undefined {
-    return this.resolveKey(name);
-  }
+	resolveType(name: string): string | undefined {
+		return this.resolveKey(name);
+	}
 
-  getAvailableTypes(): string[] {
-    return [...this.agents.entries()]
-      .filter(([_, config]) => config.enabled !== false)
-      .map(([name]) => name);
-  }
+	getAvailableTypes(): string[] {
+		return [...this.agents.entries()]
+			.filter(([, config]) => config.enabled !== false)
+			.map(([name]) => name);
+	}
 
-  list(): AgentConfig[] {
-    return [...this.agents.values()];
-  }
+	list(): AgentConfig[] {
+		return [...this.agents.values()];
+	}
 
-  getDefaultAgentNames(): string[] {
-    return [...this.agents.keys()].filter(
-      (name) => DEFAULT_AGENT_NAMES.has(name) && !this.userAgentNames.has(name),
-    );
-  }
+	isValidType(type: string): boolean {
+		const key = this.resolveKey(type);
+		if (!key) return false;
+		return this.agents.get(key)?.enabled !== false;
+	}
 
-  getUserAgentNames(): string[] {
-    return [...this.agents.keys()].filter(
-      (name) => !DEFAULT_AGENT_NAMES.has(name) || this.userAgentNames.has(name),
-    );
-  }
+	getToolNamesForType(type: string, parentToolNames: readonly string[]): string[] {
+		const config = this.resolveAgentConfig(type);
+		if (!config) return [...BUILTIN_TOOL_NAMES];
+		if (config.allTools) return [...parentToolNames];
+		if (config.toolNames) return [...config.toolNames];
+		return [...BUILTIN_TOOL_NAMES];
+	}
 
-  isValidType(type: string): boolean {
-    const key = this.resolveKey(type);
-    if (!key) return false;
-    return this.agents.get(key)?.enabled !== false;
-  }
+	resolveAgentConfig(type: string): AgentConfig | undefined {
+		const key = this.resolveKey(type);
+		const config = key ? this.agents.get(key) : undefined;
+		if (config) return config;
 
-  getToolNamesForType(type: string): string[] {
-    return this.resolveAgentConfig(type).toolNames ?? [...BUILTIN_TOOL_NAMES];
-  }
+		const generalPurpose = this.agents.get("general-purpose");
+		if (generalPurpose && generalPurpose.enabled !== false) return generalPurpose;
+		return undefined;
+	}
 
-  resolveAgentConfig(type: string): AgentConfig {
-    const key = this.resolveKey(type);
-    const config = key ? this.agents.get(key) : undefined;
-    if (config) {
-      return config;
-    }
-
-    const gp = this.agents.get("general-purpose");
-    if (gp) return gp;
-
-    return {
-      name: type,
-      displayName: "Agent",
-      description: "General-purpose agent for complex, multi-step tasks",
-      toolNames: BUILTIN_TOOL_NAMES,
-      systemPrompt: "",
-      promptMode: "append",
-    };
-  }
-
-  private resolveKey(name: string): string | undefined {
-    if (this.agents.has(name)) return name;
-    const lower = name.toLowerCase();
-    for (const key of this.agents.keys()) {
-      if (key.toLowerCase() === lower) return key;
-    }
-    return undefined;
-  }
+	private resolveKey(name: string): string | undefined {
+		if (this.agents.has(name)) return name;
+		const lower = name.toLowerCase();
+		for (const key of this.agents.keys()) {
+			if (key.toLowerCase() === lower) return key;
+		}
+		return undefined;
+	}
 }
 
 export const BUILTIN_TOOL_NAMES: string[] = ["read", "bash", "edit", "write", "grep", "find", "ls"];

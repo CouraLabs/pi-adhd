@@ -75,6 +75,9 @@ export function resolveSpawnConfig(
   const displayName = getDisplayName(spawnType, registry);
 
   const customConfig = registry.resolveAgentConfig(spawnType);
+  if (!customConfig) {
+    return { error: `Unknown agent type "${rawType}"` };
+  }
   const resolvedConfig = resolveInvocationOverrides(customConfig, {
     ...params,
     thinking: thinkingFromParams,

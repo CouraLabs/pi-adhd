@@ -1,4 +1,4 @@
-import type { AgentConfigLookup } from "../config/agent-types.ts";
+import type { AgentConfig } from "../types.ts";
 import type { TurnBudget } from "../lifecycle/turn-limits.ts";
 import { getLifetimeTotal, toUsageTotals, type LifetimeUsage } from "../lifecycle/usage.ts";
 import { type AgentDetails, formatTokens, type ModelIdentity, modelLabel } from "../ui/display.ts";
@@ -47,43 +47,36 @@ export function formatLifetimeTokens(o: { lifetimeUsage: LifetimeUsage }): strin
   return t > 0 ? formatTokens(t) : "";
 }
 
-export interface TypeListRegistry extends AgentConfigLookup {
-  getDefaultAgentNames(): string[];
-  getUserAgentNames(): string[];
+export interface TypeListRegistry {
+  list(): AgentConfig[];
 }
 
 export function buildTypeListText(registry: TypeListRegistry): string {
-  const defaultNames = registry.getDefaultAgentNames().filter((name) => isEnabledAgent(registry, name));
-  const userNames = registry.getUserAgentNames().filter((name) => isEnabledAgent(registry, name));
+  const enabled = registry.list().filter((config) => config.enabled !== false);
+  const globalAgents = enabled.filter((config) => config.source !== "project");
+  const projectAgents = enabled.filter((config) => config.source === "project");
 
-  const defaultDescs = defaultNames.map((name) => {
-    const cfg = registry.resolveAgentConfig(name);
-    const modelSuffix = cfg.model ? ` (${getModelLabelFromConfig(cfg.model)})` : "";
-    return `- ${name}: ${cfg.description}${modelSuffix}`;
-  });
-
-  const customDescs = userNames.map((name) => {
-    const cfg = registry.resolveAgentConfig(name);
-    return `- ${name}: ${cfg.description}`;
-  });
+  const globalDescs = globalAgents.map(agentListLine);
+  const projectDescs = projectAgents.map(agentListLine);
 
   return [
-    ...(defaultDescs.length > 0 ? ["Default agents:", ...defaultDescs] : []),
-    ...(customDescs.length > 0 ? ["", "Custom agents:", ...customDescs] : []),
+    ...(globalDescs.length > 0 ? ["Global agents:", ...globalDescs] : []),
+    ...(projectDescs.length > 0 ? ["", "Project agents:", ...projectDescs] : []),
     "",
-    `Custom agents can be defined in .agents/agents/<name>.md (project) or ~/.agents/agents/<name>.md (global) — they are picked up automatically. Project-level agents override global ones. Creating a .md file with the same name as a default agent overrides it.`,
+    `Agents are defined in ~/.pi/couralabs/agents/<name>.md (global) and .pi/couralabs/agents/<name>.md (project, same name replaces the global one wholesale).`,
   ].join("\n");
 }
 
-function isEnabledAgent(registry: AgentConfigLookup, name: string): boolean {
-  return registry.resolveAgentConfig(name).enabled !== false;
+function agentListLine(config: AgentConfig): string {
+  const modelSuffix = config.model ? ` (${getModelLabelFromConfig(config.model)})` : "";
+  return `- ${config.name}: ${config.description}${modelSuffix}`;
 }
 
 export function buildAgentGuidelines(registry: TypeListRegistry): string[] {
   return registry
-    .getDefaultAgentNames()
-    .filter((name) => isEnabledAgent(registry, name))
-    .map((name) => registry.resolveAgentConfig(name).toolGuideline)
+    .list()
+    .filter((config) => config.enabled !== false)
+    .map((config) => config.toolGuideline)
     .filter((line): line is string => line !== undefined);
 }
 

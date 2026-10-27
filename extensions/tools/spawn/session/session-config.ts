@@ -36,6 +36,8 @@ export interface AssemblerContext {
   parentModel?: Model<any>;
 
   modelRegistry: ModelRegistry;
+
+  parentToolNames: readonly string[];
 }
 
 export interface AssemblerOptions {
@@ -81,10 +83,11 @@ export function assembleSessionConfig(
   io: AssemblerIO,
 ): SessionConfig {
   const agentConfig = registry.resolveAgentConfig(type);
+  if (!agentConfig) throw new Error(`Unknown agent type "${type}"`);
 
   const effectiveCwd = options.cwd ?? ctx.cwd;
 
-  const toolNames = registry.getToolNamesForType(type);
+  const toolNames = registry.getToolNamesForType(type, ctx.parentToolNames);
 
   const model =
     options.model ??

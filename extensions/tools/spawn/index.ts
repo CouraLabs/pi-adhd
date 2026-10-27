@@ -13,7 +13,11 @@ import {
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { AgentTypeRegistry } from "./config/agent-types.ts";
+import { globalAgentsDir } from "./config/agent-dirs.ts";
 import { loadAgentDefinitions } from "./config/custom-agents.ts";
+import { provisionDefaultAgents } from "./config/seed-agents.ts";
+import { loadPackagedSeedAgents } from "./config/seed-source.ts";
+import { debugLog } from "./debug.ts";
 import { SessionLifecycleHandler } from "./handlers/index.ts";
 import { createChildLifecyclePublisher } from "./lifecycle/child-lifecycle.ts";
 import { createSpawnSession, type SpawnSessionDeps } from "./lifecycle/create-spawn-session.ts";
@@ -26,6 +30,7 @@ import { SpawnServiceAdapter } from "./service/service-adapter.ts";
 import { detectEnv } from "./session/env.ts";
 import { isChildSession } from "../../../shared/child-sessions.ts";
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
+import { getUserPromptsDir } from "../../../shared/user-prompts.ts";
 import { createExcludedPackagesStorage } from "./session/package-exclusions.ts";
 import { createProjectContextLoader } from "./session/project-context.ts";
 import { buildAgentPrompt } from "./session/prompts.ts";
@@ -38,6 +43,12 @@ import { SpawnSettingsHandler } from "./ui/spawn-settings.ts";
 
 export default function (pi: ExtensionAPI) {
   markExtensionLoaded("spawn");
+
+  try {
+    provisionDefaultAgents(globalAgentsDir(), loadPackagedSeedAgents(), join(getUserPromptsDir(), "subagents"));
+  } catch (err) {
+    debugLog("provisionDefaultAgents", err);
+  }
 
   const runtime = createSpawnRuntime();
 
