@@ -9,6 +9,7 @@ import type { PiToolDescriptions } from "./pi-mcp.ts";
 import { attachInterruptedAgents, clearLimitHit, hasLimitHit, recordLimitHit } from "./limit-handoff/pending-limit.ts";
 import { agentProgressRouter } from "./render-agent.ts";
 import { askAnswerBroker, createAskCanUseTool, createAskPreToolUseHook } from "./render-ask.ts";
+import { WakeTurnCollector } from "./background-tasks.ts";
 import { SDK_TOOL_NAMES } from "./sdk-tools.ts";
 import { getSessionHost, takeRestoredRecord } from "./session-host.ts";
 import { conversationOf, markPrefix, planSync, renderCatchUp, renderSeed } from "./session-sync.ts";
@@ -88,6 +89,8 @@ interface ClaudeSessionState {
 	readonly listeners: Set<SessionMessageListener>;
 	activeTurn: Promise<void>;
 	awaitingToolResults: boolean;
+	pendingUuid: string | undefined;
+	wake: WakeTurnCollector | undefined;
 	appliedSubmodeAppend: string | undefined;
 	sdkSessionId: string | undefined;
 	synced: SyncMark | undefined;
@@ -196,7 +199,7 @@ async function pumpSdkMessages(sessionKey: string, state: ClaudeSessionState): P
 			observeSdkMessage(sessionKey, state, sdkMessage);
 			agentProgressRouter.route(sessionKey, sdkMessage);
 			if (sdkMessage.type === "user") deliverToolResults(sdkMessage);
-			else state.messages.push(sdkMessage);
+			else routeTurnMessage(sessionKey, state, sdkMessage);
 		}
 		state.messages.close();
 		releaseSessionResources(sessionKey, "Claude session ended");
@@ -205,6 +208,45 @@ async function pumpSdkMessages(sessionKey: string, state: ClaudeSessionState): P
 		state.messages.close(failure);
 		releaseSessionResources(sessionKey, failure.message);
 	}
+}
+
+function stampOf(message: SDKMessage): string[] | undefined {
+	if (message.type !== "assistant" && message.type !== "result" && message.type !== "stream_event") return undefined;
+	if (message.user_message_uuids !== undefined) return [...message.user_message_uuids];
+	if (message.user_message_uuid !== undefined) return [message.user_message_uuid];
+	return undefined;
+}
+
+function feedWakeTurn(sessionKey: string, state: ClaudeSessionState, message: SDKMessage): void {
+	let wake = state.wake;
+	if (!wake) {
+		wake = new WakeTurnCollector(sessionKey);
+		state.wake = wake;
+	}
+	wake.feed(message);
+}
+
+function routeTurnMessage(sessionKey: string, state: ClaudeSessionState, message: SDKMessage): void {
+	const stamp = stampOf(message);
+	if (stamp !== undefined) {
+		if (state.pendingUuid !== undefined && stamp.includes(state.pendingUuid)) {
+			state.wake = undefined;
+			if (message.type === "result") state.pendingUuid = undefined;
+			state.messages.push(message);
+			return;
+		}
+		feedWakeTurn(sessionKey, state, message);
+		return;
+	}
+	if (state.wake?.collecting) {
+		state.wake.feed(message);
+		return;
+	}
+	if (state.pendingUuid === undefined) {
+		feedWakeTurn(sessionKey, state, message);
+		return;
+	}
+	state.messages.push(message);
 }
 
 function openSession(
@@ -243,6 +285,8 @@ function openSession(
 		listeners: new Set(),
 		activeTurn: Promise.resolve(),
 		awaitingToolResults: false,
+		pendingUuid: undefined,
+		wake: undefined,
 		appliedSubmodeAppend: submodeAppend,
 		sdkSessionId: resumeSource && !resumeSource.fork ? resumeSource.sdkSessionId : newSessionId,
 		synced: undefined,
@@ -426,7 +470,9 @@ export function streamClaudeTurn(
 					const submodeNotice = currentAppend === session.appliedSubmodeAppend ? undefined : submodeChangeNotice(currentAppend);
 					session.appliedSubmodeAppend = currentAppend;
 					const preamble = [submodeNotice, prepared.catchUp].filter((part) => part !== undefined).join("\n\n");
-					session.input.push(buildUserMessage(context.messages, sessionKey, preamble || undefined));
+					const userMessage = buildUserMessage(context.messages, sessionKey, preamble || undefined);
+					session.pendingUuid = userMessage.uuid;
+					session.input.push(userMessage);
 				}
 				await consumeUntilBoundary(session, translator);
 				if (translator.completedNormally) persistSyncRecord(sessionKey, session);
@@ -566,6 +612,8 @@ export async function compactSession(sessionKey: string, customInstructions: str
 	if (state.awaitingToolResults) await abandonPendingRun(sessionKey, state);
 
 	const command = customInstructions ? `/compact ${customInstructions}` : "/compact";
+	const pushUuid = randomUUID();
+	state.pendingUuid = pushUuid;
 	const compaction = (async (): Promise<CompactOutcome> => {
 		let boundary: Omit<CompactOutcome, "summary"> | undefined;
 		state.compactionSummary = undefined;
@@ -574,6 +622,7 @@ export async function compactSession(sessionKey: string, customInstructions: str
 			message: { role: "user", content: command },
 			parent_tool_use_id: null,
 			session_id: sessionKey,
+			uuid: pushUuid,
 		});
 		for (;;) {
 			const sdkMessage = await nextSdkMessage(state);

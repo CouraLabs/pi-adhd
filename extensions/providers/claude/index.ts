@@ -2,6 +2,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import type { Api, Model, SimpleStreamOptions, TranscriptContext } from "@earendil-works/pi-ai";
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
+import { backgroundReportRenderer, BACKGROUND_REPORT_ENTRY_TYPE } from "./background-tasks.ts";
 import { configurePiToolDescriptions, disposeClaudeSession, streamClaudeTurn } from "./bridge.ts";
 import { registerClaudeCommands } from "./commands.ts";
 import { CLAUDE_MODELS } from "./models.ts";
@@ -87,6 +88,7 @@ export default function registerClaudeProvider(pi: ExtensionAPI): void {
 	installSessionHost(pi);
 	registerClaudeCommands(pi);
 	registerLimitHandoff(pi);
+	pi.registerEntryRenderer(BACKGROUND_REPORT_ENTRY_TYPE, backgroundReportRenderer);
 
 	pi.on("session_shutdown", (_event, context) => {
 		disposeClaudeSession(context.sessionManager.getSessionId());
