@@ -10,11 +10,11 @@ export const GLYPHS = {
 
   stopped: "■",
 
-  subLine: "⎿",
+  subLine: "└",
 
   toolCall: "▸",
 
   streaming: "◍",
 } as const;
 
-export const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+export const SPINNER = ["◜", "◠", "◝", "◞", "◡", "◟"];

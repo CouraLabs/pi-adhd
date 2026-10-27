@@ -71,7 +71,7 @@ export function startRunningStream(
   const spinnerInterval = setInterval(() => {
     spinnerFrame++;
     streamUpdate();
-  }, 80);
+  }, 100);
 
   streamUpdate();
 

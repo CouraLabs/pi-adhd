@@ -23,7 +23,7 @@ export function renderRunning(details: AgentDetails, theme: Theme): string {
 	const frame = SPINNER[details.spinnerFrame ?? 0];
 	const s = renderStats(details, theme);
 	let line = theme.fg("accent", frame) + (s ? " " + s : "");
-	line += "\n" + theme.fg("dim", `  ${GLYPHS.subLine}  ${details.activity ?? "thinking\u2026"}`);
+	line += "\n" + theme.fg("dim", `  ${GLYPHS.subLine} ${details.activity ?? "thinking\u2026"}`);
 	return line;
 }
 
@@ -57,7 +57,7 @@ export function renderCompleted(
 		}
 	} else {
 		const doneText = wrappedUp ? "Wrapped up (budget warning)" : "Done";
-		line += "\n" + theme.fg("dim", `  ${GLYPHS.subLine}  ${doneText}`);
+		line += "\n" + theme.fg("dim", `  ${GLYPHS.subLine} ${doneText}`);
 	}
 	return line;
 }
@@ -65,7 +65,7 @@ export function renderCompleted(
 export function renderStopped(details: AgentDetails, theme: Theme): string {
 	const s = renderStats(details, theme);
 	let line = renderStatusIcon("stopped", theme) + (s ? " " + s : "");
-	line += "\n" + theme.fg("dim", `  ${GLYPHS.subLine}  Stopped`);
+	line += "\n" + theme.fg("dim", `  ${GLYPHS.subLine} Stopped`);
 	return line;
 }
 
@@ -76,11 +76,11 @@ export function renderFailed(details: AgentDetails, theme: Theme): string {
 	if (details.status === "error") {
 		line +=
 			"\n" +
-			theme.fg("error", `  ${GLYPHS.subLine}  Error: ${details.error ?? "unknown"}`);
+			theme.fg("error", `  ${GLYPHS.subLine} Error: ${details.error ?? "unknown"}`);
 	} else {
 		line +=
 			"\n" +
-			theme.fg("warning", `  ${GLYPHS.subLine}  Aborted (turn limit reached)`);
+			theme.fg("warning", `  ${GLYPHS.subLine} Aborted (turn limit reached)`);
 	}
 	return line;
 }
