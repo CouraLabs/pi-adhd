@@ -13,7 +13,7 @@ import {
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { AgentTypeRegistry } from "./config/agent-types.ts";
-import { loadCustomAgents } from "./config/custom-agents.ts";
+import { loadAgentDefinitions } from "./config/custom-agents.ts";
 import { SessionLifecycleHandler } from "./handlers/index.ts";
 import { createChildLifecyclePublisher } from "./lifecycle/child-lifecycle.ts";
 import { createSpawnSession, type SpawnSessionDeps } from "./lifecycle/create-spawn-session.ts";
@@ -46,7 +46,7 @@ export default function (pi: ExtensionAPI) {
   });
   settings.load();
 
-  const registry = new AgentTypeRegistry(() => loadCustomAgents(process.cwd()));
+  const registry = new AgentTypeRegistry(() => loadAgentDefinitions(process.cwd()));
 
   const eventsObserver = new SpawnEventsObserver({
     emit: (channel, data) => pi.events.emit(channel, data),

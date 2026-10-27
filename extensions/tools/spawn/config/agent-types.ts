@@ -2,8 +2,10 @@ import { DEFAULT_AGENTS } from "./default-agents.ts";
 import { offloadPrompt, readUserPrompt } from "../../../../shared/user-prompts.ts";
 import type { AgentConfig } from "../types.ts";
 
+const DEFAULT_AGENT_NAMES = new Set(DEFAULT_AGENTS.keys());
+
 function withEditablePrompt(config: AgentConfig): AgentConfig {
-	if (config.isDefault !== true || config.systemPrompt.length === 0) return config;
+	if (!DEFAULT_AGENT_NAMES.has(config.name) || config.systemPrompt.length === 0) return config;
 	offloadPrompt("subagents", `${config.name}.md`, config.systemPrompt);
 	return { ...config, systemPrompt: readUserPrompt("subagents", `${config.name}.md`, config.systemPrompt) };
 }
@@ -15,6 +17,7 @@ export interface AgentConfigLookup {
 
 export class AgentTypeRegistry implements AgentConfigLookup {
   private agents = new Map<string, AgentConfig>();
+  private userAgentNames = new Set<string>();
 
   constructor(private readonly loadUserAgents: () => Map<string, AgentConfig>) {
     this.reload();
@@ -22,10 +25,12 @@ export class AgentTypeRegistry implements AgentConfigLookup {
 
   reload(): void {
     this.agents.clear();
+    this.userAgentNames.clear();
     for (const [name, config] of DEFAULT_AGENTS) {
       this.agents.set(name, withEditablePrompt(config));
     }
     for (const [name, config] of this.loadUserAgents()) {
+      this.userAgentNames.add(name);
       this.agents.set(name, config);
     }
   }
@@ -45,15 +50,15 @@ export class AgentTypeRegistry implements AgentConfigLookup {
   }
 
   getDefaultAgentNames(): string[] {
-    return [...this.agents.entries()]
-      .filter(([_, config]) => config.isDefault === true)
-      .map(([name]) => name);
+    return [...this.agents.keys()].filter(
+      (name) => DEFAULT_AGENT_NAMES.has(name) && !this.userAgentNames.has(name),
+    );
   }
 
   getUserAgentNames(): string[] {
-    return [...this.agents.entries()]
-      .filter(([_, config]) => config.isDefault !== true)
-      .map(([name]) => name);
+    return [...this.agents.keys()].filter(
+      (name) => !DEFAULT_AGENT_NAMES.has(name) || this.userAgentNames.has(name),
+    );
   }
 
   isValidType(type: string): boolean {

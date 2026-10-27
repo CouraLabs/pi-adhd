@@ -13,7 +13,6 @@ export const DEFAULT_AGENTS: Map<string, AgentConfig> = new Map([
 
       systemPrompt: "",
       promptMode: "append",
-      isDefault: true,
     },
   ],
   [
@@ -176,7 +175,6 @@ If REJECT:
 
 **Your job is to UNBLOCK work, not to BLOCK it with perfectionism.**`,
       promptMode: "replace",
-      isDefault: true,
     },
   ],
   [
@@ -214,7 +212,6 @@ Deliver a decisive, complete architecture blueprint that provides everything nee
 
 Make confident architectural choices rather than presenting multiple options. Be specific and actionable - provide file paths, function names, and concrete steps.`,
       promptMode: "replace",
-      isDefault: true
     }
   ],
   [
@@ -264,7 +261,6 @@ Group issues by severity (Critical vs Important). If no high-confidence issues e
 
 Structure your response for maximum actionability - developers should know exactly what to fix and why.`,
       promptMode: "replace",
-      isDefault: true,
     },
   ],
   [
@@ -309,7 +305,6 @@ End with a structured report:
 
 Be factual and specific. No vague statements like "it seemed to work" — either you observed the expected outcome or you did not.`,
       promptMode: "replace",
-      isDefault: true,
     },
   ],
   [
@@ -364,7 +359,6 @@ Provide a comprehensive analysis that helps developers understand the feature de
 
 Structure your response for maximum clarity and usefulness. Always include specific file paths and line numbers.`,
       promptMode: "replace",
-      isDefault: true,
     },
   ],
 ]);

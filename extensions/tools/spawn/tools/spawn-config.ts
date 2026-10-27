@@ -1,6 +1,6 @@
 import type { Model } from "@earendil-works/pi-ai";
 import type { AgentTypeRegistry } from "../config/agent-types.ts";
-import { type LockableField, resolveAgentInvocationConfig } from "../config/invocation-config.ts";
+import { resolveInvocationOverrides } from "../config/invocation-overrides.ts";
 import { parseThinkingLevel, thinkingLevelError } from "../config/thinking-level.ts";
 import { isBelowMinimumTurns, MIN_MAX_TURNS, normalizeMaxTurns } from "../lifecycle/turn-limits.ts";
 import type { ModelRegistry } from "../session/model-resolver.ts";
@@ -75,7 +75,7 @@ export function resolveSpawnConfig(
   const displayName = getDisplayName(spawnType, registry);
 
   const customConfig = registry.resolveAgentConfig(spawnType);
-  const resolvedConfig = resolveAgentInvocationConfig(customConfig, {
+  const resolvedConfig = resolveInvocationOverrides(customConfig, {
     ...params,
     thinking: thinkingFromParams,
   });
@@ -121,7 +121,6 @@ export function resolveSpawnConfig(
     identity: { spawnType, rawType, fellBack, displayName },
     notes: [
       ...buildFallbackNote(rawType, fellBack),
-      ...buildLockNote(spawnType, resolvedConfig.discarded),
       ...buildMinimumTurnsNote(resolvedConfig.maxTurns),
       ...modelFallbackNote,
     ],
@@ -147,13 +146,4 @@ function buildMinimumTurnsNote(maxTurns: number | undefined): string[] {
   return [
     `Note: max_turns ${maxTurns} is below the minimum of ${MIN_MAX_TURNS} (one turn to work, one to answer), so the spawn runs with ${MIN_MAX_TURNS}.`,
   ];
-}
-
-function buildLockNote(agentName: string, discarded: readonly LockableField[]): string[] {
-  if (discarded.length === 0) return [];
-  const tail =
-    discarded.length === 1
-      ? `so the ${discarded[0]} parameter was ignored`
-      : "so those parameters were ignored";
-  return [`Note: agent "${agentName}" locks ${discarded.join(", ")}, ${tail}.`];
 }
