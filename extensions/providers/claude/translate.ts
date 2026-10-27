@@ -9,6 +9,7 @@ import type {
 	Usage,
 } from "@earendil-works/pi-ai";
 import { parseStreamingJson } from "@earendil-works/pi-ai";
+import { randomUUID } from "node:crypto";
 import type { SDKAssistantMessageError, SDKMessage, SDKRateLimitInfo, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { resetTimestampToMilliseconds, setRateLimitWindow, utilizationToPercent, type RateLimitWindowId } from "../../../shared/rate-limits.ts";
 import { piToolNameFromMcpName } from "./pi-mcp.ts";
@@ -113,6 +114,7 @@ export function buildUserMessage(messages: Message[], sessionId: string, preambl
 		},
 		parent_tool_use_id: null,
 		session_id: sessionId,
+		uuid: randomUUID(),
 	};
 }
 

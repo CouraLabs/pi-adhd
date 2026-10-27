@@ -10,7 +10,7 @@ type CallToolResult = Awaited<ReturnType<SdkMcpToolDefinition["handler"]>>;
 export const PI_MCP_SERVER_NAME = "pi";
 const PI_MCP_TOOL_PREFIX = `mcp__${PI_MCP_SERVER_NAME}__`;
 
-export const PI_OWNED_TOOL_NAMES = ["codemode", "plan-write", "submode-exit"] as const;
+export const PI_OWNED_TOOL_NAMES = ["plan-write", "submode-exit"] as const;
 export type PiOwnedToolName = (typeof PI_OWNED_TOOL_NAMES)[number];
 
 const PI_OWNED_TOOL_NAME_SET: ReadonlySet<string> = new Set(PI_OWNED_TOOL_NAMES);
@@ -26,14 +26,11 @@ export function piToolNameFromMcpName(sdkToolName: string): PiOwnedToolName | un
 }
 
 export interface PiToolDescriptions {
-	codemode?: string;
 	"plan-write"?: string;
 	"submode-exit"?: string;
 }
 
 const FALLBACK_DESCRIPTIONS: Record<PiOwnedToolName, string> = {
-	codemode:
-		"Run JavaScript that calls other tools. The input is raw JavaScript run as an async function body in a sandbox; `await tools.<name>({ ...args })` calls a tool, and `return` produces the output.",
 	"plan-write":
 		"Submit the complete implementation plan, in Markdown, for the user to review line by line. Returns the user's verdict and comments.",
 	"submode-exit":
@@ -89,9 +86,6 @@ export class PiToolServer {
 			name: PI_MCP_SERVER_NAME,
 			version: "1.0.0",
 			tools: [
-				tool("codemode", describe("codemode"), { code: z.string().describe("Raw JavaScript source.") }, (args, extra) =>
-					this.runInPi("codemode", args, extra),
-				),
 				tool(
 					"plan-write",
 					describe("plan-write"),

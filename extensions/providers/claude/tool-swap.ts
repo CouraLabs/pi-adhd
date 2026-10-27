@@ -20,8 +20,10 @@ const PI_TOOLS_REPLACED_BY_SDK: readonly string[] = [
 	"ask",
 ];
 
+const CLAUDE_DROPPED_TOOLS: readonly string[] = [...PI_TOOLS_REPLACED_BY_SDK, "codemode"];
+
 export function retargetToolSet(tools: readonly string[], knownNames: ReadonlySet<string>, towardClaude: boolean): string[] {
-	const replaced = new Set(PI_TOOLS_REPLACED_BY_SDK);
+	const replaced = new Set(CLAUDE_DROPPED_TOOLS);
 	const mirrors = new Set<string>(MIRROR_TOOL_NAMES);
 	if (towardClaude) {
 		const hadReplaced = tools.some((name) => replaced.has(name));
@@ -36,7 +38,7 @@ export function retargetToolSet(tools: readonly string[], knownNames: ReadonlySe
 
 export function installToolSwap(pi: ExtensionAPI): void {
 	const mirrorNames = new Set(MIRROR_TOOL_NAMES);
-	const replacedNames = new Set(PI_TOOLS_REPLACED_BY_SDK);
+	const replacedNames = new Set(CLAUDE_DROPPED_TOOLS);
 	let disabledBySwap: string[] = [];
 
 	const enterClaudeTools = (): void => {

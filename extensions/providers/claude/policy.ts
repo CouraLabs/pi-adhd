@@ -20,7 +20,6 @@ export const PI_TO_SDK_TOOL_NAMES: ToolNameMap = new Map([
 	["job-kill", "TaskStop"],
 	["spawn", "Agent"],
 	["ask", "AskUserQuestion"],
-	["codemode", "mcp__pi__codemode"],
 	["plan-write", "mcp__pi__plan-write"],
 	["submode-exit", "mcp__pi__submode-exit"],
 ]);

@@ -13,6 +13,7 @@ import {
 import type { SdkSlashCommand } from "./bridge.ts";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { CLAUDE_PROVIDER_ID } from "../../../shared/modes.ts";
+import { BACKGROUND_REPORT_ENTRY_TYPE, observeBackgroundReports } from "./background-tasks.ts";
 
 type NotifyLevel = "info" | "warning" | "error";
 
@@ -228,6 +229,10 @@ export function registerClaudeCommands(pi: ExtensionAPI): void {
 	const attachToSession = async (context: ExtensionContext): Promise<void> => {
 		const sessionKey = sessionKeyOf(context);
 		if (!observeSessionMessages(sessionKey, onSdkMessage)) return;
+		observeBackgroundReports((reportSessionKey, data) => {
+			if (reportSessionKey !== sessionKey) return;
+			pi.appendEntry(BACKGROUND_REPORT_ENTRY_TYPE, data);
+		});
 		registerPassThrough(await listSdkSlashCommands(sessionKey));
 	};
 
