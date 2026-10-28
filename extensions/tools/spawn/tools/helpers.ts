@@ -63,7 +63,7 @@ export function buildTypeListText(registry: TypeListRegistry): string {
     ...(globalDescs.length > 0 ? ["Global agents:", ...globalDescs] : []),
     ...(projectDescs.length > 0 ? ["", "Project agents:", ...projectDescs] : []),
     "",
-    `Agents are defined in ~/.pi/couralabs/subagents/<name>.md (global) and .pi/couralabs/subagents/<name>.md (project, same name replaces the global one wholesale).`,
+    `Agents are defined in ~/.pi/agents/<name>.md (global) and .pi/agents/<name>.md (project, same name replaces the global one wholesale).`,
   ].join("\n");
 }
 

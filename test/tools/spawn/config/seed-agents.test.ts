@@ -58,61 +58,9 @@ describe("provisionDefaultAgents", () => {
 		expect(readFileSync(join(targetDir, "Explore.md"), "utf8")).toBe(seededContent("Explore"));
 	});
 
-	it("merges seed frontmatter with a non-empty legacy body", () => {
+	it("provisions seed agents and writes the initialized marker", () => {
 		const targetDir = freshDir();
-		const legacyDir = makeTempDir("legacy");
-		dirs.push(legacyDir);
-		writeFileSync(join(legacyDir, "general-purpose.md"), "My customized general prompt.", "utf8");
-		provisionDefaultAgents(targetDir, loadPackagedSeedAgents(), legacyDir);
-		const merged = readFileSync(join(targetDir, "general-purpose.md"), "utf8");
-		expect(merged).toBe(
-			[
-				"---",
-				'description: "General-purpose agent for complex, multi-step tasks"',
-				'display_name: "Agent"',
-				"prompt_mode: append",
-				'tool_guideline: "- Use general-purpose for complex tasks that need file editing."',
-				"---",
-				"",
-				"My customized general prompt.",
-				"",
-			].join("\n"),
-		);
-		expect(readFileSync(join(targetDir, "Explore.md"), "utf8")).toBe(seededContent("Explore"));
-	});
-
-	it("copies the packaged seed when the legacy body is empty", () => {
-		const targetDir = freshDir();
-		const legacyDir = makeTempDir("legacy");
-		dirs.push(legacyDir);
-		writeFileSync(join(legacyDir, "qa.md"), "   \n\t\n", "utf8");
-		provisionDefaultAgents(targetDir, loadPackagedSeedAgents(), legacyDir);
-		expect(readFileSync(join(targetDir, "qa.md"), "utf8")).toBe(seededContent("qa"));
-	});
-
-	it("deletes the legacy dir after provisioning with a legacyDir", () => {
-		const targetDir = freshDir();
-		const legacyDir = makeTempDir("legacy");
-		dirs.push(legacyDir);
-		writeFileSync(join(legacyDir, "general-purpose.md"), "My customized general prompt.", "utf8");
-		provisionDefaultAgents(targetDir, loadPackagedSeedAgents(), legacyDir);
-		expect(existsSync(legacyDir)).toBe(false);
-	});
-
-	it("leaves the legacy dir untouched when the marker already exists", () => {
-		const targetDir = freshDir();
-		provisionDefaultAgents(targetDir, loadPackagedSeedAgents());
-		const legacyDir = makeTempDir("legacy");
-		dirs.push(legacyDir);
-		writeFileSync(join(legacyDir, "qa.md"), "keep me", "utf8");
-		provisionDefaultAgents(targetDir, loadPackagedSeedAgents(), legacyDir);
-		expect(existsSync(legacyDir)).toBe(true);
-		expect(readFileSync(join(legacyDir, "qa.md"), "utf8")).toBe("keep me");
-	});
-
-	it("does nothing extra without a legacyDir", () => {
-		const targetDir = freshDir();
-		expect(() => provisionDefaultAgents(targetDir, loadPackagedSeedAgents(), undefined)).not.toThrow();
+		expect(() => provisionDefaultAgents(targetDir, loadPackagedSeedAgents())).not.toThrow();
 		expect(existsSync(join(targetDir, AGENTS_INITIALIZED_MARKER))).toBe(true);
 	});
 });
