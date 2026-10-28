@@ -56,6 +56,7 @@ Fifteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`,
 | Command | Does |
 |---|---|
 | `/mode [name]` | Switch the system prompt and agent voice; bare `/mode` cycles alphabetically |
+| `/n [mode]` | Start a new session, optionally directly in a mode |
 | `/submode [plan\|grill\|straight\|none]` | Enter or leave a submode |
 | `/plan` `/grill` `/straight` | Toggle one submode |
 | `/couralabs:toggle [name]` | Open a list to toggle extensions and feature toggles, or flip one by name |
@@ -82,7 +83,7 @@ One built-in mode plus any number of user modes, all switched with `/mode`:
 - **π Pi** leaves pi's default system prompt (or a user `SYSTEM.md`) untouched.
 - **◈ Any user mode** — every `<name>.md` in `~/.pi/couralabs/prompts/modes/` is a mode that replaces pi's default system prompt with the file's content. Bare `/mode` cycles through all of them (pi included) in alphabetical order; `/mode <name>` switches directly and an unknown name reports the available ones.
 
-The replacement uses pi's `customPrompt` slot, the same mechanism as `SYSTEM.md`, so tool declarations still reach the model while the default preamble is swapped. The active mode shows first in the footer (`π Pi` in the accent color, `⦵ Work` in the default foreground), the prompt field recolors its border (accent for Pi, default border for Work), and the choice is recorded in the session and restored when that session is resumed. Modes are session-scoped: two pi instances (or two sessions in one process) each carry their own mode, and switching in one never changes another.
+The replacement uses pi's `customPrompt` slot, the same mechanism as `SYSTEM.md`, so tool declarations still reach the model while the default preamble is swapped. The active mode shows first in the footer (`π Pi` in the accent color, `⦵ Work` in the default foreground), the prompt field recolors its border (accent for Pi, default border for Work), and the choice is recorded in the session and restored when that session is resumed. Modes are session-scoped: two pi instances (or two sessions in one process) each carry their own mode, and switching in one never changes another. `/n [mode]` starts a new session: bare `/n` gives a plain new session, and `/n <name>` starts one directly in that mode — the name is matched case-insensitively by unambiguous prefix, an ambiguous prefix reports the matches, and an invalid name fails without creating a session; the mode's `model:` frontmatter applies to the new session.
 
 A mode file may start with a YAML frontmatter block containing a `model:` key that switches the session model when the mode activates. The frontmatter is stripped; the body below the closing `---` is the mode's system prompt (a file without frontmatter is used byte-identical, as before):
 

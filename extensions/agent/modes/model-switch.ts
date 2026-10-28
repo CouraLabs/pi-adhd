@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { Model } from "@earendil-works/pi-ai";
 import { readModeDeclaration, type AgentMode } from "../../../shared/modes.ts";
 import {
@@ -54,7 +54,7 @@ export function resolveModeModelSwitch(
 
 export async function applyModeModel(
 	pi: ExtensionAPI,
-	ctx: ExtensionCommandContext,
+	ctx: ExtensionContext,
 	mode: AgentMode,
 ): Promise<ModeModelSwitchDecision> {
 	const decision = resolveModeModelSwitch(
