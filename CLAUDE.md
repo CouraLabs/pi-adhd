@@ -46,3 +46,7 @@ Conventional-commit style subjects: `feat:`, `fix:`, `docs:` (optionally scoped,
 ## Session output contract
 
 Work mode's rules (see `extensions/agent/modes/prompts/work.md`) are the package's own house style for agent replies: lead with the next action, one bounded action per numbered step, restate state every turn, cap lists, no preamble or closing pleasantries.
+
+---
+
+This is a duplicate of [AGENTS.md](AGENTS.md) and both files should always have the same content.
