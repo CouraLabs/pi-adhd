@@ -7,6 +7,14 @@ export function globalAgentsDir(): string {
 	return join(dirname(getAgentDir()), "agents");
 }
 
+export function globalCommunityAgentsDir(): string {
+	return join(dirname(dirname(getAgentDir())), ".agents", "agents");
+}
+
 export function projectAgentsDir(cwd: string): string {
 	return join(cwd, ".pi", "agents");
+}
+
+export function projectCommunityAgentsDir(cwd: string): string {
+	return join(cwd, ".agents", "agents");
 }

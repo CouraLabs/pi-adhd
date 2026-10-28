@@ -1,15 +1,21 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
-import { globalAgentsDir, projectAgentsDir } from "./agent-dirs.ts";
+import { globalAgentsDir, globalCommunityAgentsDir, projectAgentsDir, projectCommunityAgentsDir } from "./agent-dirs.ts";
 import { parseThinkingLevel, thinkingLevelError } from "./thinking-level.ts";
 import { debugLog } from "../debug.ts";
 import type { AgentConfig } from "../types.ts";
 
 export function loadAgentDefinitions(cwd: string): Map<string, AgentConfig> {
 	const agents = new Map<string, AgentConfig>();
-	loadFromDir(globalAgentsDir(), agents, "global");
-	loadFromDir(projectAgentsDir(cwd), agents, "project");
+	for (const { dir, label } of [
+		{ dir: globalCommunityAgentsDir(), label: "global" as const },
+		{ dir: globalAgentsDir(), label: "global" as const },
+		{ dir: projectCommunityAgentsDir(cwd), label: "project" as const },
+		{ dir: projectAgentsDir(cwd), label: "project" as const },
+	]) {
+		loadFromDir(dir, agents, label);
+	}
 	return agents;
 }
 

@@ -169,7 +169,7 @@ ${guidelines}
 					description: "A short (3-5 word) description of the task (shown in UI).",
 				}),
 				spawn_type: Type.String({
-					description: `The type of specialized agent to use. Available types: ${availableTypesText}. Agents defined in ~/.pi/agents/<name>.md (global) or .pi/agents/<name>.md (project) are also available.`,
+					description: `The type of specialized agent to use. Available types: ${availableTypesText}. Agents defined in ~/.pi/agents/<name>.md (global) or .pi/agents/<name>.md (project) are also available; ~/.agents/agents/ and .agents/agents/ are read as additional sources.`,
 				}),
 				model: Type.Optional(
 					Type.String({

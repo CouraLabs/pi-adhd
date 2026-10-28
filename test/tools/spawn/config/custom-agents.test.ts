@@ -16,6 +16,8 @@ let rootDir: string;
 let globalDir: string;
 let projectDir: string;
 let projectAgentsDir: string;
+let globalCommunityDir: string;
+let projectCommunityDir: string;
 
 function agentFile(frontmatter: string, body = "Body text."): string {
 	return `---\n${frontmatter}\n---\n${body}`;
@@ -37,12 +39,16 @@ function load(): Map<string, AgentConfig> {
 
 beforeAll(() => {
 	rootDir = mkdtempSync(join(tmpdir(), "pi-adhd-agents-"));
-	agentDirState.dir = join(rootDir, "agent");
+	agentDirState.dir = join(rootDir, ".pi", "agent");
 	globalDir = join(dirname(agentDirState.dir), "agents");
 	projectDir = join(rootDir, "project");
 	projectAgentsDir = join(projectDir, ".pi", "agents");
+	globalCommunityDir = join(dirname(dirname(agentDirState.dir)), ".agents", "agents");
+	projectCommunityDir = join(projectDir, ".agents", "agents");
 	mkdirSync(globalDir, { recursive: true });
 	mkdirSync(projectAgentsDir, { recursive: true });
+	mkdirSync(globalCommunityDir, { recursive: true });
+	mkdirSync(projectCommunityDir, { recursive: true });
 });
 
 afterAll(() => {
@@ -66,6 +72,28 @@ describe("loadAgentDefinitions", () => {
 		expect(agents.get("shared")?.source).toBe("project");
 		expect(agents.get("global-only")?.source).toBe("global");
 		expect(sharedPath).toContain("shared.md");
+	});
+
+	it("loads agents from ~/.agents/agents and .agents/agents as additional sources", () => {
+		writeAgent(globalCommunityDir, "community-global", "description: from ~/.agents/agents\n");
+		writeAgent(projectCommunityDir, "community-project", "description: from .agents/agents\n");
+
+		const agents = load();
+		expect(agents.get("community-global")?.description).toBe("from ~/.agents/agents");
+		expect(agents.get("community-global")?.source).toBe("global");
+		expect(agents.get("community-project")?.description).toBe("from .agents/agents");
+		expect(agents.get("community-project")?.source).toBe("project");
+	});
+
+	it("resolves precedence: pi dirs override community dirs in the same scope", () => {
+		writeAgent(globalCommunityDir, "global-conflict", "description: from ~/.agents/agents\n");
+		writeAgent(globalDir, "global-conflict", "description: from ~/.pi/agents\n");
+		writeAgent(projectCommunityDir, "project-conflict", "description: from .agents/agents\n");
+		writeProjectAgent("project-conflict", "description: from .pi/agents\n");
+
+		const agents = load();
+		expect(agents.get("global-conflict")?.description).toBe("from ~/.pi/agents");
+		expect(agents.get("project-conflict")?.description).toBe("from .pi/agents");
 	});
 
 	it("parses frontmatter fields into the agent config", () => {
