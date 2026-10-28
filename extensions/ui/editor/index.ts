@@ -4,6 +4,7 @@ import { loadSettings, updateSettings } from "../../../shared/settings.ts";
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import { subscribeAgentMode } from "../../../shared/modes.ts";
 import { FieldEditor, type LocationProvider } from "./field-editor.ts";
+import { attachImageMarkers } from "./image-paste.ts";
 import { emptyGit, parseNumstat, type GitInfo } from "./git.ts";
 import { SPINNER_INTERVAL_MS } from "./spinner.ts";
 import { LoadingWidget, type LoadingFigures } from "./loading.ts";
@@ -122,6 +123,17 @@ export default function (pi: ExtensionAPI) {
 		});
 	};
 
+	const attachPastedImages = async (text: string) => {
+		if (!text.includes("[Image #")) return undefined;
+		const attached = await attachImageMarkers(text);
+		if (attached.images.length === 0 && attached.text === text) return undefined;
+		return {
+			action: "transform" as const,
+			text: attached.text,
+			...(attached.images.length > 0 ? { images: attached.images } : {}),
+		};
+	};
+
 	pi.registerCommand("full-cwd", {
 		description: "Toggle the full working directory in the prompt field (usage: /full-cwd [on|off])",
 		handler: async (args, commandCtx) => {
@@ -138,6 +150,8 @@ export default function (pi: ExtensionAPI) {
 			);
 		},
 	});
+
+	pi.on("input", (event) => attachPastedImages(event.text));
 
 	pi.on("session_start", (_event, context) => {
 		ctx = context;
