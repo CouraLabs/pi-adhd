@@ -1,6 +1,6 @@
 {
   "name": "@couralabs/pi-adhd",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "A collection of pi extensions: tools, commands, and lifecycle hooks for the pi coding agent, shaped for ADHD-readable output",
   "keywords": [
     "pi-package",
