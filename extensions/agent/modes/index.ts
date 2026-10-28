@@ -11,6 +11,8 @@ import {
 	PI_MODE,
 	MODE_STATE_ENTRY_TYPE,
 	getAgentMode,
+	agentModeLabel,
+	readModeDeclaration,
 	isClaudeProvider,
 	listAgentModes,
 	modeNotice,
@@ -21,6 +23,8 @@ import {
 	type AgentMode,
 	type SelectableAgentMode,
 } from "../../../shared/modes.ts";
+import { applyModeModel, resolveModeModelSwitch } from "./model-switch.ts";
+import { resolveConfiguredDefaultModel } from "../../tools/spawn/config/default-model.ts";
 
 const packagedWorkPrompt = readFileSync(
 	path.join(path.dirname(fileURLToPath(import.meta.url)), "prompts", "work.md"),
@@ -118,10 +122,34 @@ export default function (pi: ExtensionAPI) {
 				}
 				next = match;
 			}
+			const precheck = resolveModeModelSwitch(
+				readModeDeclaration(next),
+				ctx.model,
+				ctx.modelRegistry,
+				resolveConfiguredDefaultModel(ctx.cwd),
+			);
+			if (precheck.error !== undefined) {
+				ctx.ui.notify(`Cannot switch to ${agentModeLabel(next)}: ${precheck.error}`, "error");
+				return;
+			}
 			applyMode(next);
 
-			if (getAgentMode() === current) return;
-			ctx.ui.notify(modeNotice(next), "info");
+			const modelResult = await applyModeModel(pi, ctx, next);
+			if (modelResult.error !== undefined) {
+				ctx.ui.notify(modelResult.error, "error");
+				return;
+			}
+
+			const modeChanged = getAgentMode() !== current;
+			if (!modeChanged && modelResult.switchTo === undefined) return;
+			const modelLine = modelResult.switchTo
+				? ` Model set to ${modelResult.switchTo.name}.`
+				: "";
+			if (modeChanged) {
+				ctx.ui.notify(`${modeNotice(getAgentMode())}${modelLine}`, "info");
+			} else {
+				ctx.ui.notify(`${agentModeLabel(next)} re-selected.${modelLine}`, "info");
+			}
 		},
 	});
 }
