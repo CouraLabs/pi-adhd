@@ -3,7 +3,7 @@ import {
   type ParentPromptOptions,
   type ParentSnapshot,
 } from "./lifecycle/parent-snapshot.ts";
-import { type DefaultModelRef } from "./session/model-resolver.ts";
+import { type DefaultModelRef } from "../../../shared/model-resolver.ts";
 import type { ModelInfo } from "./tools/spawn-config.ts";
 import type { SessionContext } from "./types.ts";
 

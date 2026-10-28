@@ -15,7 +15,7 @@ import { builtinExtensionsFor } from "../session/builtin-extensions.ts";
 import { registerChildSession } from "../../../../shared/child-sessions.ts";
 import type { EnvInfo } from "../session/env.ts";
 import { expandMcpToolPatterns } from "../session/mcp-tool-patterns.ts";
-import type { ModelRegistry } from "../session/model-resolver.ts";
+import type { ModelRegistry } from "../../../../shared/model-resolver.ts";
 import { type AssemblerIO, assembleSessionConfig } from "../session/session-config.ts";
 import type {
   ParentSessionInfo,

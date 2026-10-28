@@ -1,7 +1,7 @@
 import type { Model } from "@earendil-works/pi-ai";
 import type { AgentSessionEvent, SessionContext as SdkSessionContext } from "@earendil-works/pi-coding-agent";
 import type { SpawnThinkingLevel } from "./config/thinking-level.ts";
-import type { ModelRegistry } from "./session/model-resolver.ts";
+import type { ModelRegistry } from "../../../shared/model-resolver.ts";
 
 export { Spawn } from "./lifecycle/spawn.ts";
 export type { AgentSessionEvent };
