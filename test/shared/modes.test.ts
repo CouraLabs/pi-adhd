@@ -18,6 +18,7 @@ import {
 	listAgentModes,
 	modeNotice,
 	nextAgentMode,
+	readModeDeclaration,
 	readModePrompt,
 	restoreModeSnapshotFromEntries,
 	setAgentMode,
@@ -232,6 +233,35 @@ describe("user mode files", () => {
 	it("reads a mode prompt from the modes dir", () => {
 		writeModeFile("deep", "DEEP PROMPT BODY\n");
 		expect(readModePrompt("deep")).toBe("DEEP PROMPT BODY\n");
+	});
+
+	it("returns the raw text byte-identical for a file without frontmatter", () => {
+		const raw = "DEEP PROMPT BODY\n\nmore lines\n";
+		writeModeFile("raw", raw);
+		expect(readModePrompt("raw")).toBe(raw);
+	});
+
+	it("returns only the body for a file with frontmatter and exposes the model", () => {
+		writeModeFile("fronted", "---\nmodel: opus\n---\nBODY\n");
+		expect(readModePrompt("fronted")).toBe("BODY");
+		expect(readModeDeclaration("fronted")).toEqual({ model: "opus" });
+	});
+
+	it("fails soft on an unclosed frontmatter file", () => {
+		writeModeFile("broken", "---\nmodel: opus\nBODY\n");
+		const path = join(userModesDir(), "broken.md");
+		expect(readModePrompt("broken")).toBeUndefined();
+		expect(readModeDeclaration("broken")?.error).toContain(path);
+	});
+
+	it("returns an empty declaration when frontmatter has no model key", () => {
+		writeModeFile("nomodel", "---\nother: value\n---\nBODY\n");
+		expect(readModeDeclaration("nomodel")).toEqual({});
+		expect(readModePrompt("nomodel")).toBe("BODY");
+	});
+
+	it("returns undefined declaration for a missing mode file", () => {
+		expect(readModeDeclaration("missing")).toBeUndefined();
 	});
 
 	it("returns undefined for missing or empty prompts", () => {
