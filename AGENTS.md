@@ -50,4 +50,4 @@ Work mode's rules (see `extensions/agent/modes/prompts/work.md`) are the package
 
 ---
 
-This is a duplicate of [CLAUDE.md](CLAUDE.md) and both files should always have the same content.
+AGENTS.md and CLAUDE.md are duplicates; they must always have the same content.
