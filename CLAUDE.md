@@ -1,11 +1,12 @@
-# CLAUDE.md
+# AGENTS.md
 
 pi-adhd — pi coding-agent extensions that shape agent output for an ADHD reader: next action first, numbered steps, visible progress, no preamble, no closer. Full user docs live in [README.md](README.md).
 
 ## Commands
 
 ```bash
-npx tsc --noEmit    # typecheck (no build step, no test suite, no linter)
+npx tsc --noEmit    # typecheck (no build step, no linter)
+npx vitest run      # test suite (test/**/*.test.ts)
 ```
 
 There are no test files and no lint config. Verify changes by typechecking, then running `pi -e /path/to/pi-adhd` and exercising the affected command/tool.
@@ -16,7 +17,7 @@ A pi extension package. `package.json` exposes one manifest entry (`extensions/i
 
 - `extensions/index.ts` — the barrel. Reads the `extensions` array in `~/.pi/couralabs/settings.json` and calls only the enabled factories. Load order is deliberate: **ui → agent → tools → providers**. Every extension also stays individually loadable (`pi -e extensions/tools/web/index.ts`).
 - `extensions/ui/` — TUI chrome: `editor`, `footer`, `messages`, `session-title`, `thinking`.
-- `extensions/agent/` — prompt shaping: `commands` (`/cmd:<name>`), `modes` (`/mode`, Work mode = the ADHD contract), `submodes` (`plan`/`grill`/`straight`, appended prompt sections + tool whitelists).
+- `extensions/agent/` — prompt shaping: `commands` (`/cmd:<name>`), `modes` (`/mode`, Work mode = the ADHD contract; mode files may carry YAML frontmatter with a `model:` key that switches the session model on activation — see `shared/mode-frontmatter.ts` and `shared/model-resolver.ts`), `submodes` (`plan`/`grill`/`straight`, appended prompt sections + tool whitelists).
 - `extensions/tools/` — agent tools and their commands: `ask-user`, `job`, `pomodoro`, `spawn`, `timer`, `web`.
 - `extensions/providers/claude/` — `claude/*` models backed by the Claude Agent SDK (bridge, tool swap, session host).
 - `shared/` — cross-extension helpers (settings, timer registry, spawn service, glyphs, formatting, extension registry). Nothing in `shared/` may import from `extensions/`.
@@ -49,4 +50,4 @@ Work mode's rules (see `extensions/agent/modes/prompts/work.md`) are the package
 
 ---
 
-This is a duplicate of [AGENTS.md](AGENTS.md) and both files should always have the same content.
+This is a duplicate of [CLAUDE.md](CLAUDE.md) and both files should always have the same content.
