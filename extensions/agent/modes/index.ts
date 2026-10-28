@@ -112,7 +112,6 @@ export default function (pi: ExtensionAPI) {
 			}
 			let next: SelectableAgentMode;
 			if (arg === "") {
-
 				next = nextAgentMode(current, modes);
 			} else {
 				const match = modes.find((mode) => mode.toLowerCase() === arg.toLowerCase());

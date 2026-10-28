@@ -49,9 +49,24 @@ describe("resolveModeModelSwitch", () => {
 		expect(result.switchTo).toBeUndefined();
 	});
 
-	it("returns the resolver error for an unresolvable model input", () => {
-		const result = resolveModeModelSwitch({ model: "default" }, gpt4o, registry);
+	it("errors on model \"default\" when no defaultModelRef is configured", () => {
+		const result = resolveModeModelSwitch({ model: "default" }, gpt4o, registry, undefined);
 		expect(result.error).toContain("no default model is configured");
+	});
+
+	it("returns unchanged when the model input is whitespace only", () => {
+		const result = resolveModeModelSwitch({ model: "   " }, gpt4o, registry);
+		expect(result).toEqual({ unchanged: true });
+	});
+
+	it("returns switchTo when the current model is undefined and the input resolves", () => {
+		const result = resolveModeModelSwitch({ model: "anthropic/claude-sonnet-4" }, undefined, registry);
+		expect(result.switchTo).toBe(sonnet);
+	});
+
+	it("returns unchanged for model \"inherit\" when there is no current model", () => {
+		const result = resolveModeModelSwitch({ model: "inherit" }, undefined, registry);
+		expect(result).toEqual({ unchanged: true });
 	});
 
 	it("returns switchTo when the model resolves and differs from the current model", () => {
@@ -67,11 +82,6 @@ describe("resolveModeModelSwitch", () => {
 	it("allows claude-provider models with no special-casing", () => {
 		const result = resolveModeModelSwitch({ model: "claude/claude-sonnet-4-5" }, gpt4o, registry);
 		expect(result.switchTo).toBe(claudeModel);
-	});
-
-	it("errors on model \"default\" when no defaultModelRef is configured", () => {
-		const result = resolveModeModelSwitch({ model: "default" }, gpt4o, registry, undefined);
-		expect(result.error).toContain("no default model is configured");
 	});
 
 	it("resolves model \"default\" through the configured defaultModelRef", () => {
