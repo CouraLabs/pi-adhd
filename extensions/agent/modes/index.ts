@@ -24,6 +24,7 @@ import {
 	type SelectableAgentMode,
 } from "../../../shared/modes.ts";
 import { applyModeModel, resolveModeModelSwitch } from "./model-switch.ts";
+import { applyStagedModeModel, registerNewSessionCommand } from "./new-session.ts";
 import { resolveConfiguredDefaultModel } from "../../tools/spawn/config/default-model.ts";
 
 const packagedWorkPrompt = readFileSync(
@@ -63,10 +64,11 @@ export default function (pi: ExtensionAPI) {
 		setAgentMode(resolved);
 	};
 
-	pi.on("session_start", (_event, ctx) => {
+	pi.on("session_start", async (_event, ctx) => {
 		childSession = isChildSession(ctx.sessionManager.getSessionId());
 		if (childSession) return;
 		restoreMode(ctx);
+		await applyStagedModeModel(pi, ctx);
 	});
 
 	pi.on("session_tree", (_event, ctx) => {
@@ -96,6 +98,8 @@ export default function (pi: ExtensionAPI) {
 		const prompt = readModePrompt(mode);
 		if (prompt !== undefined) event.systemPromptOptions.customPrompt = prompt;
 	});
+
+	registerNewSessionCommand(pi);
 
 	pi.registerCommand("mode", {
 		description: "Switch agent mode (/mode cycles, /mode <name> selects)",

@@ -47,7 +47,7 @@ export function registerNewSessionCommand(pi: ExtensionAPI): void {
 			}
 			if (isClaudeProvider(ctx.model?.provider)) {
 				ctx.ui.notify(
-					"/mode is unavailable while a Claude model is active: the Claude Agent SDK owns the system prompt. Switch to another model first.",
+					"/n is unavailable while a Claude model is active: the Claude Agent SDK owns the system prompt. Switch to another model first.",
 					"warning",
 				);
 				return;
