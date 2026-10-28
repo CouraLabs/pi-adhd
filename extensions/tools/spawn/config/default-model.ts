@@ -1,6 +1,6 @@
 import { getAgentDir, SettingsManager } from "@earendil-works/pi-coding-agent";
 import { debugLog } from "../debug.ts";
-import { type DefaultModelRef } from "../session/model-resolver.ts";
+import { type DefaultModelRef } from "../../../../shared/model-resolver.ts";
 
 export function resolveConfiguredDefaultModel(cwd: string): DefaultModelRef | undefined {
 	try {

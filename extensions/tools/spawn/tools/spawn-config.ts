@@ -3,7 +3,7 @@ import type { AgentTypeRegistry } from "../config/agent-types.ts";
 import { resolveInvocationOverrides } from "../config/invocation-overrides.ts";
 import { parseThinkingLevel, thinkingLevelError } from "../config/thinking-level.ts";
 import { isBelowMinimumTurns, MIN_MAX_TURNS, normalizeMaxTurns } from "../lifecycle/turn-limits.ts";
-import { type DefaultModelRef, type ModelRegistry, resolveInvocationModel } from "../session/model-resolver.ts";
+import { type DefaultModelRef, type ModelRegistry, resolveInvocationModel } from "../../../../shared/model-resolver.ts";
 import type { AgentInvocation, SpawnType, ThinkingLevel } from "../types.ts";
 import {
   type AgentDetails,

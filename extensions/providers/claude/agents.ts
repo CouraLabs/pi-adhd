@@ -1,7 +1,7 @@
 import type { AgentDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { loadAgentDefinitions } from "../../tools/spawn/config/custom-agents.ts";
 import { BUILTIN_TOOL_NAMES } from "../../tools/spawn/config/agent-types.ts";
-import { type DefaultModelRef } from "../../tools/spawn/session/model-resolver.ts";
+import { type DefaultModelRef } from "../../../shared/model-resolver.ts";
 import type { AgentConfig } from "../../tools/spawn/types.ts";
 import { familyToSdkModelId } from "./models.ts";
 import { toSdkToolName } from "./policy.ts";

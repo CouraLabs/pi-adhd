@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Model } from "@earendil-works/pi-ai";
-import type { DefaultModelRef, ModelRegistry } from "../../../../extensions/tools/spawn/session/model-resolver.ts";
-import { resolveInvocationModel, resolveModel } from "../../../../extensions/tools/spawn/session/model-resolver.ts";
+import type { DefaultModelRef, ModelRegistry } from "../../shared/model-resolver.ts";
+import { resolveInvocationModel, resolveModel } from "../../shared/model-resolver.ts";
 
 function asModel(value: { provider: string; id: string; name: string }): Model<any> {
 	return value as unknown as Model<any>;

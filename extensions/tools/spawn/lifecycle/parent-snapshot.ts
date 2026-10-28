@@ -1,6 +1,6 @@
 import type { Model } from "@earendil-works/pi-ai";
 import { buildParentContext } from "../session/context.ts";
-import type { ModelRegistry } from "../session/model-resolver.ts";
+import type { ModelRegistry } from "../../../../shared/model-resolver.ts";
 import type { SessionContext } from "../types.ts";
 
 export interface ParentPromptOptions {

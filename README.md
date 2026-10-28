@@ -84,6 +84,30 @@ One built-in mode plus any number of user modes, all switched with `/mode`:
 
 The replacement uses pi's `customPrompt` slot, the same mechanism as `SYSTEM.md`, so tool declarations still reach the model while the default preamble is swapped. The active mode shows first in the footer (`π Pi` in the accent color, `⦵ Work` in the default foreground), the prompt field recolors its border (accent for Pi, default border for Work), and the choice is recorded in the session and restored when that session is resumed. Modes are session-scoped: two pi instances (or two sessions in one process) each carry their own mode, and switching in one never changes another.
 
+A mode file may start with a YAML frontmatter block containing a `model:` key that switches the session model when the mode activates. The frontmatter is stripped; the body below the closing `---` is the mode's system prompt (a file without frontmatter is used byte-identical, as before):
+
+```markdown
+---
+model: sonnet
+---
+
+You are a ruthless code reviewer...
+```
+
+The `model` value follows the same grammar as spawned agents:
+
+- **absent** — no model switch; the session keeps its current model.
+- **`inherit`** — no switch; the parent (current) model stays.
+- **`default`** — pi's configured default model; an explicit error when no default is configured.
+- **`provider/model-id`** — an exact match, e.g. `openai/gpt-5.2`.
+- **a fuzzy name** — e.g. `sonnet` or `haiku`, resolved by best match against the available models.
+
+Failure is a hard stop: if the `model` value cannot be resolved, or the frontmatter is malformed (missing closing `---`, a non-string `model`, a non-mapping block), the `/mode` switch aborts with an error and the mode does not activate. Unknown frontmatter keys are ignored.
+
+Claude-provider models (e.g. `model: claude/claude-sonnet-5-5`) are allowed but behave exactly like a manual `/model` selection of a Claude model: the session force-switches to Claude mode and the mode's own prompt is discarded, because the Claude Agent SDK owns the system prompt. This is current, intended behavior.
+
+Re-selecting the current mode with `/mode <name>` re-applies its model, so a mode's model is enforced on every explicit activation. A mode-initiated switch runs through `setModel`, so per-model thinking-level overrides apply as a side effect, and it appears as a `model_change` entry in `/tree` (model changes are not rendered in the chat viewport).
+
 The full Work prompt also covers orchestration: delegate to spawned agents and ask before inferring.
 
 ## Working modes: `submodes`

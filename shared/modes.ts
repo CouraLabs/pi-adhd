@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { ThemeColor } from "@earendil-works/pi-coding-agent";
 import { MODE_CLAUDE, MODE_CUSTOM, MODE_PI, MODE_WORK } from "./glyphs.ts";
+import { parseModeFile } from "./mode-frontmatter.ts";
 import { getUserPromptsDir } from "./user-prompts.ts";
 import { createGlobalStore } from "./store.ts";
 
@@ -46,14 +47,34 @@ export function nextAgentMode(current: AgentMode, modes: readonly AgentMode[]): 
 	return modes[(modes.indexOf(current) + 1) % modes.length];
 }
 
-export function readModePrompt(mode: AgentMode): string | undefined {
+interface ModeDeclaration {
+	model?: string;
+	error?: string;
+}
+
+function readModeFile(mode: AgentMode): string | undefined {
 	try {
 		const path = join(userModesDir(), `${mode}.md`);
-		const text = existsSync(path) ? readFileSync(path, "utf8") : "";
-		return text.trim() ? text : undefined;
+		return existsSync(path) ? readFileSync(path, "utf8") : undefined;
 	} catch {
 		return undefined;
 	}
+}
+
+export function readModePrompt(mode: AgentMode): string | undefined {
+	const text = readModeFile(mode);
+	if (text === undefined) return undefined;
+	const parsed = parseModeFile(text);
+	if ("error" in parsed) return undefined;
+	return parsed.body.trim() ? parsed.body : undefined;
+}
+
+export function readModeDeclaration(mode: AgentMode): ModeDeclaration | undefined {
+	const text = readModeFile(mode);
+	if (text === undefined) return undefined;
+	const parsed = parseModeFile(text);
+	if ("error" in parsed) return { error: `${join(userModesDir(), `${mode}.md`)}: ${parsed.error}` };
+	return { model: parsed.frontmatter.model };
 }
 
 function modeDisplayName(mode: AgentMode): string {
