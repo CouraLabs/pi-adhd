@@ -21,7 +21,3 @@ export function takePendingModeRequest(sessionId: string): PendingModeRequest | 
 	if (pending === undefined || pending.sessionId !== sessionId) return undefined;
 	return pending;
 }
-
-export function clearPendingModeRequest(): void {
-	store.set(undefined);
-}
