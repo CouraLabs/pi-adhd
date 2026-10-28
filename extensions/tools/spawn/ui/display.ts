@@ -73,12 +73,12 @@ export function formatDuration(startedAt: number, completedAt?: number): string 
 
 export function getDisplayName(type: SpawnType, registry: AgentConfigLookup): string {
   const config = registry.resolveAgentConfig(type);
-  return config.displayName ?? config.name;
+  return config?.displayName ?? config?.name ?? type;
 }
 
 export function getPromptModeLabel(type: SpawnType, registry: AgentConfigLookup): string | undefined {
   const config = registry.resolveAgentConfig(type);
-  return config.promptMode === "append" ? "twin" : undefined;
+  return config?.promptMode === "append" ? "twin" : undefined;
 }
 
 export function buildInvocationTags(

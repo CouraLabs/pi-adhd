@@ -142,7 +142,7 @@ export class AgentTool {
 			"- Provide clear, detailed prompts so the agent can work autonomously.",
 			"- Spawn results are returned as text — summarize them for the user.",
 			"- Use resume with an agent ID to continue a previous agent's work, or to answer an agent that ended its turn with a question.",
-			'- Use model to specify a different model (as "provider/modelId", or fuzzy e.g. "haiku", "sonnet").',
+			'- Use model to specify a different model (as "provider/modelId", fuzzy e.g. "haiku", "sonnet", "default" for Pi\'s configured default, or "inherit" for the parent session model).',
 			"- Use thinking to control extended thinking level.",
 			"- Use inherit_context if the agent needs the parent conversation history.",
 		].join("\n");
@@ -169,18 +169,18 @@ ${guidelines}
 					description: "A short (3-5 word) description of the task (shown in UI).",
 				}),
 				spawn_type: Type.String({
-					description: `The type of specialized agent to use. Available types: ${availableTypesText}. Custom agents from .agents/agents/<name>.md (project) or ~/.agents/agents/<name>.md (global) are also available.`,
+					description: `The type of specialized agent to use. Available types: ${availableTypesText}. Agents defined in ~/.pi/couralabs/subagents/<name>.md (global) or .pi/couralabs/subagents/<name>.md (project) are also available.`,
 				}),
 				model: Type.Optional(
 					Type.String({
 						description:
-							'Optional model override. Accepts "provider/modelId" or fuzzy name (e.g. "haiku", "sonnet"). Omit to use the agent type\'s default. An agent that locks this field keeps its own model and says so in the result.',
+							'Optional model override. Accepts "provider/modelId" or fuzzy name (e.g. "haiku", "sonnet"), "default" for Pi\'s configured default model, or "inherit" for the parent session model. Omit to use the agent type\'s default.',
 					}),
 				),
 				thinking: Type.Optional(
 					Type.String({
 						description:
-							"Thinking level: off, minimal, low, medium, high, xhigh, max. Overrides the agent's default unless the agent locks this field.",
+							"Thinking level: off, minimal, low, medium, high, xhigh, max. Overrides the agent's default.",
 					}),
 				),
 				max_turns: Type.Optional(

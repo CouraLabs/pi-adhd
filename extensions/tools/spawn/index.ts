@@ -13,7 +13,12 @@ import {
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { AgentTypeRegistry } from "./config/agent-types.ts";
-import { loadCustomAgents } from "./config/custom-agents.ts";
+import { globalAgentsDir } from "./config/agent-dirs.ts";
+import { loadAgentDefinitions } from "./config/custom-agents.ts";
+import { resolveConfiguredDefaultModel } from "./config/default-model.ts";
+import { provisionDefaultAgents } from "./config/seed-agents.ts";
+import { loadPackagedSeedAgents } from "./config/seed-source.ts";
+import { debugLog } from "./debug.ts";
 import { SessionLifecycleHandler } from "./handlers/index.ts";
 import { createChildLifecyclePublisher } from "./lifecycle/child-lifecycle.ts";
 import { createSpawnSession, type SpawnSessionDeps } from "./lifecycle/create-spawn-session.ts";
@@ -26,6 +31,7 @@ import { SpawnServiceAdapter } from "./service/service-adapter.ts";
 import { detectEnv } from "./session/env.ts";
 import { isChildSession } from "../../../shared/child-sessions.ts";
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
+import { getUserPromptsDir } from "../../../shared/user-prompts.ts";
 import { createExcludedPackagesStorage } from "./session/package-exclusions.ts";
 import { createProjectContextLoader } from "./session/project-context.ts";
 import { buildAgentPrompt } from "./session/prompts.ts";
@@ -34,11 +40,16 @@ import { deriveSpawnSessionDir } from "./session/session-dir.ts";
 import { SettingsManager } from "./settings.ts";
 import { AgentTool } from "./tools/agent-tool.ts";
 import { SessionNavigatorHandler } from "./ui/session-navigator.ts";
-import { SpawnDefaultsHandler } from "./ui/spawn-defaults.ts";
 import { SpawnSettingsHandler } from "./ui/spawn-settings.ts";
 
 export default function (pi: ExtensionAPI) {
   markExtensionLoaded("spawn");
+
+  try {
+    provisionDefaultAgents(globalAgentsDir(), loadPackagedSeedAgents(), join(getUserPromptsDir(), "subagents"));
+  } catch (err) {
+    debugLog("provisionDefaultAgents", err);
+  }
 
   const runtime = createSpawnRuntime();
 
@@ -47,11 +58,7 @@ export default function (pi: ExtensionAPI) {
   });
   settings.load();
 
-  const registry = new AgentTypeRegistry(
-    () => loadCustomAgents(process.cwd()),
-    () => settings.agentModels,
-    () => settings.agentThinking,
-  );
+  const registry = new AgentTypeRegistry(() => loadAgentDefinitions(process.cwd()));
 
   const eventsObserver = new SpawnEventsObserver({
     emit: (channel, data) => pi.events.emit(channel, data),
@@ -166,7 +173,10 @@ export default function (pi: ExtensionAPI) {
     spawnEnabled = !isChild;
     applySpawnEnabled(isChild);
 
-    if (!isChild) publishSpawnService(service);
+    if (!isChild) {
+      publishSpawnService(service);
+      runtime.setDefaultModelRef(resolveConfiguredDefaultModel(ctx.cwd));
+    }
   });
   pi.on("session_before_switch", () => lifecycle.handleSessionBeforeSwitch());
   pi.on("session_shutdown", () => lifecycle.handleSessionShutdown());
@@ -206,32 +216,6 @@ export default function (pi: ExtensionAPI) {
         cwd: ctx.cwd,
         readFile: (path) => readFileSync(path, "utf8"),
         sessionEntries: ctx.sessionManager.getEntries(),
-      });
-    },
-  });
-
-  const spawnDefaultsHandler = new SpawnDefaultsHandler();
-
-  pi.registerCommand("spawn:model", {
-    description: "Set a spawned agent's default model and thinking level (built-in or .agents/agents/*.md)",
-    handler: async (_args, ctx) => {
-      if (!spawnEnabled) {
-        ctx.ui.notify(SPAWN_CHILD_MESSAGE, "warning");
-        return;
-      }
-      await spawnDefaultsHandler.handle({
-        ui: ctx.ui,
-        listAgents: () => registry.list(),
-        cwd: ctx.cwd,
-        models:
-          ctx.scopedModels.length > 0
-            ? ctx.scopedModels.map((scoped) => scoped.model)
-            : ctx.modelRegistry.getAvailable(),
-        getBuiltInModels: () => settings.agentModels,
-        getBuiltInThinking: () => settings.agentThinking,
-        setAgentModel: (agentName, modelId) => settings.applyAgentModel(agentName, modelId),
-        setAgentThinking: (agentName, thinking) => settings.applyAgentThinking(agentName, thinking),
-        reload: () => registry.reload(),
       });
     },
   });

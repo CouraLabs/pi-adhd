@@ -55,8 +55,6 @@ describe("DEFAULT_SETTINGS", () => {
 			unconsumedSessionRetentionMinutes: 720,
 			excludedExtensionPackages: [],
 			promptInheritance: {},
-			agentModels: {},
-			agentThinking: {},
 		});
 	});
 

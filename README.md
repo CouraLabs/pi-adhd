@@ -62,7 +62,7 @@ Fifteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`,
 | `/couralabs:session-title` | Show session-title state and pick the model that names sessions |
 | `/couralabs:claude-limit-handoff` | Pick the model that takes over when the Claude rate limit is reached (none: wait for the reset, then auto-continue) |
 | `/full-cwd [on\|off]` | Show the full working directory or only its last folder |
-| `/spawn:settings` `/spawn:sessions` `/spawn:model` | Tune limits, open a transcript, set agent defaults |
+| `/spawn:settings` `/spawn:sessions` | Tune spawn limits and retention, open a transcript |
 | `/web` | Pick web fetch and search providers |
 | `/job <name> <command...>` | Start a background job |
 | `/job-kill <jobId>` | Stop a job and forget it |
@@ -141,7 +141,7 @@ A rejection's line comments come back as `line N: <comment>` so the model can re
 
 ### Plan reviewer agent
 
-The built-in `plan-reviewer` agent is a practical, read-only blocker-finder (`read`, `grep`, `find`, `ls`) that verifies referenced files exist and returns `[OKAY]` or a max-3 `[REJECT]`. It ships as an embedded default, so it is available wherever pi-adhd is installed. The Plan agent spawns it with the `spawn` tool before calling `plan-write` (see [plan.md](extensions/agent/submodes/prompts/plan.md)).
+The built-in `plan-reviewer` agent is a practical, tightly-scoped blocker-finder (`read`, `bash`, `grep`, `find`, `ls`) that verifies referenced files exist and returns `[OKAY]` or a max-3 `[REJECT]`. It ships as a packaged agent, so it is available wherever pi-adhd is installed. The Plan agent spawns it with the `spawn` tool before calling `plan-write` (see [plan.md](extensions/agent/submodes/prompts/plan.md)).
 
 ## Prompt commands: `commands`
 
@@ -232,9 +232,50 @@ In-process autonomous spawned agents, vendored from [`@gotgenes/pi-subagents`](h
 
 The model spawns agents with the `spawn` tool (`spawn_type`, `prompt`, `description`, and optional `model`, `thinking`, `max_turns`, `resume`, `inherit_context`). Every agent runs foreground: the call blocks until the agent finishes and its result comes back inline, so several independent pieces of work are launched in one turn and their results are synthesized as they arrive. `/spawn:settings` tunes turn limits and session retention; `/spawn:sessions` opens a running or completed agent's transcript in pi's read-only viewer.
 
-`/spawn:model` sets a spawned agent's defaults: it lists every agent type — the built-ins `general-purpose`, `plan-reviewer`, `Arquitect`, `Code-Review`, and `Explore` plus the `.agents/agents/*.md` files from the project and `~/.agents/agents/` — annotated with each agent's current model and thinking level, then offers both for the chosen agent. Choosing a model persists it and goes straight to the thinking-level picker, which offers only the levels the chosen model supports (from its `reasoning` flag and `thinkingLevelMap` — a non-reasoning model offers only `off`); esc there keeps the model and leaves thinking untouched. The standalone "Thinking:" action filters the same way, by the agent's already-set model (when that model resolves among the available ones). The dialog loops: after a pick, the agent list returns with the new value shown, so the write is visible without reopening the command; esc exits. Each picker also offers "Inherit (clear override)" to drop an override. A built-in choice is stored in `~/.pi/couralabs/settings.json` under `spawn.agentModels` / `spawn.agentThinking`; a custom agent's choice is written as a `model:` / `thinking:` key in its own markdown frontmatter.
+### Agent definitions
 
-Agent types are defined in `.agents/agents/<name>.md` (project) and `~/.agents/agents/<name>.md` (global) with YAML frontmatter for the prompt, model, thinking level, tools, and `max_turns`. The built-in `general-purpose`, `plan-reviewer`, `Arquitect`, `Code-Review`, and `Explore` types cover the common cases. Lifecycle events (`spawn:started`, `completed`, `failed`, `resuming`, `resumed`, `compacted`, `settings_loaded`, `settings_changed`) are emitted on `pi.events`, and a typed `SpawnService` is published for other extensions.
+Every agent — packaged or your own — is a markdown file: `~/.pi/couralabs/subagents/<name>.md` (global) and `<project>/.pi/couralabs/subagents/<name>.md` (project). The filename without its extension is the agent name, and a project file with the same name replaces the global definition wholesale. The old locations — `~/.agents/agents/`, `<project>/.agents/agents/`, and `~/.pi/agent/agents/` — are no longer read.
+
+Six agents ship with the package — `general-purpose`, `plan-reviewer`, `Arquitect`, `Code-Review`, `qa`, and `Explore` — and the first load copies any that are missing into `~/.pi/couralabs/subagents/`, then drops a `.initialized` marker there. The marker is what makes deletion stick: while it exists, missing packaged files are never recreated, so deleting an agent file removes it permanently. Deleting the whole directory resets seeding; deleting just the marker reseeds the files that are missing without overwriting the ones you edited.
+
+An agent file is YAML frontmatter plus a markdown body, where the body is the agent's system prompt:
+
+```
+── ~/.pi/couralabs/subagents/Code-Review.md ──
+---
+description: "Reviews code for correctness, style, and maintainability, providing detailed feedback and suggestions for improvement."
+display_name: "Review Code"
+tools: read, bash, grep, find, ls
+prompt_mode: replace
+tool_guideline: "- Use Code-Review for analyzing and improving code quality."
+---
+
+You are an expert code reviewer specializing in modern software development...
+```
+
+| Frontmatter field | Meaning |
+|---|---|
+| `description` | When to pick the agent, shown in the spawn tool's catalogue (falls back to the filename) |
+| `display_name` | Human-readable name used by the UI |
+| `name` | Human-readable name used by the UI; lower priority than `display_name` |
+| `tools` | Which tools the agent gets — see below |
+| `model` | `inherit` (the parent session's model — also the fallback when the field is omitted), `default` (Pi's configured default model; an explicit error when that model is unavailable), or a concrete model (`provider/model-id` or a fuzzy name like `haiku`) |
+| `thinking` | Thinking level for the agent's model |
+| `max_turns` | Turn ceiling |
+| `prompt_mode` | `append` (default) appends the body to the inherited identity; `replace` uses the body alone |
+| `inherit_context` | `true` forks the parent conversation into the agent; the default is fresh context |
+| `enabled` | `false` keeps the definition but hides it from the catalogue and rejects spawning it (default `true`) |
+| `tool_guideline` | One-line selection guidance, included in the spawn tool description |
+
+The `tools` field has four forms. `tools: all` gives the agent every tool available in the parent session at spawn time, including extension and MCP tools. Omitting the field gives the fixed built-in list `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`. `tools: "none"` gives no tools, and an explicit list restricts the agent to those tools. Mixing `all` or `none` with other tool names is a validation error.
+
+The `spawn` call's `model`, `thinking`, `max_turns`, and `inherit_context` parameters are per-invocation overrides that always win over the file — for every field the caller's parameter comes first, then the frontmatter, then the field's normal fallback. Overrides are ephemeral: they never modify the agent's file, so the next spawn of the same agent is back to its file's values. The `locked` frontmatter key and the `/spawn:model` command are gone; to change an agent's persistent defaults, edit its markdown file — the files are the source of truth, and hand-editing them is the intended workflow.
+
+The spawn tool description lists every enabled agent, grouped as **Global agents** and **Project agents**, each with its description and current model, followed by the `tool_guideline` line of every agent that has one.
+
+If you had customized prompts under the retired `~/.pi/couralabs/prompts/subagents/`, the first initialization preserves them: a legacy prompt file with a non-empty body becomes the body of the corresponding new agent file (packaged frontmatter, your text); otherwise the packaged file is copied as-is. Once the new agent files are written and the marker is in place, the legacy directory itself is deleted automatically (only `~/.pi/couralabs/prompts/subagents/` is removed; sibling folders such as `prompts/submodes/` and `prompts/modes/` are left untouched). If the marker already exists, nothing is deleted.
+
+Lifecycle events (`spawn:started`, `completed`, `failed`, `resuming`, `resumed`, `compacted`, `settings_loaded`, `settings_changed`) are emitted on `pi.events`, and a typed `SpawnService` is published for other extensions.
 
 Disable the whole extension with `/couralabs:toggle spawn`; an already-running agent keeps running until it settles, and `/spawn:settings` and `/spawn:sessions` are unavailable in a spawned child session.
 
@@ -339,7 +380,7 @@ Registers a `claude` provider with `claude-opus-5-5`, `claude-sonnet-5-5`, and `
 - **Tool ownership.** SDK built-ins (`Read`, `Write`, `Edit`, `Bash`, `Grep`, `Glob`, `WebFetch`, `WebSearch`, `Agent`, `AskUserQuestion`, `TaskStop`, `Skill`) run in the SDK and show up as mirror tools in pi's renderers. `plan-write` and `submode-exit` run in pi and are reached by the SDK as `mcp__pi__*`. `codemode` is disabled while a Claude model is active — its sandbox would reach pi's tools and MCP servers past the SDK's own tool handling. `AskUserQuestion` uses the `ask` dialog.
 - **Redirected commands.** `/compact`, `/new`, `/model`, `/job*`, and `/spawn:*` act on the SDK session while a Claude model is active. SDK slash commands appear as pass-through pi commands.
 - **Background tasks report back.** SDK background tasks (Bash with `run_in_background`, backgrounded subagents) surface their completion as a transcript entry the moment the SDK emits the finish event — the task notice (exit status, summary) plus the model's own report — instead of sitting silently until the next prompt. `/job-list` stays live the whole time through the SDK's task-level updates.
-- **Subagents.** `.agents/agents/*.md` become SDK agent definitions.
+- **Subagents.** The agent definitions in `~/.pi/couralabs/subagents/*.md` and `<project>/.pi/couralabs/subagents/*.md` become SDK agent definitions.
 - **MCP servers come from one side at a time.** Under a Claude model the SDK loads your `~/.claude` settings, CLAUDE.md, hooks, and MCP servers, while pi's MCP servers stay out of reach (codemode is off), so no server is callable two ways.
 
 **Authentication.** pi-adhd never handles Claude credentials: no `/login` entry, no reading of `~/.claude`, nothing written to `auth.json`. The bundled `claude` binary uses your own `ANTHROPIC_API_KEY` or your own `claude /login` session.
@@ -395,8 +436,7 @@ It is organized as `{ feature: { option: value } }`, plus a top-level `extension
     "consumedSessionRetentionMinutes": 10,
     "unconsumedSessionRetentionMinutes": 720,
     "excludedExtensionPackages": [],
-    "promptInheritance": {},
-    "agentModels": {}
+    "promptInheritance": {}
   },
   "timer": { "osNotification": true },
   "pomodoro": { "workMinutes": 25, "breakMinutes": 5, "longBreakMinutes": 15, "rounds": 4 },
@@ -422,8 +462,6 @@ It is organized as `{ feature: { option: value } }`, plus a top-level `extension
 | `spawn` | `unconsumedSessionRetentionMinutes` | `720` | Minutes an unconsumed agent's session is retained |
 | `spawn` | `excludedExtensionPackages` | `[]` | Pi package sources whose extensions child sessions must not load |
 | `spawn` | `promptInheritance` | `{}` | Per-provider prompt strategy (`full` or `portable`) |
-| `spawn` | `agentModels` | `{}` | Per-built-in-agent model override, set by `/spawn:model` |
-| `spawn` | `agentThinking` | `{}` | Per-built-in-agent thinking override, set by `/spawn:model` |
 | `timer` | `osNotification` | `true` | Push a native OS notification when a timer or pomodoro phase fires, in addition to the bell |
 | `pomodoro` | `workMinutes` | `25` | Length of a work session |
 | `pomodoro` | `breakMinutes` | `5` | Length of a short break |
@@ -486,7 +524,7 @@ pi --use-theme synthwave84
 | The ADHD output rules | `~/.pi/couralabs/prompts/modes/work.md` (offloaded from `extensions/agent/modes/prompts/work.md` on load) |
 | A `/cmd:<name>` prompt command | `extensions/agent/commands/index.ts` (scans `.agents/commands` + `.claude/commands`) |
 | A submode's prompt | `~/.pi/couralabs/prompts/submodes/<name>.md` (offloaded from `extensions/agent/submodes/prompts/<name>.md` on load) |
-| A built-in sub-agent's prompt | `~/.pi/couralabs/prompts/subagents/<name>.md` (offloaded from `extensions/tools/spawn/config/default-agents.ts` on load) |
+| A spawned agent's prompt, model, or tools | `~/.pi/couralabs/subagents/<name>.md` (project: `<project>/.pi/couralabs/subagents/<name>.md`) |
 | Submode tool whitelists | `extensions/agent/submodes/index.ts` |
 | Footer layout | `extensions/ui/footer/render.ts` |
 | Prompt box drawing | `extensions/ui/editor/field-editor.ts` |

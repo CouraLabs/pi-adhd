@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Model } from "@earendil-works/pi-ai";
-import type { ModelRegistry } from "../../../../extensions/tools/spawn/session/model-resolver.ts";
+import type { DefaultModelRef, ModelRegistry } from "../../../../extensions/tools/spawn/session/model-resolver.ts";
 import { resolveInvocationModel, resolveModel } from "../../../../extensions/tools/spawn/session/model-resolver.ts";
 
 function asModel(value: { provider: string; id: string; name: string }): Model<any> {
@@ -105,5 +105,55 @@ describe("resolveInvocationModel", () => {
 			registryWith([sonnet]),
 		);
 		expect(result).toEqual({ model: sonnet });
+	});
+
+	it("returns the parent model for the inherit sentinel", () => {
+		const result = resolveInvocationModel(
+			gpt4o,
+			"inherit",
+			true,
+			registryWith([sonnet]),
+		);
+		expect(result).toEqual({ model: gpt4o });
+	});
+
+	it("resolves the default sentinel to the configured default model", () => {
+		const defaultModelRef: DefaultModelRef = { provider: "anthropic", id: "claude-sonnet-4" };
+		const result = resolveInvocationModel(
+			gpt4o,
+			"default",
+			true,
+			registryWith([sonnet]),
+			defaultModelRef,
+		);
+		expect(result).toEqual({ model: sonnet });
+	});
+
+	it("errors on the default sentinel when no default model is configured", () => {
+		const result = resolveInvocationModel(gpt4o, "default", false, registryWith([sonnet]), undefined);
+		expect(result).toMatchObject({
+			error: expect.stringContaining('"default" is set but no default model is configured'),
+		});
+	});
+
+	it("errors on the default sentinel when the configured default is missing from the registry", () => {
+		const defaultModelRef: DefaultModelRef = { provider: "openai", id: "gpt-4o" };
+		const result = resolveInvocationModel(
+			gpt4o,
+			"default",
+			true,
+			registryWith([sonnet]),
+			defaultModelRef,
+		);
+		expect(result).toMatchObject({
+			error: expect.stringContaining('"openai/gpt-4o"'),
+		});
+	});
+
+	it("treats sentinels case-sensitively and trims surrounding whitespace", () => {
+		const result = resolveInvocationModel(gpt4o, " inherit ", false, registryWith([sonnet]));
+		expect(result).toEqual({ model: gpt4o });
+		const misspelled = resolveInvocationModel(gpt4o, "Inherit", false, registryWith([sonnet]));
+		expect(misspelled).toMatchObject({ fallbackNote: expect.any(String) });
 	});
 });

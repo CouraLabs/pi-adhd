@@ -1,6 +1,5 @@
 import type { Model } from "@earendil-works/pi-ai";
 import type { AgentSessionEvent, SessionContext as SdkSessionContext } from "@earendil-works/pi-coding-agent";
-import type { LockDeclaration } from "./config/invocation-config.ts";
 import type { SpawnThinkingLevel } from "./config/thinking-level.ts";
 import type { ModelRegistry } from "./session/model-resolver.ts";
 
@@ -35,21 +34,18 @@ export interface AgentPromptConfig {
 export interface AgentConfig extends AgentIdentity, AgentPromptConfig {
 
   toolNames?: string[];
+  allTools?: boolean;
   model?: string;
   thinking?: ThinkingLevel;
   maxTurns?: number;
 
   inheritContext?: boolean;
 
-  locked?: LockDeclaration;
-
   toolGuideline?: string;
-
-  isDefault?: boolean;
 
   enabled?: boolean;
 
-  source?: "default" | "project" | "global";
+  source?: "global" | "project";
 }
 
 export interface AgentInvocation {

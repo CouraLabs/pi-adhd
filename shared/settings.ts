@@ -32,10 +32,6 @@ export interface SpawnConfig {
 	excludedExtensionPackages: string[];
 
 	promptInheritance: Record<string, PromptInheritance>;
-
-	agentModels: Record<string, string>;
-
-	agentThinking: Record<string, string>;
 }
 
 export interface ThinkingConfig {
@@ -133,8 +129,6 @@ export const DEFAULT_SETTINGS: CouralabsSettings = {
 		unconsumedSessionRetentionMinutes: 720,
 		excludedExtensionPackages: [],
 		promptInheritance: {},
-		agentModels: {},
-		agentThinking: {},
 	},
 	timer: {
 		osNotification: true,

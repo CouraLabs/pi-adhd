@@ -3,6 +3,7 @@ import { getSessionInfo, query } from "@anthropic-ai/claude-agent-sdk";
 import type { Options, Query, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { Api, AssistantMessageEventStream, Message, Model, SimpleStreamOptions, TranscriptContext } from "@earendil-works/pi-ai";
 import { fromPiAgentDefinitions } from "./agents.ts";
+import { resolveConfiguredDefaultModel } from "../../tools/spawn/config/default-model.ts";
 import { buildSubmodeAppend, foregroundAgentHook, submodePolicyHook } from "./policy.ts";
 import { PI_MCP_SERVER_NAME, PiToolServer, isPiOwnedToolName } from "./pi-mcp.ts";
 import type { PiToolDescriptions } from "./pi-mcp.ts";
@@ -143,7 +144,7 @@ export function buildQueryOptions(
 			PreToolUse: [{ hooks: [submodePolicyHook, ...foregroundHooks, piToolServer.captureToolUseIdHook, createAskPreToolUseHook(sessionKey)] }],
 		},
 		canUseTool: createAskCanUseTool(sessionKey),
-		agents: fromPiAgentDefinitions(cwd),
+		agents: fromPiAgentDefinitions(cwd, resolveConfiguredDefaultModel(cwd)),
 		enableFileCheckpointing: true,
 		extraArgs: { "replay-user-messages": null },
 

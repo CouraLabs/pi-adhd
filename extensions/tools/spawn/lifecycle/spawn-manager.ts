@@ -14,7 +14,7 @@ import type { AgentConfig, CompactionInfo, ParentSessionInfo, SpawnType, Thinkin
 export interface SpawnTypeResolver {
   resolveType(name: string): string | undefined;
   isValidType(type: string): boolean;
-  resolveAgentConfig(type: string): AgentConfig;
+  resolveAgentConfig(type: string): AgentConfig | undefined;
 }
 
 export type ResumeRefusalReason = ResumeRefusal | "unknown-agent";

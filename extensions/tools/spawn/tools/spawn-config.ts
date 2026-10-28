@@ -1,10 +1,9 @@
 import type { Model } from "@earendil-works/pi-ai";
 import type { AgentTypeRegistry } from "../config/agent-types.ts";
-import { type LockableField, resolveAgentInvocationConfig } from "../config/invocation-config.ts";
+import { resolveInvocationOverrides } from "../config/invocation-overrides.ts";
 import { parseThinkingLevel, thinkingLevelError } from "../config/thinking-level.ts";
 import { isBelowMinimumTurns, MIN_MAX_TURNS, normalizeMaxTurns } from "../lifecycle/turn-limits.ts";
-import type { ModelRegistry } from "../session/model-resolver.ts";
-import { resolveInvocationModel } from "../session/model-resolver.ts";
+import { type DefaultModelRef, type ModelRegistry, resolveInvocationModel } from "../session/model-resolver.ts";
 import type { AgentInvocation, SpawnType, ThinkingLevel } from "../types.ts";
 import {
   type AgentDetails,
@@ -17,6 +16,7 @@ import {
 export interface ModelInfo {
   parentModel: Model<any> | undefined;
   modelRegistry: ModelRegistry | undefined;
+  defaultModelRef: DefaultModelRef | undefined;
 }
 
 export interface SpawnIdentity {
@@ -67,15 +67,21 @@ export function resolveSpawnConfig(
   }
 
   const rawType = params.spawn_type as SpawnType;
-  const resolved = registry.resolveType(rawType);
+  const directMatch = registry.resolveType(rawType);
 
-  const spawnType = resolved ?? "general-purpose";
-  const fellBack = resolved === undefined;
+  const spawnType = directMatch ?? "general-purpose";
+  const fellBack = directMatch === undefined;
 
   const displayName = getDisplayName(spawnType, registry);
 
   const customConfig = registry.resolveAgentConfig(spawnType);
-  const resolvedConfig = resolveAgentInvocationConfig(customConfig, {
+  if (!customConfig) {
+    return { error: `Unknown agent type "${rawType}" and no general-purpose agent is defined.` };
+  }
+  if (!fellBack && customConfig.enabled === false) {
+    return { error: `Agent "${rawType}" is disabled (enabled: false in its agent file).` };
+  }
+  const resolvedConfig = resolveInvocationOverrides(customConfig, {
     ...params,
     thinking: thinkingFromParams,
   });
@@ -85,6 +91,7 @@ export function resolveSpawnConfig(
     resolvedConfig.modelInput,
     resolvedConfig.modelFromParams,
     modelInfo.modelRegistry,
+    modelInfo.defaultModelRef,
   );
   if (resolution.error !== undefined) return { error: resolution.error };
   const model = resolution.model;
@@ -121,7 +128,6 @@ export function resolveSpawnConfig(
     identity: { spawnType, rawType, fellBack, displayName },
     notes: [
       ...buildFallbackNote(rawType, fellBack),
-      ...buildLockNote(spawnType, resolvedConfig.discarded),
       ...buildMinimumTurnsNote(resolvedConfig.maxTurns),
       ...modelFallbackNote,
     ],
@@ -147,13 +153,4 @@ function buildMinimumTurnsNote(maxTurns: number | undefined): string[] {
   return [
     `Note: max_turns ${maxTurns} is below the minimum of ${MIN_MAX_TURNS} (one turn to work, one to answer), so the spawn runs with ${MIN_MAX_TURNS}.`,
   ];
-}
-
-function buildLockNote(agentName: string, discarded: readonly LockableField[]): string[] {
-  if (discarded.length === 0) return [];
-  const tail =
-    discarded.length === 1
-      ? `so the ${discarded[0]} parameter was ignored`
-      : "so those parameters were ignored";
-  return [`Note: agent "${agentName}" locks ${discarded.join(", ")}, ${tail}.`];
 }
