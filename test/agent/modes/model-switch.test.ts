@@ -22,10 +22,9 @@ function registryWith(models: Model<any>[]): ModelRegistry {
 const registry = registryWith([gpt4o, sonnet, claudeModel]);
 
 describe("resolveModeModelSwitch", () => {
-	it("returns an error when the declaration cannot be read", () => {
+	it("returns unchanged when the declaration is absent (built-in modes have no file)", () => {
 		const result = resolveModeModelSwitch(undefined, gpt4o, registry);
-		expect(result.error).toBeDefined();
-		expect(result.switchTo).toBeUndefined();
+		expect(result).toEqual({ unchanged: true });
 	});
 
 	it("returns the declaration error verbatim", () => {

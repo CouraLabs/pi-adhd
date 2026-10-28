@@ -26,7 +26,7 @@ export function resolveModeModelSwitch(
 	defaultModelRef?: DefaultModelRef,
 ): ModeModelSwitchDecision {
 	if (declaration === undefined) {
-		return { error: "Mode declaration could not be read." };
+		return { unchanged: true };
 	}
 	if (declaration.error !== undefined) {
 		return { error: declaration.error };
