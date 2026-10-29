@@ -11,5 +11,6 @@
     "verbatimModuleSyntax": true,
     "isolatedModules": true
   },
-  "include": ["extensions/**/*.ts", "shared/**/*.ts"]
+  "include": ["extensions/**/*.ts", "shared/**/*.ts"],
+  "exclude": ["extensions/tools/session-dashboard"]
 }

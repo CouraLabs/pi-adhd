@@ -10,6 +10,7 @@ export type ExtensionName =
 	| "messages"
 	| "modes"
 	| "pomodoro"
+	| "session-dashboard"
 	| "session-title"
 	| "spawn"
 	| "submodes"
