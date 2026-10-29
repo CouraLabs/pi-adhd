@@ -31,7 +31,6 @@ import { SpawnServiceAdapter } from "./service/service-adapter.ts";
 import { detectEnv } from "./session/env.ts";
 import { isChildSession } from "../../../shared/child-sessions.ts";
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
-import { getUserPromptsDir } from "../../../shared/user-prompts.ts";
 import { createExcludedPackagesStorage } from "./session/package-exclusions.ts";
 import { createProjectContextLoader } from "./session/project-context.ts";
 import { buildAgentPrompt } from "./session/prompts.ts";
@@ -46,7 +45,7 @@ export default function (pi: ExtensionAPI) {
   markExtensionLoaded("spawn");
 
   try {
-    provisionDefaultAgents(globalAgentsDir(), loadPackagedSeedAgents(), join(getUserPromptsDir(), "subagents"));
+    provisionDefaultAgents(globalAgentsDir(), loadPackagedSeedAgents());
   } catch (err) {
     debugLog("provisionDefaultAgents", err);
   }
