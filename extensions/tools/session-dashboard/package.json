@@ -1,0 +1,20 @@
+{
+  "name": "session-dashboard-extension",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": ["server"],
+  "scripts": {
+    "dev": "npm --workspace server run dev",
+    "dev:server": "npm --workspace server run dev:server",
+    "dev:client": "npm --workspace server run dev:client",
+    "build": "npm --workspace server run build",
+    "preview": "npm --workspace server run preview",
+    "test": "npm --workspace server run test",
+    "test:watch": "npm --workspace server run test:watch",
+    "typecheck": "npm --workspace server run typecheck"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
+  }
+}

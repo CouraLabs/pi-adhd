@@ -1,3 +1,4 @@
 node_modules/
+extensions/tools/session-dashboard/server/dist/
 *.log
 .DS_Store

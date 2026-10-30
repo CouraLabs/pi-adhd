@@ -1,0 +1,1299 @@
+/* src/styles.css — session-dashboard dark theme */
+:root {
+  --bg: #0f1115;
+  --bg-elev: #161922;
+  --bg-elev-2: #1c2030;
+  --border: #2a2f40;
+  --border-strong: #3a4060;
+  --text: #e8eaf0;
+  --text-dim: #9aa0b4;
+  --text-faint: #6a7088;
+  --accent: #7aa2f7;
+  --accent-dim: #5a82d7;
+  --user-bubble: #1a2a44;
+  --user-bubble-border: #2c4870;
+  --assistant-bubble: #1f2330;
+  --assistant-bubble-border: #303650;
+  --tool-result: #1a2420;
+  --tool-result-border: #2d4438;
+  --tool-result-error: #2a1a1a;
+  --tool-result-error-border: #6a2a2a;
+  --compaction: #2a1f10;
+  --compaction-border: #5e4a20;
+  --compaction-accent: #e8c87a;
+  --md-heading: #f0c674;
+  --bash: #16181f;
+  --bash-border: #2c2f3a;
+  --bash-cmd: #c5e1f5;
+  --divider: #3a3f50;
+  --error: #e07070;
+  --warn: #e8c87a;
+  --ok: #7ec47e;
+  --shadow-sm: rgba(0, 0, 0, 0.4);
+  --shadow-md: rgba(0, 0, 0, 0.5);
+  --font:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
+    Cantarell, "Helvetica Neue", Arial, sans-serif;
+  --mono:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, "SF Mono", "Cascadia Mono",
+    Consolas, "Liberation Mono", monospace;
+  --font-size: 14.5px;
+}
+
+/* Light theme overrides. Cool-neutral palette. */
+:root[data-theme="light"] {
+  --bg: #f6f7f9;
+  --bg-elev: #ffffff;
+  --bg-elev-2: #eef0f4;
+  --border: #e2e5ec;
+  --border-strong: #c8ccd6;
+  --text: #1a1d24;
+  --text-dim: #5a6072;
+  --text-faint: #6a7088;
+  --accent: #2f5fc0;
+  --accent-dim: #244e9c;
+  --user-bubble: #e6efff;
+  --user-bubble-border: #b8d0f5;
+  --assistant-bubble: #eef0f4;
+  --assistant-bubble-border: #d8dce4;
+  --tool-result: #ebf5ec;
+  --tool-result-border: #bcd9c0;
+  --tool-result-error: #fbecec;
+  --tool-result-error-border: #e6b8b8;
+  --compaction: #faf3e3;
+  --compaction-border: #d9c896;
+  --compaction-accent: #7a5c10;
+  --md-heading: #3b6fd9;
+  --bash: #f0f2f6;
+  --bash-border: #d8dce4;
+  --bash-cmd: #1a4d80;
+  --divider: #d8dce4;
+  --error: #b03030;
+  --warn: #7a5c10;
+  --ok: #2a7a2a;
+  --shadow-sm: rgba(15, 17, 21, 0.08);
+  --shadow-md: rgba(15, 17, 21, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root,
+.app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--font-size);
+  line-height: 1.5;
+  overflow: hidden;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+input[type="text"] {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* ---- App layout ---- */
+.app {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Top bar ---- */
+.top-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+  min-height: 2.5rem;
+}
+.top-bar-title {
+  font-weight: 600;
+}
+.top-bar-spacer {
+  flex: 1;
+}
+.back-button {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 0.25rem 0.6rem;
+}
+.back-button:hover {
+  background: var(--bg-elev-2);
+  border-color: var(--border-strong);
+}
+/* Off button (topbar) — stops the server from the browser via
+   POST /api/shutdown. Visually a neutral outline; on hover it warms up
+   toward the danger color so it reads as a power button without
+   screaming "delete". Disabled state is dimmed. */
+.off-button {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 0.25rem 0.6rem;
+  cursor: pointer;
+}
+.off-button:hover:not(:disabled) {
+  background: var(--bg-elev-2);
+  border-color: var(--error);
+  color: var(--error);
+}
+.off-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.top-bar-cwd {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 0.828em;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cwd-segment {
+  white-space: nowrap;
+}
+.cwd-sep {
+  color: var(--text-faint);
+  margin: 0 0.15rem;
+}
+
+/* ---- Session list ---- */
+.session-list-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.session-list-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.reload-button {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.reload-button:hover {
+  background: var(--bg-elev-2);
+}
+.session-list-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem 1rem;
+}
+.session-list-loading,
+.session-list-empty {
+  color: var(--text-dim);
+  padding: 2rem;
+  text-align: center;
+}
+.session-list-error {
+  color: var(--error);
+  padding: 1rem;
+}
+.session-list-error button {
+  margin-top: 0.5rem;
+  background: transparent;
+  border: 1px solid var(--error);
+  color: var(--error);
+  border-radius: 4px;
+  padding: 0.25rem 0.6rem;
+}
+.session-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.session-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.session-card:hover,
+.session-card:focus {
+  background: var(--bg-elev-2);
+  border-color: var(--accent-dim);
+  outline: none;
+}
+.session-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.session-card-cwd {
+  font-family: var(--mono);
+  font-size: 0.828em;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-card-cwd-last {
+  /* Highlight the leaf folder name so the workspace is easy to scan
+   * across the session list. Theme-aware: --warn is a soft yellow in
+   * dark theme and a deep amber in light theme. */
+  color: var(--warn);
+  font-weight: 600;
+}
+.session-card-time {
+  font-size: 0.828em;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.session-card-name {
+  font-weight: 600;
+  color: var(--text);
+}
+.session-card-preview {
+  color: var(--text-dim);
+  font-size: 0.897em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-card-meta {
+  font-size: 0.759em;
+  color: var(--text-faint);
+}
+/* Parent↔child relationship row (shown only when a card has one or both). */
+.session-card-row-relations {
+  justify-content: flex-start;
+  gap: 0.75rem;
+  margin-top: 0.15rem;
+}
+.session-card-parent-link {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font-size: 0.759em;
+  line-height: 1.4;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.session-card-parent-link:hover {
+  color: var(--accent-dim);
+}
+.session-card-parent-link:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+.session-card-children-badge {
+  font-size: 0.759em;
+  line-height: 1.4;
+  color: var(--text-dim);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+  white-space: nowrap;
+}
+
+/* ---- Search bar ---- */
+.search-bar {
+  position: relative;
+  flex: 1;
+}
+.search-input {
+  width: 100%;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 0.4rem 2rem 0.4rem 0.6rem;
+}
+.search-input::placeholder {
+  color: var(--text-faint);
+}
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+}
+.search-clear {
+  position: absolute;
+  right: 0.4rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 4px;
+}
+.search-clear:hover {
+  background: var(--bg-elev-2);
+  color: var(--text);
+}
+
+/* ---- Session view ---- */
+.session-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.session-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+}
+.session-parent-link {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--accent);
+  border-radius: 4px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.828em;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+.session-parent-link:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-elev-2);
+}
+.session-parent-link:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+.session-title-text {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-meta {
+  font-size: 0.828em;
+  color: var(--text-faint);
+}
+
+/* ---- Session stats strip (detail view only) ---- */
+.session-stats {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.9rem;
+  padding: 0.4rem 1rem;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.828em;
+  color: var(--text-faint);
+}
+.session-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  white-space: nowrap;
+}
+.session-stat-label {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  font-size: 0.9em;
+}
+.session-stat-value {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Session file path row: full JSONL path + copy button. */
+.session-filepath-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 1rem;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+}
+.session-filepath {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75em;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl; /* keep the distinctive tail (id.jsonl) visible when truncated */
+  text-align: left;
+  min-width: 0;
+}
+.session-filepath-copy {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 4px;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.75em;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.session-filepath-copy:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-elev-2);
+  color: var(--text);
+}
+.session-filepath-copy:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+.session-filepath-copy.copied {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ---- Filter bar ---- */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 1rem;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+}
+.filter-bar-roles {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+.filter-bar-divider {
+  width: 1px;
+  height: 1.1rem;
+  background: var(--border-strong);
+  margin: 0 0.25rem;
+}
+.filter-pill {
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.828em;
+  line-height: 1.4;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background 80ms ease,
+    border-color 80ms ease,
+    color 80ms ease;
+}
+.filter-pill:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.filter-pill[aria-pressed="true"] {
+  background: var(--user-bubble);
+  border-color: var(--user-bubble-border);
+  color: var(--text);
+}
+.filter-pill-bundle[aria-pressed="true"] {
+  background: var(--bg-elev-2);
+  border-color: var(--border);
+  color: var(--text-dim);
+}
+/* ---- Session children ---- */
+.session-children-section {
+  max-height: 100px;
+  overflow-y: auto;
+  padding: 0.4rem 1rem;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+}
+.session-children-heading {
+  margin: 0 0 0.25rem 0;
+  font-size: 0.759em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+.session-children-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.session-children-item {
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 999px;
+  padding: 0.1rem 0.6rem;
+  font-family: var(--mono);
+  font-size: 0.828em;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.session-children-item:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+  background: var(--bg-elev-2);
+}
+.session-children-item:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+.session-children-error {
+  padding: 0.3rem 1rem;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.828em;
+  color: var(--text-faint);
+}
+.session-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.75rem 1rem;
+}
+.session-loading,
+.session-empty,
+.session-error {
+  color: var(--text-dim);
+  padding: 2rem;
+  text-align: center;
+}
+.session-error p {
+  color: var(--error);
+  margin: 0 0 0.5rem 0;
+}
+.session-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 1050px;
+  margin: 0 auto;
+}
+
+/* ---- Message bubbles ---- */
+.message-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.message-group-children {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-left: 1rem;
+  border-left: 2px solid var(--assistant-bubble-border);
+}
+.message {
+  border-radius: 6px;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--border);
+}
+.message-user {
+  background: var(--user-bubble);
+  border-color: var(--user-bubble-border);
+}
+.message-assistant {
+  background: var(--assistant-bubble);
+  border-color: var(--assistant-bubble-border);
+}
+.message-role {
+  font-size: 0.759em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+  margin-bottom: 0.25rem;
+}
+/* ---- Tool result ---- */
+.tool-result {
+  background: var(--tool-result);
+  border: 1px solid var(--tool-result-border);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+}
+.tool-result-error {
+  background: var(--tool-result-error);
+  border-color: var(--tool-result-error-border);
+}
+.tool-result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.25rem;
+}
+.tool-result-name {
+  font-weight: 600;
+  font-size: 0.828em;
+}
+.tool-result-status {
+  font-size: 0.759em;
+  padding: 0.05rem 0.4rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+.tool-result-status.is-ok {
+  color: var(--ok);
+}
+.tool-result-status.is-error {
+  color: var(--error);
+}
+.tool-result-content {
+  font-family: var(--mono);
+  font-size: 0.828em;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.tool-result-error-message {
+  font-size: 0.828em;
+  color: var(--error);
+  margin-bottom: 0.25rem;
+}
+
+/* ---- Bash ---- */
+.bash {
+  background: var(--bash);
+  border: 1px solid var(--bash-border);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+}
+.bash-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.4rem;
+}
+.bash-label {
+  font-weight: 600;
+  font-size: 0.828em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.bash-exit {
+  font-family: var(--mono);
+  font-size: 0.759em;
+  padding: 0.05rem 0.4rem;
+  border-radius: 3px;
+}
+.bash-exit-ok {
+  color: var(--ok);
+}
+.bash-exit-error {
+  color: var(--error);
+}
+.bash-exit-cancelled {
+  color: var(--warn);
+}
+.bash-command {
+  font-family: var(--mono);
+  font-size: 0.828em;
+  color: var(--bash-cmd);
+  margin: 0 0 0.4rem 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.bash-output {
+  font-family: var(--mono);
+  font-size: 0.828em;
+  color: var(--text-dim);
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* ---- Compaction ---- */
+.compaction {
+  background: var(--compaction);
+  border: 1px solid var(--compaction-border);
+  border-radius: 6px;
+  padding: 0.6rem 0.9rem;
+}
+.compaction-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.4rem;
+}
+.compaction-label {
+  font-weight: 600;
+  color: var(--compaction-accent);
+  text-transform: uppercase;
+  font-size: 0.828em;
+  letter-spacing: 0.05em;
+}
+.compaction-tokens {
+  font-size: 0.759em;
+  color: var(--text-faint);
+}
+.compaction-summary {
+  font-family: var(--mono);
+  font-size: 0.828em;
+  color: var(--text);
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.compaction-files {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.5rem;
+  font-size: 0.828em;
+}
+.compaction-files-label {
+  color: var(--text-faint);
+  text-transform: uppercase;
+  font-size: 0.759em;
+  display: block;
+  margin-bottom: 0.25rem;
+}
+.compaction-files-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: var(--mono);
+  font-size: 0.759em;
+  color: var(--text-dim);
+}
+.compaction-files-list li {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 30rem;
+}
+
+/* ---- Branch summary ---- */
+.branch-summary {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+}
+.branch-summary-label {
+  font-size: 0.759em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+  margin-bottom: 0.25rem;
+  display: block;
+}
+.branch-summary-text {
+  font-family: var(--mono);
+  font-size: 0.828em;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ---- Custom message ---- */
+.custom-message {
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+}
+.custom-message-type {
+  font-size: 0.759em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+  margin-bottom: 0.25rem;
+}
+.custom-message-content {
+  font-family: var(--mono);
+  font-size: 0.828em;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+/* ---- Entry divider ---- */
+.entry-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+  color: var(--text-dim);
+  font-size: 0.828em;
+  font-family: var(--mono);
+}
+.entry-divider-line {
+  flex: 1;
+  height: 1px;
+  background: var(--divider);
+}
+.entry-divider-text {
+  white-space: nowrap;
+  padding: 0 0.25rem;
+}
+
+/* ---- Settings panel ---- */
+.settings-panel {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+.settings-button {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px var(--shadow-sm);
+}
+.settings-button:hover {
+  background: var(--bg-elev-2);
+}
+.settings-popover {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  box-shadow: 0 2px 12px var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 10rem;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.897em;
+}
+.settings-row input[type="checkbox"] {
+  cursor: pointer;
+}
+.settings-segmented {
+  display: inline-flex;
+  gap: 0.25rem;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px;
+}
+.settings-segmented-button {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  border-radius: 3px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.828em;
+  cursor: pointer;
+  transition:
+    background 80ms ease,
+    color 80ms ease;
+}
+.settings-segmented-button:hover:not(:disabled) {
+  color: var(--text);
+}
+.settings-segmented-button.is-active {
+  background: var(--accent);
+  color: var(--bg-elev);
+}
+.settings-segmented-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.settings-font-size-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5em;
+  padding: 0 0.4rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+/* ---- Markdown body ---- */
+.markdown-body {
+  color: var(--text);
+  font-size: 1em;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.markdown-body > *:first-child {
+  margin-top: 0;
+}
+.markdown-body > *:last-child {
+  margin-bottom: 0;
+}
+.markdown-body p,
+.markdown-body ul,
+.markdown-body ol,
+.markdown-body blockquote,
+.markdown-body pre,
+.markdown-body table {
+  margin: 0.75em 0;
+}
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin: 1.1em 0 0.4em;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--md-heading);
+}
+.markdown-body h1 {
+  font-size: 1.4em;
+}
+.markdown-body h2 {
+  font-size: 1.25em;
+}
+.markdown-body h3 {
+  font-size: 1.1em;
+}
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  font-size: 1em;
+}
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 1.6em;
+}
+.markdown-body li {
+  margin: 0.25em 0;
+}
+.markdown-body li::marker {
+  color: var(--text-faint);
+}
+.markdown-body blockquote {
+  background: var(--bg-elev-2);
+  border-left: 3px solid var(--border-strong);
+  border-radius: 0 6px 6px 0;
+  padding: 0.4em 0.9em;
+  margin: 0.75em 0;
+  color: var(--text-dim);
+}
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid var(--divider);
+  margin: 1.5em 0;
+}
+.markdown-body a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition:
+    border-color 80ms ease,
+    color 80ms ease;
+}
+.markdown-body a:hover {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.markdown-body strong {
+  font-weight: 600;
+  color: var(--text);
+}
+.markdown-body em {
+  font-style: italic;
+}
+.markdown-body del {
+  color: var(--text-faint);
+}
+
+/* Inline code (`code`) — accent-tinted pill so it reads as code without
+   shouting. Background is a soft accent wash that stays neutral in both
+   themes; text color stays var(--text) for long-token readability. */
+.markdown-body code {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elev-2));
+  padding: 0.08em 0.4em;
+  border-radius: 4px;
+}
+/* Fenced code blocks reset inline-code styling — the <pre><code> pair is
+   rendered by <CodeBlock> with its own panel + header. Without this
+   reset the accent pill would leak inside fenced blocks. */
+.markdown-body pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+
+/* Image placeholder */
+.markdown-image-placeholder {
+  color: var(--text-dim);
+  font-style: normal;
+  background: var(--bg-elev-2);
+  padding: 0.1em 0.5em;
+  border-radius: 4px;
+  border: 1px dashed var(--border);
+}
+
+/* GFM tables */
+.markdown-body table {
+  border-collapse: collapse;
+  font-size: 0.897em;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid var(--border);
+  padding: 0.5em 0.7em;
+}
+.markdown-body td {
+  text-align: left;
+}
+.markdown-body th {
+  background: var(--bg-elev);
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+  border-bottom: 2px solid var(--border-strong);
+}
+.markdown-body tbody tr:nth-child(even) td {
+  background: var(--bg-elev);
+}
+.markdown-body tbody tr:hover td {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* GFM task lists */
+.markdown-body input[type="checkbox"] {
+  margin-right: 0.5em;
+  accent-color: var(--accent);
+  transform: scale(1.05);
+}
+
+/* ---- Code block ---- */
+.code-block {
+  position: relative;
+  margin: 0.5em 0;
+}
+.code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  padding: 0.3rem 0.75rem;
+  font-family: var(--mono);
+  font-size: 0.828em;
+  color: var(--text-dim);
+}
+.code-block-filename {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.code-block-copy {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 6px;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.828em;
+  line-height: 1;
+  cursor: pointer;
+}
+.code-block-copy:hover {
+  background: var(--bg-elev);
+  color: var(--text);
+}
+.code-block-copy-floating {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  opacity: 0.7;
+}
+.code-block-copy-floating:hover {
+  opacity: 1;
+}
+.code-block-pre {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 0.897em;
+  line-height: 1.55;
+  margin: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.code-block-pre::-webkit-scrollbar {
+  height: 8px;
+}
+.code-block-pre::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+.code-block:has(.code-block-header) .code-block-pre {
+  border-radius: 0 0 8px 8px;
+  border-top: none;
+}
+
+/* ---- highlight.js token overrides ---- */
+/* rehype-highlight ships with github-dark class names hard-coded. We map
+   each known token class to our existing theme variables so the Theme
+   Switcher re-themes code blocks automatically. The palette still uses
+   --accent / --accent-dim / --ok / --warn / --error / --bash-cmd /
+   --text-faint / --text — no new color tokens. Unknown classes fall
+   through to var(--text). */
+.hljs {
+  background: transparent;
+  color: var(--text);
+}
+.hljs-comment,
+.hljs-quote {
+  color: var(--text-faint);
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-section,
+.hljs-doctag,
+.hljs-type {
+  color: var(--accent);
+  font-weight: 600;
+}
+.hljs-string,
+.hljs-attr,
+.hljs-template-tag,
+.hljs-template-variable,
+.hljs-addition {
+  color: var(--ok);
+}
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link,
+.hljs-meta {
+  color: var(--warn);
+}
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-title.function_,
+.hljs-title.class_,
+.hljs-attribute {
+  color: var(--bash-cmd);
+}
+/* Identifiers, tag names, properties — split from keywords so they read
+   distinctly in languages like JS/Python/HTML. */
+.hljs-name,
+.hljs-property,
+.hljs-attribute,
+.hljs-variable.language_,
+.hljs-tag {
+  color: var(--accent-dim);
+}
+.hljs-params {
+  color: var(--text);
+}
+.hljs-variable,
+.hljs-regexp,
+.hljs-deletion {
+  color: var(--error);
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 700;
+}
+
+/* ---- Thinking block (inside assistant messages) ---- */
+.thinking-block {
+  margin: 0.5em 0;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.828em;
+}
+.thinking-block > summary {
+  cursor: pointer;
+  color: var(--text-faint);
+  font-style: italic;
+  font-size: 0.759em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  user-select: none;
+  outline: none;
+}
+.thinking-block > summary:hover {
+  color: var(--text-dim);
+}
+.thinking-block > pre {
+  margin: 0.4rem 0 0 0;
+  padding: 0.4rem 0.6rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 0.828em;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 400px;
+  overflow-y: auto;
+}
