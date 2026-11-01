@@ -12,6 +12,7 @@ import {
 	RATE_LIMIT_SEVEN_DAY_LABEL,
 	SEPARATOR,
 	THINKING_LEVELS,
+	THINKING_TOKENS_GLYPH,
 	TIMER_GLYPH,
 } from "../../../shared/glyphs.ts";
 import { prettyModelName } from "../../../shared/model-name.ts";
@@ -40,6 +41,7 @@ export interface FooterState {
 	timers: readonly ActiveTimer[];
 
 	rateLimits: RateLimits;
+	thinkingTokens: number;
 	statuses: ReadonlyMap<string, string>;
 
 	sections: readonly string[];
@@ -177,7 +179,7 @@ export function renderFooter(state: FooterState, width: number, theme: Theme): s
 		parts.push(submodeLabel);
 	}
 	if (state.model) {
-		parts.push(theme.fg("text", prettyModelName(state.model)));
+		parts.push(`${theme.fg("muted", state.model.provider)} ${theme.fg("text", prettyModelName(state.model))}`);
 		if (state.model.reasoning) {
 			const level = state.thinkingLevel;
 			const glyph = THINKING_LEVELS[level];
@@ -200,6 +202,9 @@ export function renderFooter(state: FooterState, width: number, theme: Theme): s
 	const totals = state.usage;
 	const group = usageGroup(totals, theme);
 	if (group) parts.push(group);
+	if (state.thinkingTokens > 0) {
+		parts.push(`${theme.fg("accent", THINKING_TOKENS_GLYPH)} ${theme.fg("thinkingText", formatTokens(state.thinkingTokens))}`);
+	}
 	const cost = usageCost(totals, theme, state.spawnCost);
 	if (cost) parts.push(cost);
 	if (state.mode === "claude") parts.push(planRateLimitSegment(theme, state.rateLimits));
