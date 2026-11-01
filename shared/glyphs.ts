@@ -24,6 +24,8 @@ export const CACHE_GLYPH = "⮏";
 
 export const RATE_GLYPH = "⭍";
 
+export const THINKING_TOKENS_GLYPH = "✻";
+
 export const RATE_LIMIT_FIVE_HOUR_LABEL = "🯵h";
 
 export const RATE_LIMIT_SEVEN_DAY_LABEL = "🯷d";
@@ -45,6 +47,8 @@ export const MODE_WORK = "⦵";
 export const MODE_CUSTOM = "◈";
 
 export const MODE_CLAUDE = "🞻";
+
+export const MODE_GOOGLE = "◉";
 
 export const SUBMODE_PLAN = "⚼";
 

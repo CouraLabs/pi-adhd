@@ -31,7 +31,7 @@ About 2 minutes.
 
 ## What you get
 
-Fifteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`, which opens a list where Enter flips the highlighted extension; the same list carries the feature toggles (settings-backed options such as Loading Phrases).
+Sixteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`, which opens a list where Enter flips the highlighted extension; the same list carries the feature toggles (settings-backed options such as Loading Phrases).
 
 | Job | Extension | What it adds |
 |---|---|---|
@@ -49,6 +49,8 @@ Fifteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`,
 | Input & output | `messages` | Left status rule on tool calls |
 | Reach the web | `web` | `webfetch` / `websearch`: provider-neutral fetch and search |
 | Use Claude | `claude` | `claude/*` models backed by the Claude Agent SDK, with a forced Claude mode and pi-rendered SDK tools |
+| Use Antigravity | `agy` | `agy/*` models backed by the `agy` CLI over stream-json, with a forced Google mode and resumed `--conversation` sessions |
+| Use OpenCode | `opencode` | `opencode-free/*` anonymous free models and `opencode-go/*` keyed models via the OpenCode Zen gateway |
 | Name sessions | `session-title` | Names each session from its last user prompt; `/couralabs:session-title` picks the model |
 
 ## Quick reference: every command
@@ -409,6 +411,17 @@ Registers a `claude` provider with `claude-opus-5-5`, `claude-sonnet-5-5`, and `
 **Authentication.** pi-adhd never handles Claude credentials: no `/login` entry, no reading of `~/.claude`, nothing written to `auth.json`. The bundled `claude` binary uses your own `ANTHROPIC_API_KEY` or your own `claude /login` session.
 
 **Publishing.** Personal use on your own plan is ordinary, individual usage. If you build a product on top of this for other people, Anthropic's terms for the Agent SDK point developers to API key authentication, so use an API key in that case. This is not legal advice; check Anthropic's current terms. Do not call the feature "Claude Code" or use Anthropic logos.
+
+## Antigravity provider: `agy`
+
+Registers an `agy` provider backed by the `agy` CLI (Google Antigravity). The model list mirrors `agy models` (Gemini 4 Argon, Gemini 3.8 Flash, Claude 5.5, GPT-OSS variants), refreshed live on `/model` refresh. Pick one with `/model`. Each pi turn spawns `agy --print "" --input-format stream-json --output-format stream-json --mode auto --dangerously-skip-permissions --model <id> [--conversation <id>]`, feeds the latest user message as one stream-json line, and streams `agent_response` text deltas back into the transcript while tool steps render as thinking progress. The conversation id is persisted per pi session, so follow-up turns resume with `--conversation`.
+
+- **Google mode.** Selecting an `agy/*` model forces the Google mode and disables `/mode` switching, like Claude mode. Plan, Grill, and Straight submodes keep working as prompt preamble. Switching to another model restores the previous mode.
+- **Commands.** `/agy:new` drops the resumed conversation id; `/agy:info` shows it. Compacting resets the conversation so the next turn starts fresh from the compacted summary.
+
+## OpenCode provider: `opencode`
+
+Registers `opencode-free` with the eight anonymous Zen free models (`big-pickle`, `beam-free`, and the other `*-free` ids, refreshed live from `https://opencode.ai/inference/v1/models`) and `opencode-go` with the same free ids against the Go endpoint for `OPENCODE_API_KEY` holders. Pick one with `/model`. The free lane sends the `public` bearer instead of your account key, stamps every request with the CLI identity (`opencode/1.19.0`, `cli` client, fresh `ses_`/`msg_` ids), prepends the `<env>Working directory: .</env>` frame, and adds `glob` (an alias of pi's `find`) plus `grep` to the turn so the upstream free-tier gate accepts the request. Anonymous free quotas are per-IP and best-effort; heavy use hits `FreeUsageLimitError` until the window resets.
 
 ## Session names: `session-title`
 

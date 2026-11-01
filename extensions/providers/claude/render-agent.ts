@@ -238,6 +238,19 @@ function formatStats(snapshot: AgentRunSnapshot): string {
 	return parts.join(STATS_SEPARATOR);
 }
 
+const HANDBACK_NOTE = /This agent's report was delivered to you as a message from .+\(its SubagentHandback call\)\./;
+
+function withoutDuplicateHandbackNotes(lines: string[]): string[] {
+	const seen = new Set<string>();
+	return lines.filter((line) => {
+		const trimmed = line.trim();
+		if (!HANDBACK_NOTE.test(trimmed)) return true;
+		if (seen.has(trimmed)) return false;
+		seen.add(trimmed);
+		return true;
+	});
+}
+
 export function cleanAgentReport(text: string): string {
 	const lines = text.split("\n");
 	const frameEnd = lines.findIndex((line) => line.trimEnd().endsWith("The report follows:"));
@@ -245,7 +258,7 @@ export function cleanAgentReport(text: string): string {
 	const usageStart = body.findIndex((line) => line.trimStart().startsWith("<usage>"));
 	const withoutUsage = usageStart >= 0 ? body.slice(0, usageStart) : body;
 	const withoutId = withoutUsage.filter((line) => !line.trimStart().startsWith("agentId:"));
-	return withoutId
+	return withoutDuplicateHandbackNotes(withoutId)
 		.map((line) => line.replace(/^ {4}/, ""))
 		.join("\n")
 		.trim();

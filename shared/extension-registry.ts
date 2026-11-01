@@ -1,6 +1,7 @@
 import { createGlobalStore } from "./store.ts";
 
 export type ExtensionName =
+	| "agy"
 	| "ask-user"
 	| "claude"
 	| "commands"
@@ -9,6 +10,7 @@ export type ExtensionName =
 	| "job"
 	| "messages"
 	| "modes"
+	| "opencode"
 	| "pomodoro"
 	| "session-dashboard"
 	| "session-title"

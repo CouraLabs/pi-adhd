@@ -4,7 +4,7 @@ import {
 	MODE_STATE_ENTRY_TYPE,
 	agentModeLabel,
 	getAgentMode,
-	isClaudeProvider,
+	isExternalProvider,
 	listAgentModes,
 	readModeDeclaration,
 	setAgentMode,
@@ -45,9 +45,9 @@ export function registerNewSessionCommand(pi: ExtensionAPI): void {
 				});
 				return;
 			}
-			if (isClaudeProvider(ctx.model?.provider)) {
+			if (isExternalProvider(ctx.model?.provider)) {
 				ctx.ui.notify(
-					"/n is unavailable while a Claude model is active: the Claude Agent SDK owns the system prompt. Switch to another model first.",
+					"/n is unavailable while an external model is active: the agy CLI or Claude Agent SDK owns the system prompt. Switch to another model first.",
 					"warning",
 				);
 				return;

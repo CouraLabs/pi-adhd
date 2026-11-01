@@ -7,6 +7,7 @@ import { isExtensionLoaded, markExtensionLoaded } from "../../../shared/extensio
 import { getAgentMode, subscribeAgentMode } from "../../../shared/modes.ts";
 import { getRateLimits, subscribeRateLimits } from "../../../shared/rate-limits.ts";
 import { getSubmode, subscribeSubmode } from "../../../shared/submodes.ts";
+import { getThinkingTokens, subscribeThinkingTokens } from "../../../shared/thinking-tokens.ts";
 import { getTimers, subscribeTimers } from "../../../shared/timers.ts";
 import { computeUsage, emptyUsage, type UsageTotals } from "../../../shared/usage.ts";
 import { renderFooter } from "./render.ts";
@@ -24,6 +25,7 @@ export default function (pi: ExtensionAPI) {
 	let unsubscribeSections: (() => void) | undefined;
 	let unsubscribeTimers: (() => void) | undefined;
 	let unsubscribeRateLimits: (() => void) | undefined;
+	let unsubscribeThinkingTokens: (() => void) | undefined;
 	let timerTick: NodeJS.Timeout | undefined;
 
 	const requestRender = () => tui?.requestRender();
@@ -92,6 +94,7 @@ export default function (pi: ExtensionAPI) {
 							spawnCost: spawnCost(),
 							timers: getTimers(),
 							rateLimits: getRateLimits(),
+							thinkingTokens: isExtensionLoaded("claude") ? getThinkingTokens(ctx?.sessionManager.getSessionId() ?? "") : 0,
 							statuses: footerData.getExtensionStatuses(),
 							sections,
 						},
@@ -123,6 +126,8 @@ export default function (pi: ExtensionAPI) {
 		});
 		unsubscribeRateLimits?.();
 		unsubscribeRateLimits = subscribeRateLimits(() => requestRender());
+		unsubscribeThinkingTokens?.();
+		unsubscribeThinkingTokens = subscribeThinkingTokens(() => requestRender());
 		syncTimerTick();
 
 		if (context.mode !== "tui") return;
@@ -162,6 +167,8 @@ export default function (pi: ExtensionAPI) {
 		unsubscribeTimers = undefined;
 		unsubscribeRateLimits?.();
 		unsubscribeRateLimits = undefined;
+		unsubscribeThinkingTokens?.();
+		unsubscribeThinkingTokens = undefined;
 		if (timerTick) {
 			clearInterval(timerTick);
 			timerTick = undefined;

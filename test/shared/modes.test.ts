@@ -13,7 +13,9 @@ import {
 	agentModeLabel,
 	getAgentMode,
 	isAgentMode,
+	isAgyProvider,
 	isClaudeProvider,
+	isExternalProvider,
 	isSelectableAgentMode,
 	listAgentModes,
 	modeNotice,
@@ -48,6 +50,34 @@ describe("isClaudeProvider", () => {
 		expect(isClaudeProvider("claude")).toBe(true);
 		expect(isClaudeProvider("openai")).toBe(false);
 		expect(isClaudeProvider(undefined)).toBe(false);
+	});
+});
+
+describe("agy provider and Google mode", () => {
+	it("matches only the agy provider id", () => {
+		expect(isAgyProvider("agy")).toBe(true);
+		expect(isAgyProvider("claude")).toBe(false);
+		expect(isAgyProvider(undefined)).toBe(false);
+	});
+
+	it("treats claude and agy as external providers", () => {
+		expect(isExternalProvider("claude")).toBe(true);
+		expect(isExternalProvider("agy")).toBe(true);
+		expect(isExternalProvider("openai")).toBe(false);
+	});
+
+	it("labels the google mode", () => {
+		expect(agentModeLabel("google")).toBe("◉ Google");
+	});
+
+	it("describes the google mode as CLI-driven", () => {
+		const notice = modeNotice("google");
+		expect(notice).toContain("◉ Google");
+		expect(notice).toContain("agy CLI drives the run");
+	});
+
+	it("excludes the google mode from selectable modes", () => {
+		expect(isSelectableAgentMode("google")).toBe(false);
 	});
 });
 
@@ -225,6 +255,7 @@ describe("user mode files", () => {
 		writeModeFile("alpha");
 		writeModeFile("Beta");
 		writeModeFile("claude");
+		writeModeFile("google");
 		writeModeFile("pi");
 		writeFileSync(join(userModesDir(), "notes.txt"), "not a mode", "utf8");
 		expect(listAgentModes()).toEqual(["alpha", "Beta", "pi", "Zeta"]);

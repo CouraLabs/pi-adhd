@@ -22,7 +22,9 @@ import timer from "./tools/timer/index.ts";
 import web from "./tools/web/index.ts";
 
 import { withClaudeCommandRedirects } from "./providers/claude/commands.ts";
+import agy from "./providers/agy/index.ts";
 import claude from "./providers/claude/index.ts";
+import opencode from "./providers/opencode/index.ts";
 
 export default function piAdhd(pi: ExtensionAPI): void {
 
@@ -52,4 +54,6 @@ if (enabled.has("session-title")) sessionTitle(pi);
 	if (enabled.has("web")) web(pi);
 
 	if (enabled.has("claude")) claude(pi);
+	if (enabled.has("agy")) agy(pi);
+	if (enabled.has("opencode")) opencode(pi);
 }

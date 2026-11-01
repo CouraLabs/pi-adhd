@@ -8,11 +8,13 @@ import { offloadPrompt } from "../../../shared/user-prompts.ts";
 import {
 	CLAUDE_MODE,
 	DEFAULT_AGENT_MODE,
+	GOOGLE_MODE,
 	PI_MODE,
 	MODE_STATE_ENTRY_TYPE,
 	getAgentMode,
 	agentModeLabel,
 	readModeDeclaration,
+	isAgyProvider,
 	isClaudeProvider,
 	listAgentModes,
 	modeNotice,
@@ -50,7 +52,7 @@ export default function (pi: ExtensionAPI) {
 	const restoreMode = (ctx: ExtensionContext): void => {
 		const snapshot = restoreModeSnapshotFromEntries(ctx.sessionManager.getBranch());
 		const selectable: SelectableAgentMode =
-			snapshot?.mode === CLAUDE_MODE || snapshot === undefined
+			snapshot?.mode === CLAUDE_MODE || snapshot?.mode === GOOGLE_MODE || snapshot === undefined
 				? (snapshot?.previousMode ?? DEFAULT_AGENT_MODE)
 				: snapshot.mode;
 
@@ -58,6 +60,11 @@ export default function (pi: ExtensionAPI) {
 		if (isClaudeProvider(ctx.model?.provider)) {
 			previousMode = resolved;
 			setAgentMode(CLAUDE_MODE);
+			return;
+		}
+		if (isAgyProvider(ctx.model?.provider)) {
+			previousMode = resolved;
+			setAgentMode(GOOGLE_MODE);
 			return;
 		}
 		previousMode = undefined;
@@ -80,12 +87,18 @@ export default function (pi: ExtensionAPI) {
 		if (childSession) return;
 		const current = getAgentMode();
 		if (isClaudeProvider(event.model.provider)) {
-			if (current === "claude") return;
-			previousMode = current;
-			applyMode("claude");
+			if (current === CLAUDE_MODE) return;
+			if (current !== GOOGLE_MODE) previousMode = current as SelectableAgentMode;
+			applyMode(CLAUDE_MODE);
 			return;
 		}
-		if (current !== "claude") return;
+		if (isAgyProvider(event.model.provider)) {
+			if (current === GOOGLE_MODE) return;
+			if (current !== CLAUDE_MODE) previousMode = current as SelectableAgentMode;
+			applyMode(GOOGLE_MODE);
+			return;
+		}
+		if (current !== CLAUDE_MODE && current !== GOOGLE_MODE) return;
 		const restored = previousMode ?? DEFAULT_AGENT_MODE;
 		previousMode = undefined;
 		applyMode(restored);
@@ -94,7 +107,7 @@ export default function (pi: ExtensionAPI) {
 	pi.on("before_agent_start", (event) => {
 		if (childSession) return;
 		const mode = getAgentMode();
-		if (mode === PI_MODE || mode === CLAUDE_MODE) return;
+		if (mode === PI_MODE || mode === CLAUDE_MODE || mode === GOOGLE_MODE) return;
 		const prompt = readModePrompt(mode);
 		if (prompt !== undefined) event.systemPromptOptions.customPrompt = prompt;
 	});
@@ -107,9 +120,9 @@ export default function (pi: ExtensionAPI) {
 			const arg = args.trim();
 			const modes = listAgentModes();
 			const current = getAgentMode();
-			if (current === CLAUDE_MODE) {
+			if (current === CLAUDE_MODE || current === GOOGLE_MODE) {
 				ctx.ui.notify(
-					"/mode is unavailable while a Claude model is active: the Claude Agent SDK owns the system prompt. Switch to another model first.",
+					"/mode is unavailable while an external model is active: the agy CLI or Claude Agent SDK owns the system prompt. Switch to another model first.",
 					"warning",
 				);
 				return;

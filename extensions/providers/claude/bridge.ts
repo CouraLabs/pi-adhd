@@ -9,6 +9,7 @@ import { PI_MCP_SERVER_NAME, PiToolServer, isPiOwnedToolName } from "./pi-mcp.ts
 import type { PiToolDescriptions } from "./pi-mcp.ts";
 import { attachInterruptedAgents, clearLimitHit, hasLimitHit, recordLimitHit } from "./limit-handoff/pending-limit.ts";
 import { agentProgressRouter } from "./render-agent.ts";
+import { addThinkingTokens, resetThinkingTokens } from "../../../shared/thinking-tokens.ts";
 import { askAnswerBroker, createAskCanUseTool, createAskPreToolUseHook } from "./render-ask.ts";
 import { WakeTurnCollector } from "./background-tasks.ts";
 import { SDK_TOOL_NAMES } from "./sdk-tools.ts";
@@ -294,6 +295,7 @@ function openSession(
 		rebaseNextTurn: false,
 		compactionSummary: undefined,
 	};
+	resetThinkingTokens(sessionKey);
 	void pumpSdkMessages(sessionKey, state);
 	return state;
 }
@@ -550,7 +552,13 @@ function trackRateLimitHit(sessionKey: string, message: SDKMessage): void {
 	else if (hasLimitHit(sessionKey)) attachInterruptedAgents(sessionKey, agentProgressRouter.interruptedRuns(sessionKey));
 }
 
+function trackThinkingTokens(sessionKey: string, message: SDKMessage): void {
+	if (message.type !== "system" || message.subtype !== "thinking_tokens") return;
+	addThinkingTokens(sessionKey, message.estimated_tokens_delta);
+}
+
 function observeSdkMessage(sessionKey: string, state: ClaudeSessionState, message: SDKMessage): void {
+	trackThinkingTokens(sessionKey, message);
 	trackBackgroundTasks(sessionKey, message);
 	trackRateLimitHit(sessionKey, message);
 	if (message.type === "system" && message.subtype === "init") state.sdkSessionId = message.session_id;

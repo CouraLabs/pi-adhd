@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { ThemeColor } from "@earendil-works/pi-coding-agent";
-import { MODE_CLAUDE, MODE_CUSTOM, MODE_PI, MODE_WORK } from "./glyphs.ts";
+import { MODE_CLAUDE, MODE_CUSTOM, MODE_GOOGLE, MODE_PI, MODE_WORK } from "./glyphs.ts";
 import { parseModeFile } from "./mode-frontmatter.ts";
 import { getUserPromptsDir } from "./user-prompts.ts";
 import { createGlobalStore } from "./store.ts";
@@ -10,14 +10,26 @@ export const PI_MODE = "pi";
 
 export const CLAUDE_MODE = "claude";
 
+export const GOOGLE_MODE = "google";
+
 export type AgentMode = string;
 
 export type SelectableAgentMode = AgentMode;
 
 export const CLAUDE_PROVIDER_ID = "claude";
 
+export const AGY_PROVIDER_ID = "agy";
+
 export function isClaudeProvider(provider: string | undefined): boolean {
 	return provider === CLAUDE_PROVIDER_ID;
+}
+
+export function isAgyProvider(provider: string | undefined): boolean {
+	return provider === AGY_PROVIDER_ID;
+}
+
+export function isExternalProvider(provider: string | undefined): boolean {
+	return provider === CLAUDE_PROVIDER_ID || provider === AGY_PROVIDER_ID;
 }
 
 export const DEFAULT_AGENT_MODE: SelectableAgentMode = "work";
@@ -38,7 +50,7 @@ export function listAgentModes(): AgentMode[] {
 
 	}
 	return [...new Set([...names, PI_MODE])]
-		.filter((name) => name.toLowerCase() !== CLAUDE_MODE)
+		.filter((name) => name.toLowerCase() !== CLAUDE_MODE && name.toLowerCase() !== GOOGLE_MODE)
 		.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
 }
 
@@ -84,6 +96,7 @@ function modeDisplayName(mode: AgentMode): string {
 export function agentModeLabel(mode: AgentMode): string {
 	if (mode === PI_MODE) return `${MODE_PI} Pi`;
 	if (mode === CLAUDE_MODE) return `${MODE_CLAUDE} Claude`;
+	if (mode === GOOGLE_MODE) return `${MODE_GOOGLE} Google`;
 	if (mode === "work") return `${MODE_WORK} Work`;
 	return `${MODE_CUSTOM} ${modeDisplayName(mode)}`;
 }
@@ -94,6 +107,9 @@ export function modeNotice(mode: AgentMode): string {
 	}
 	if (mode === CLAUDE_MODE) {
 		return `${agentModeLabel(mode)}. The Claude Agent SDK drives the run with its own system prompt; the pi-adhd Work rules are not used and submodes are appended to it. Switching to a non-Claude model restores the previous mode.`;
+	}
+	if (mode === GOOGLE_MODE) {
+		return `${agentModeLabel(mode)}. The agy CLI drives the run with its own system prompt; the pi-adhd Work rules are not used and submodes are prepended to the prompt. Switching to a non-agy model restores the previous mode.`;
 	}
 	return `${agentModeLabel(mode)}. The pi-adhd mode '${mode}' replace Pi's default system prompt.`;
 }
@@ -124,7 +140,7 @@ export interface ModeSnapshot {
 }
 
 export function isSelectableAgentMode(value: unknown): value is SelectableAgentMode {
-	return isAgentMode(value) && value !== CLAUDE_MODE;
+	return isAgentMode(value) && value !== CLAUDE_MODE && value !== GOOGLE_MODE;
 }
 
 export function restoreModeSnapshotFromEntries(entries: readonly unknown[]): ModeSnapshot | undefined {

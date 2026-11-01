@@ -25,6 +25,8 @@ export const EXTENSION_CATALOG: readonly ExtensionCatalogEntry[] = [
 	{ name: "spawn", description: "spawn tool and sub-agents" },
 	{ name: "timer", description: "/timer bell countdown" },
 	{ name: "web", description: "web fetch and search tools" },
+	{ name: "opencode", description: "OpenCode free and Go providers with CLI-identity bypass" },
+	{ name: "agy", description: "Antigravity agy CLI provider and Google mode" },
 	{ name: "claude", description: "Claude Agent SDK provider and Claude mode" },
 ];
 
