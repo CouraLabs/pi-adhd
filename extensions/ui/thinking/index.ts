@@ -43,6 +43,8 @@ function getAssistantMarkdownOptions(
 						messageType: "assistant",
 						isStreaming,
 						availableWidth,
+						messageId: self.messageId,
+						timestamp: self.timestamp,
 					} satisfies Parameters<MarkdownTransformer>[1]);
 					if (typeof transformed === "string") {
 						transformedMarkdown = transformed;
