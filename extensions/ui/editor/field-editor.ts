@@ -21,9 +21,9 @@ import {
 	type TuiMouseEvent,
 	type TuiMouseEventResult,
 } from "@earendil-works/pi-tui";
-import { wordWrapLine, type TextChunk } from "@earendil-works/pi-tui/dist/components/editor.js";
-import { decodePrintableKey } from "@earendil-works/pi-tui/dist/keys.js";
 import { formatCwd } from "../../../shared/format.ts";
+import { wordWrapLine, type TextChunk } from "./vendored-word-wrap.ts";
+import { decodePrintableKey } from "./vendored-printable-key.ts";
 import { agentModeBorderColor, getAgentMode } from "../../../shared/modes.ts";
 import {
 	BOX_BOTTOM_LEFT,
