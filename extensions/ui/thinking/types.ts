@@ -23,6 +23,8 @@ export interface MarkdownTransformContext {
 	messageType: string;
 	isStreaming: boolean;
 	availableWidth: number;
+	messageId?: string;
+	timestamp?: string;
 }
 
 export type MarkdownTransformer = (
@@ -40,6 +42,8 @@ export interface AssistantInternals {
 	hiddenThinkingLabel: string;
 	outputPad: number;
 	isStreaming?: boolean;
+	messageId?: string;
+	timestamp?: string;
 	markdownTransformers?: readonly MarkdownTransformer[];
 	lastMessage?: AssistantMessage;
 	hasToolCalls: boolean;

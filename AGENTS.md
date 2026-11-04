@@ -9,7 +9,7 @@ npx tsc --noEmit    # typecheck (no build step, no linter)
 npx vitest run      # test suite (test/**/*.test.ts)
 ```
 
-There are no test files and no lint config. Verify changes by typechecking, then running `pi -e /path/to/pi-adhd` and exercising the affected command/tool.
+There is no lint config. Verify changes by typechecking (`npx tsc --noEmit`) and running the test suite (`npx vitest run`, tests live in `test/`), then running `pi -e /path/to/pi-adhd` and exercising the affected command/tool.
 
 ## Architecture
 

@@ -29,8 +29,12 @@ async function nameSession(pi: ExtensionAPI, context: ExtensionContext): Promise
 	if (!model) return;
 
 	const title = await generateSessionTitle(model, context.modelRegistry, run.prompt, run.controller.signal);
-	if (run.controller.signal.aborted) return;
-	if (title) pi.setSessionName(title);
+	try {
+		if (run.controller.signal.aborted) return;
+		if (title) pi.setSessionName(title);
+	} catch {
+		return;
+	}
 }
 
 export default function sessionTitle(pi: ExtensionAPI): void {
@@ -46,7 +50,7 @@ export default function sessionTitle(pi: ExtensionAPI): void {
 	});
 
 	pi.on("agent_end", (_event, context) => {
-		void nameSession(pi, context);
+		void nameSession(pi, context).catch(() => {});
 	});
 
 	pi.on("session_shutdown", (_event, context) => {

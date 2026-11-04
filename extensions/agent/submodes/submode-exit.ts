@@ -51,10 +51,11 @@ export function createSubmodeExitTool(deps: SubmodeExitDeps): ToolDefinition {
 			}),
 		}),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx: ExtensionToolContext) {
-			const message = deps.transition(params.mode, ctx);
+			const mode = params.mode as SubmodeExitMode;
+			const message = deps.transition(mode, ctx);
 			return {
 				content: [{ type: "text" as const, text: message }],
-				details: { mode: params.mode },
+				details: { mode },
 				terminate: true,
 			};
 		},
