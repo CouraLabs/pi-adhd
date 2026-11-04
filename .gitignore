@@ -1,4 +1,6 @@
 node_modules/
 extensions/tools/session-dashboard/server/dist/
+*.tsbuildinfo
+.tmp/
 *.log
 .DS_Store
