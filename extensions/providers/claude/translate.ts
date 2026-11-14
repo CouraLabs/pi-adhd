@@ -6,61 +6,32 @@ import type {
 	Model,
 	Api,
 	TextContent,
+	ToolCall,
 	Usage,
 } from "@earendil-works/pi-ai";
 import { parseStreamingJson } from "@earendil-works/pi-ai";
 import { randomUUID } from "node:crypto";
-import type { SDKAssistantMessageError, SDKMessage, SDKRateLimitInfo, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import { resetTimestampToMilliseconds, setRateLimitWindow, utilizationToPercent, type RateLimitWindowId } from "../../../shared/rate-limits.ts";
+import type { SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { TurnDiagnostics, isFailedResult } from "./errors.ts";
 import { piToolNameFromMcpName } from "./pi-mcp.ts";
+import { recordRateLimit } from "./rate-limit-windows.ts";
 import { isMirroredSdkTool } from "./sdk-tools.ts";
+import { UsageTracker } from "./usage.ts";
 
 export const CLAUDE_API_ID = "claude-agent-sdk";
 
-const AUTH_ERROR_GUIDANCE =
-	"Claude is not signed in. Run `claude /login` in a terminal or set ANTHROPIC_API_KEY. pi never handles Claude credentials.";
-
-type UnifiedRateLimitWindow = { utilization: number; resetsAt: number };
-
-type RuntimeRateLimitInfo = SDKRateLimitInfo & {
-	unifiedWindows?: Partial<Record<string, UnifiedRateLimitWindow>>;
-};
-
-const RATE_LIMIT_WINDOWS: Readonly<Record<string, RateLimitWindowId>> = {
-	five_hour: "fiveHour",
-	seven_day: "sevenDay",
-};
-
-function recordRateLimitWindow(windowId: RateLimitWindowId, utilization: number | undefined, resetsAt: number | undefined): void {
-	if (utilization === undefined || resetsAt === undefined) return;
-	setRateLimitWindow(windowId, {
-		percent: utilizationToPercent(utilization),
-		resetsAt: resetTimestampToMilliseconds(resetsAt),
-	});
-}
-
-function recordRateLimit(info: RuntimeRateLimitInfo): void {
-	for (const [windowType, windowId] of Object.entries(RATE_LIMIT_WINDOWS)) {
-		const unified = info.unifiedWindows?.[windowType];
-		if (unified) recordRateLimitWindow(windowId, unified.utilization, unified.resetsAt);
-	}
-	const limitingWindowId = info.rateLimitType ? RATE_LIMIT_WINDOWS[info.rateLimitType] : undefined;
-	if (limitingWindowId && !info.unifiedWindows?.[info.rateLimitType as string]) {
-		recordRateLimitWindow(limitingWindowId, info.utilization, info.resetsAt);
-	}
-}
-
-const SDK_ERROR_MESSAGES: Partial<Record<SDKAssistantMessageError, string>> = {
-	authentication_failed: AUTH_ERROR_GUIDANCE,
-	oauth_org_not_allowed: AUTH_ERROR_GUIDANCE,
-	account_on_hold: "The Claude account is on hold.",
-	billing_error: "Claude reported a billing error for this account.",
-	rate_limit: "Claude rate limit reached.",
-	overloaded: "Claude is overloaded. Try again shortly.",
-	model_not_found: "Claude does not recognise this model for the signed-in account.",
-};
-
 export type TurnOutcome = "stop" | "length" | "toolUse" | "error" | "aborted";
+
+type ResultMessage = Extract<SDKMessage, { type: "result" }>;
+
+type AssistantSdkMessage = Extract<SDKMessage, { type: "assistant" }>;
+
+export interface TurnTranslatorHooks {
+	readonly onToolCall: (toolUseId: string) => void;
+	readonly markStreamed: (messageId: string) => void;
+	readonly wasStreamed: (messageId: string) => boolean;
+	readonly turnCostOf: (result: ResultMessage) => number;
+}
 
 export function emptyUsage(): Usage {
 	return {
@@ -130,6 +101,16 @@ function textOfBlocks(content: unknown): string {
 		.join("\n");
 }
 
+function toolArguments(input: unknown): ToolCall["arguments"] {
+	return typeof input === "object" && input !== null && !Array.isArray(input) ? (input as ToolCall["arguments"]) : {};
+}
+
+function piToolNameOf(sdkToolName: string): string | undefined {
+	const piOwned = piToolNameFromMcpName(sdkToolName);
+	if (piOwned !== undefined) return piOwned;
+	return isMirroredSdkTool(sdkToolName) ? sdkToolName : undefined;
+}
+
 type StreamEvent = Extract<SDKMessage, { type: "stream_event" }>["event"];
 
 type BlockDelta = Extract<StreamEvent, { type: "content_block_delta" }>["delta"];
@@ -142,16 +123,17 @@ interface BlockRef {
 
 export class TurnTranslator {
 	private readonly blocksBySdkIndex = new Map<number, BlockRef>();
+	private readonly usage = new UsageTracker();
+	private readonly diagnostics = new TurnDiagnostics();
 	private outcome: TurnOutcome | undefined;
-	private errorMessage: string | undefined;
 	private toolCallsInMessage = 0;
-	private streamedUsageSeen = false;
+	private currentMessageId = "";
 	private localOutputRendered = false;
 
 	constructor(
 		private readonly output: AssistantMessage,
 		private readonly stream: AssistantMessageEventStream,
-		private readonly onToolCall: (toolUseId: string) => void,
+		private readonly hooks: TurnTranslatorHooks,
 	) {}
 
 	get finished(): boolean {
@@ -167,17 +149,13 @@ export class TurnTranslator {
 	}
 
 	handle(sdkMessage: SDKMessage): void {
+		this.diagnostics.observe(sdkMessage);
 		switch (sdkMessage.type) {
 			case "stream_event":
 				if (sdkMessage.parent_tool_use_id === null) this.handleStreamEvent(sdkMessage.event);
 				return;
 			case "assistant":
-				if (sdkMessage.parent_tool_use_id !== null) return;
-				if (sdkMessage.error) {
-					this.errorMessage = SDK_ERROR_MESSAGES[sdkMessage.error] ?? `Claude error: ${sdkMessage.error}`;
-					return;
-				}
-				if (sdkMessage.message.model === SYNTHETIC_MODEL && this.output.content.length === 0) this.renderLocalOutput(textOfBlocks(sdkMessage.message.content));
+				if (sdkMessage.parent_tool_use_id === null) this.handleAssistant(sdkMessage);
 				return;
 			case "system":
 				if (sdkMessage.subtype === "local_command_output") this.renderLocalOutput(sdkMessage.content);
@@ -195,9 +173,10 @@ export class TurnTranslator {
 
 	finish(outcome: Extract<TurnOutcome, "error" | "aborted">, message?: string): void {
 		this.closeOpenBlocks();
+		this.applyUsage();
 		this.outcome = outcome;
 		this.output.stopReason = outcome;
-		this.output.errorMessage = message ?? this.errorMessage;
+		this.output.errorMessage = message;
 		this.stream.push({ type: "error", reason: outcome, error: this.output });
 		this.stream.end();
 	}
@@ -207,10 +186,12 @@ export class TurnTranslator {
 			case "message_start":
 				this.closeOpenBlocks();
 				this.toolCallsInMessage = 0;
-				this.applyMessageStartUsage(event.message.usage);
+				this.currentMessageId = event.message.id;
+				this.hooks.markStreamed(event.message.id);
+				this.recordUsage(event.message.id, event.message.usage);
 				return;
 			case "message_delta":
-				this.applyMessageDeltaUsage(event.usage);
+				this.recordUsage(this.currentMessageId, event.usage);
 				return;
 			case "message_stop":
 				this.closeOpenBlocks();
@@ -234,11 +215,40 @@ export class TurnTranslator {
 		}
 	}
 
-	private renderLocalOutput(rawText: string): void {
-		const text = rawText.replace(LOCAL_COMMAND_TAGS, "").trim();
-		if (this.localOutputRendered || text.length === 0) return;
-		this.localOutputRendered = true;
+	private handleAssistant(message: AssistantSdkMessage): void {
+		if (message.error) return;
+		if (message.message.model === SYNTHETIC_MODEL) {
+			if (this.output.content.length === 0) this.renderLocalOutput(textOfBlocks(message.message.content));
+			return;
+		}
+		this.recordUsage(message.message.id, message.message.usage);
+		if (this.hooks.wasStreamed(message.message.id)) {
+			this.reconcileToolArguments(message);
+			return;
+		}
+		this.renderCompleteMessage(message);
+	}
+
+	private reconcileToolArguments(message: AssistantSdkMessage): void {
+		for (const block of message.message.content) {
+			if (block.type !== "tool_use") continue;
+			const target = this.output.content.find((content): content is ToolCall => content.type === "toolCall" && content.id === block.id);
+			if (target) target.arguments = toolArguments(block.input);
+		}
+	}
+
+	private renderCompleteMessage(message: AssistantSdkMessage): void {
 		this.closeOpenBlocks();
+		let toolCalls = 0;
+		for (const block of message.message.content) {
+			if (block.type === "text" && block.text) this.pushCompleteText(block.text);
+			else if (block.type === "thinking" && block.thinking) this.pushCompleteThinking(block.thinking);
+			else if (block.type === "tool_use" && this.pushCompleteToolCall(block.id, block.name, block.input)) toolCalls += 1;
+		}
+		if (toolCalls > 0) this.finishForToolUse();
+	}
+
+	private pushCompleteText(text: string): void {
 		const contentIndex = this.output.content.length;
 		this.output.content.push({ type: "text", text });
 		this.stream.push({ type: "text_start", contentIndex, partial: this.output });
@@ -246,7 +256,37 @@ export class TurnTranslator {
 		this.stream.push({ type: "text_end", contentIndex, content: text, partial: this.output });
 	}
 
+	private pushCompleteThinking(thinking: string): void {
+		const contentIndex = this.output.content.length;
+		this.output.content.push({ type: "thinking", thinking });
+		this.stream.push({ type: "thinking_start", contentIndex, partial: this.output });
+		this.stream.push({ type: "thinking_delta", contentIndex, delta: thinking, partial: this.output });
+		this.stream.push({ type: "thinking_end", contentIndex, content: thinking, partial: this.output });
+	}
+
+	private pushCompleteToolCall(toolUseId: string, sdkToolName: string, input: unknown): boolean {
+		const name = piToolNameOf(sdkToolName);
+		if (name === undefined) return false;
+		const contentIndex = this.output.content.length;
+		const toolCall: ToolCall = { type: "toolCall", id: toolUseId, name, arguments: toolArguments(input) };
+		this.output.content.push(toolCall);
+		this.hooks.onToolCall(toolUseId);
+		this.stream.push({ type: "toolcall_start", contentIndex, partial: this.output });
+		this.stream.push({ type: "toolcall_end", contentIndex, toolCall, partial: this.output });
+		return true;
+	}
+
+	private renderLocalOutput(rawText: string): void {
+		const text = rawText.replace(LOCAL_COMMAND_TAGS, "").trim();
+		if (this.localOutputRendered || text.length === 0) return;
+		this.localOutputRendered = true;
+		this.closeOpenBlocks();
+		this.pushCompleteText(text);
+	}
+
 	private finishForToolUse(): void {
+		if (this.finished) return;
+		this.applyUsage();
 		this.outcome = "toolUse";
 		this.output.stopReason = "toolUse";
 		this.stream.push({ type: "done", reason: "toolUse", message: this.output });
@@ -254,12 +294,12 @@ export class TurnTranslator {
 	}
 
 	private startToolCall(sdkIndex: number, toolUseId: string, toolName: string): void {
-		const piToolName = piToolNameFromMcpName(toolName);
-		if (piToolName === undefined && !isMirroredSdkTool(toolName)) return;
+		const name = piToolNameOf(toolName);
+		if (name === undefined) return;
 		const contentIndex = this.output.content.length;
 		this.blocksBySdkIndex.set(sdkIndex, { contentIndex, kind: "toolCall", partialJson: "" });
-		this.output.content.push({ type: "toolCall", id: toolUseId, name: piToolName ?? toolName, arguments: {} });
-		this.onToolCall(toolUseId);
+		this.output.content.push({ type: "toolCall", id: toolUseId, name, arguments: {} });
+		this.hooks.onToolCall(toolUseId);
 		this.toolCallsInMessage += 1;
 		this.stream.push({ type: "toolcall_start", contentIndex, partial: this.output });
 	}
@@ -334,12 +374,22 @@ export class TurnTranslator {
 		for (const sdkIndex of [...this.blocksBySdkIndex.keys()]) this.closeBlock(sdkIndex);
 	}
 
-	private handleResult(result: Extract<SDKMessage, { type: "result" }>): void {
+	private recordUsage(callId: string, usage: Parameters<UsageTracker["record"]>[1]): void {
+		this.usage.record(callId, usage);
+		this.applyUsage();
+	}
+
+	private applyUsage(): void {
+		this.usage.applyTo(this.output.usage);
+	}
+
+	private handleResult(result: ResultMessage): void {
 		this.closeOpenBlocks();
-		this.applyUsage(result);
-		if (result.subtype !== "success" || result.is_error) {
-			const detail = result.subtype === "success" ? result.result : result.errors?.join("\n");
-			this.finish("error", this.errorMessage ?? (detail || `Claude run ended with ${result.subtype}`));
+		if (result.num_turns === 1) this.usage.recordTurnTotal(result.usage);
+		this.applyUsage();
+		this.output.usage.cost.total = this.hooks.turnCostOf(result);
+		if (isFailedResult(result)) {
+			this.finish("error", this.diagnostics.describeFailure(result));
 			return;
 		}
 		const reason = result.stop_reason === "max_tokens" ? "length" : "stop";
@@ -347,38 +397,5 @@ export class TurnTranslator {
 		this.output.stopReason = reason;
 		this.stream.push({ type: "done", reason, message: this.output });
 		this.stream.end();
-	}
-
-	private applyMessageStartUsage(usage: { input_tokens?: number | null; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null } | undefined): void {
-		if (!usage) return;
-		this.streamedUsageSeen = true;
-		const target = this.output.usage;
-		target.input += usage.input_tokens ?? 0;
-		target.cacheRead += usage.cache_read_input_tokens ?? 0;
-		target.cacheWrite += usage.cache_creation_input_tokens ?? 0;
-		this.refreshTotalTokens();
-	}
-
-	private applyMessageDeltaUsage(usage: { output_tokens?: number | null } | undefined): void {
-		if (!usage) return;
-		this.streamedUsageSeen = true;
-		this.output.usage.output += usage.output_tokens ?? 0;
-		this.refreshTotalTokens();
-	}
-
-	private refreshTotalTokens(): void {
-		const usage = this.output.usage;
-		usage.totalTokens = usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
-	}
-
-	private applyUsage(result: Extract<SDKMessage, { type: "result" }>): void {
-		const usage = this.output.usage;
-		usage.cost.total = result.total_cost_usd ?? 0;
-		if (this.streamedUsageSeen) return;
-		usage.input = result.usage.input_tokens ?? 0;
-		usage.output = result.usage.output_tokens ?? 0;
-		usage.cacheRead = result.usage.cache_read_input_tokens ?? 0;
-		usage.cacheWrite = result.usage.cache_creation_input_tokens ?? 0;
-		this.refreshTotalTokens();
 	}
 }

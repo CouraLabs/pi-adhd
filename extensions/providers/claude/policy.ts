@@ -2,7 +2,6 @@ import type { HookCallback } from "@anthropic-ai/claude-agent-sdk";
 import {
 	SUBMODE_TOOLS,
 	getSubmode,
-	getSubmodePromptSections,
 	type ToolNameMap,
 } from "../../../shared/submodes.ts";
 
@@ -39,12 +38,6 @@ export function allowedSdkToolsForActiveSubmode(): ReadonlySet<string> | undefin
 		if (sdkToolName !== undefined) allowed.add(sdkToolName);
 	}
 	return allowed;
-}
-
-export function buildSubmodeAppend(): string | undefined {
-	const sections = Object.entries(getSubmodePromptSections(PI_TO_SDK_TOOL_NAMES));
-	if (sections.length === 0) return undefined;
-	return sections.map(([tag, content]) => `<${tag}>\n${content}\n</${tag}>`).join("\n\n");
 }
 
 export const submodePolicyHook: HookCallback = async (input) => {

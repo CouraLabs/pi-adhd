@@ -1,10 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { getSessionInfo, query } from "@anthropic-ai/claude-agent-sdk";
-import type { Options, Query, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { EffortLevel, Options, Query, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { Api, AssistantMessageEventStream, Message, Model, SimpleStreamOptions, TranscriptContext } from "@earendil-works/pi-ai";
 import { fromPiAgentDefinitions } from "./agents.ts";
+import { buildSdkSettings } from "./claude-settings.ts";
+import { effortForThinkingLevel } from "./effort.ts";
+import { buildQueryEnv } from "./query-env.ts";
+import { TurnCostLedger } from "./turn-cost.ts";
 import { resolveConfiguredDefaultModel } from "../../tools/spawn/config/default-model.ts";
-import { buildSubmodeAppend, foregroundAgentHook, submodePolicyHook } from "./policy.ts";
+import { foregroundAgentHook, submodePolicyHook } from "./policy.ts";
+import { taggedResponseStyle } from "../../../shared/response-style.ts";
 import { PI_MCP_SERVER_NAME, PiToolServer, isPiOwnedToolName } from "./pi-mcp.ts";
 import type { PiToolDescriptions } from "./pi-mcp.ts";
 import { attachInterruptedAgents, clearLimitHit, hasLimitHit, recordLimitHit } from "./limit-handoff/pending-limit.ts";
@@ -19,27 +24,6 @@ import type { SyncMark, SyncRecord } from "./session-sync.ts";
 import { toolResultBroker } from "./tool-result-broker.ts";
 import type { SdkToolResult } from "./tool-result-broker.ts";
 import { createAssistantShell, buildUserMessage, TurnTranslator } from "./translate.ts";
-
-const SDK_SETTINGS: NonNullable<Options["settings"]> = {
-	agentPushNotifEnabled: true,
-	showMessageTimestamps: true,
-	idleCompaction: false,
-	autoCompactEnabled: true,
-	showThinkingSummaries: true,
-	autoMemoryEnabled: false,
-	emojiCompletionEnabled: false,
-	spinnerTipsEnabled: false,
-	disableAgentView: true,
-	allowAllClaudeAiMcps: false,
-	includeGitInstructions: false,
-	syncClaudeAiPlugins: false,
-	syncClaudeAiSkills: false,
-	enableAllProjectMcpServers: true,
-	promptCacheTtl: "1h",
-	subagentPromptCacheTtl: "1h",
-	viewMode: "verbose",
-	attribution: { commit: "", pr: "" },
-};
 
 class AsyncQueue<T> implements AsyncIterable<T> {
 	private readonly pending: T[] = [];
@@ -93,8 +77,10 @@ interface ClaudeSessionState {
 	awaitingToolResults: boolean;
 	pendingUuid: string | undefined;
 	wake: WakeTurnCollector | undefined;
-	appliedSubmodeAppend: string | undefined;
 	sdkSessionId: string | undefined;
+	appliedEffort: EffortLevel | undefined;
+	readonly streamedMessageIds: Set<string>;
+	readonly costs: TurnCostLedger;
 	synced: SyncMark | undefined;
 	rebaseNextTurn: boolean;
 	compactionSummary: string | undefined;
@@ -113,18 +99,12 @@ export function configurePiToolDescriptions(source: () => PiToolDescriptions): v
 	describePiTools = source;
 }
 
-function submodeChangeNotice(current: string | undefined): string {
-	return current === undefined
-		? "<system-reminder>The previous submode has ended. Its instructions and tool restrictions no longer apply.</system-reminder>"
-		: `<system-reminder>The active submode changed. These instructions replace any earlier submode instructions:\n\n${current}</system-reminder>`;
-}
-
 export function buildQueryOptions(
 	model: Model<Api>,
 	lifetime: AbortController,
 	reasoningRequested: boolean,
+	effort: EffortLevel | undefined,
 	piToolServer: PiToolServer,
-	submodeAppend: string | undefined,
 	sessionKey: string,
 	cwd: string,
 	interactive: boolean,
@@ -139,7 +119,7 @@ export function buildQueryOptions(
 		...(newSessionId ? { sessionId: newSessionId } : {}),
 		tools: [...SDK_TOOL_NAMES],
 		disallowedTools: ["Agent(Explore)", "Agent(Plan)", "Agent(statusline-setup)"],
-		systemPrompt: { type: "preset", preset: "claude_code", ...(submodeAppend ? { append: submodeAppend } : {}) },
+		systemPrompt: { type: "preset", preset: "claude_code", append: taggedResponseStyle() },
 		mcpServers: { [PI_MCP_SERVER_NAME]: piToolServer.server },
 		hooks: {
 			PreToolUse: [{ hooks: [submodePolicyHook, ...foregroundHooks, piToolServer.captureToolUseIdHook, createAskPreToolUseHook(sessionKey)] }],
@@ -150,14 +130,15 @@ export function buildQueryOptions(
 		extraArgs: { "replay-user-messages": null },
 
 		permissionMode: "auto",
-		settings: SDK_SETTINGS,
+		settings: buildSdkSettings(),
 		settingSources: ["user", "project", "local"],
 		skills: "all",
 		agentProgressSummaries: true,
 		includePartialMessages: true,
 		includeHookEvents: true,
 		abortController: lifetime,
-		env: { ...process.env, ENABLE_TOOL_SEARCH: "false", CLAUDE_CODE_ENABLE_FINE_GRAINED_TOOL_STREAMING: "1" },
+		env: buildQueryEnv(process.env),
+		...(effort ? { effort } : {}),
 		...(reasoningRequested ? { thinking: { type: "adaptive", display: "summarized" } } : {}),
 	};
 }
@@ -255,11 +236,11 @@ function openSession(
 	sessionKey: string,
 	model: Model<Api>,
 	reasoningRequested: boolean,
+	effort: EffortLevel | undefined,
 	resumeSource: ResumeSource | undefined,
 ): ClaudeSessionState {
 	const input = new AsyncQueue<SDKUserMessage>();
 	const lifetime = new AbortController();
-	const submodeAppend = buildSubmodeAppend();
 	const host = getSessionHost(sessionKey);
 	const newSessionId = resumeSource ? undefined : randomUUID();
 	const piToolServer = new PiToolServer(describePiTools());
@@ -269,8 +250,8 @@ function openSession(
 			model,
 			lifetime,
 			reasoningRequested,
+			effort,
 			piToolServer,
-			submodeAppend,
 			sessionKey,
 			host?.cwd ?? process.cwd(),
 			host?.interactive ?? false,
@@ -289,8 +270,10 @@ function openSession(
 		awaitingToolResults: false,
 		pendingUuid: undefined,
 		wake: undefined,
-		appliedSubmodeAppend: submodeAppend,
 		sdkSessionId: resumeSource && !resumeSource.fork ? resumeSource.sdkSessionId : newSessionId,
+		appliedEffort: effort,
+		streamedMessageIds: new Set(),
+		costs: new TurnCostLedger(resumeSource === undefined),
 		synced: undefined,
 		rebaseNextTurn: false,
 		compactionSummary: undefined,
@@ -324,6 +307,7 @@ async function consumeUntilBoundary(state: ClaudeSessionState, translator: TurnT
 		if (sdkMessage.type === "result") {
 			state.awaitingToolResults = false;
 			state.piToolServer.clearClaims();
+			state.streamedMessageIds.clear();
 			return;
 		}
 		if (translator.pausedForToolResults) {
@@ -349,8 +333,17 @@ async function abandonPendingRun(sessionKey: string, state: ClaudeSessionState):
 	await state.sdkQuery.interrupt();
 	for (;;) {
 		const sdkMessage = await nextSdkMessage(state);
-		if (sdkMessage.type === "result") return;
+		if (sdkMessage.type === "result") {
+			state.streamedMessageIds.clear();
+			return;
+		}
 	}
+}
+
+async function applyEffort(state: ClaudeSessionState, effort: EffortLevel | undefined): Promise<void> {
+	if (state.appliedEffort === effort) return;
+	await state.sdkQuery.applyFlagSettings({ effortLevel: effort ?? null });
+	state.appliedEffort = effort;
 }
 
 interface PreparedSession {
@@ -373,6 +366,7 @@ async function prepareSession(
 	sessionKey: string,
 	model: Model<Api>,
 	reasoningRequested: boolean,
+	effort: EffortLevel | undefined,
 	conversation: Message[],
 ): Promise<PreparedSession> {
 	const existing = sessions.get(sessionKey);
@@ -390,16 +384,16 @@ async function prepareSession(
 	if (plan.kind === "in-sync") {
 		const source = await resumableSource(sessionKey, restored);
 		if (source) {
-			const resumed = openSession(sessionKey, model, reasoningRequested, source);
+			const resumed = openSession(sessionKey, model, reasoningRequested, effort, source);
 			sessions.set(sessionKey, resumed);
 			return { session: resumed, catchUp: renderCatchUp(plan.missed) };
 		}
-		const reseeded = openSession(sessionKey, model, reasoningRequested, undefined);
+		const reseeded = openSession(sessionKey, model, reasoningRequested, effort, undefined);
 		sessions.set(sessionKey, reseeded);
 		return { session: reseeded, catchUp: renderSeed(conversation.slice(0, Math.max(userIndex, 0))) };
 	}
 
-	const fresh = openSession(sessionKey, model, reasoningRequested, undefined);
+	const fresh = openSession(sessionKey, model, reasoningRequested, effort, undefined);
 	sessions.set(sessionKey, fresh);
 	return { session: fresh, catchUp: renderSeed(plan.transcript) };
 }
@@ -423,7 +417,13 @@ export function streamClaudeTurn(
 	const sessionKey = options?.sessionId;
 	if (sessionKey === undefined) throw new Error("claude provider: the stream options carry no sessionId");
 	const output = createAssistantShell(model);
-	const translator = new TurnTranslator(output, stream, (toolUseId) => toolResultBroker.expect(toolUseId, sessionKey));
+	const effort = effortForThinkingLevel(options?.reasoning, model.thinkingLevelMap);
+	const translator = new TurnTranslator(output, stream, {
+		onToolCall: (toolUseId) => toolResultBroker.expect(toolUseId, sessionKey),
+		markStreamed: (messageId) => sessions.get(sessionKey)?.streamedMessageIds.add(messageId),
+		wasStreamed: (messageId) => sessions.get(sessionKey)?.streamedMessageIds.has(messageId) === true,
+		turnCostOf: (result) => sessions.get(sessionKey)?.costs.costOf(result) ?? 0,
+	});
 
 	let started = false;
 	const emitStart = (): void => {
@@ -454,7 +454,7 @@ export function streamClaudeTurn(
 			const conversation = conversationOf(context.messages);
 			const prepared = resuming
 				? { session: existing, catchUp: undefined }
-				: await prepareSession(sessionKey, model, options?.reasoning !== undefined, conversation);
+				: await prepareSession(sessionKey, model, options?.reasoning !== undefined, effort, conversation);
 			const session = prepared.session;
 			activeSession = session;
 			if (signal?.aborted) {
@@ -469,11 +469,8 @@ export function streamClaudeTurn(
 				} else {
 					if (session.awaitingToolResults) await abandonPendingRun(sessionKey, session);
 					await session.sdkQuery.setModel(model.id);
-					const currentAppend = buildSubmodeAppend();
-					const submodeNotice = currentAppend === session.appliedSubmodeAppend ? undefined : submodeChangeNotice(currentAppend);
-					session.appliedSubmodeAppend = currentAppend;
-					const preamble = [submodeNotice, prepared.catchUp].filter((part) => part !== undefined).join("\n\n");
-					const userMessage = buildUserMessage(context.messages, sessionKey, preamble || undefined);
+					await applyEffort(session, effort);
+					const userMessage = buildUserMessage(context.messages, sessionKey, prepared.catchUp);
 					session.pendingUuid = userMessage.uuid;
 					session.input.push(userMessage);
 				}
@@ -558,6 +555,7 @@ function trackThinkingTokens(sessionKey: string, message: SDKMessage): void {
 }
 
 function observeSdkMessage(sessionKey: string, state: ClaudeSessionState, message: SDKMessage): void {
+	if (message.type === "result") state.costs.observe(message);
 	trackThinkingTokens(sessionKey, message);
 	trackBackgroundTasks(sessionKey, message);
 	trackRateLimitHit(sessionKey, message);
@@ -644,6 +642,7 @@ export async function compactSession(sessionKey: string, customInstructions: str
 			if (sdkMessage.type !== "result") continue;
 			if (sdkMessage.is_error) throw new Error(`Claude /compact failed (${sdkMessage.subtype})`);
 			if (!boundary) throw new Error("Claude /compact finished without a compaction boundary");
+			state.streamedMessageIds.clear();
 			state.rebaseNextTurn = true;
 			return { ...boundary, summary: state.compactionSummary };
 		}
