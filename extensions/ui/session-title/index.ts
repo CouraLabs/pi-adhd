@@ -11,6 +11,7 @@ interface PendingRun {
 }
 
 const pending = new Map<string, PendingRun>();
+const naming = new Map<string, AbortController>();
 
 function sessionKey(context: ExtensionContext): string {
 	return context.sessionManager.getSessionFile() ?? context.sessionManager.getSessionId();
@@ -21,7 +22,15 @@ async function nameSession(pi: ExtensionAPI, context: ExtensionContext): Promise
 	const run = pending.get(sessionFile);
 	if (!run) return;
 	pending.delete(sessionFile);
+	naming.set(sessionFile, run.controller);
+	try {
+		await nameSessionFrom(pi, context, run);
+	} finally {
+		if (naming.get(sessionFile) === run.controller) naming.delete(sessionFile);
+	}
+}
 
+async function nameSessionFrom(pi: ExtensionAPI, context: ExtensionContext, run: PendingRun): Promise<void> {
 	const config = loadSessionTitleConfig();
 	if (!config.enabled) return;
 	if (context.sessionManager.getSessionName()) return;
@@ -50,12 +59,14 @@ export default function sessionTitle(pi: ExtensionAPI): void {
 	});
 
 	pi.on("agent_end", (_event, context) => {
-		void nameSession(pi, context).catch(() => {});
+		nameSession(pi, context).catch(() => undefined);
 	});
 
 	pi.on("session_shutdown", (_event, context) => {
 		const sessionFile = sessionKey(context);
 		pending.get(sessionFile)?.controller.abort();
 		pending.delete(sessionFile);
+		naming.get(sessionFile)?.abort();
+		naming.delete(sessionFile);
 	});
 }
