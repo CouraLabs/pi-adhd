@@ -6,8 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-14
+
 ### Added
 
+- `remote` extension: a password-protected web terminal (xterm.js + WebGL) that mirrors the running pi TUI, auto-started with a Cloudflare quick tunnel (no account; `cloudflared` downloaded on demand) and a Tailscale link when signed in. `/couralabs:pi-remote` shows the links and password; `PI_ADHD_REMOTE_PASS`, `PI_ADHD_REMOTE_PORT`, and `PI_ADHD_REMOTE_TUNNEL` configure it.
 - CI typechecks the test suite (`tsconfig.test.json`).
 - `package.json` `files` allowlist and `engines.node >= 22`; the npm tarball no longer ships tests, fixtures, or `.agents/`.
 
