@@ -5,6 +5,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { isChildSession } from "../../../shared/child-sessions.ts";
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import { offloadPrompt } from "../../../shared/user-prompts.ts";
+import { RESPONSE_STYLE_RULES, RESPONSE_STYLE_SECTION } from "../../../shared/response-style.ts";
 import {
 	CLAUDE_MODE,
 	DEFAULT_AGENT_MODE,
@@ -107,7 +108,9 @@ export default function (pi: ExtensionAPI) {
 	pi.on("before_agent_start", (event) => {
 		if (childSession) return;
 		const mode = getAgentMode();
-		if (mode === PI_MODE || mode === CLAUDE_MODE || mode === GOOGLE_MODE) return;
+		if (mode === CLAUDE_MODE || mode === GOOGLE_MODE) return;
+		event.systemPromptOptions.sections[RESPONSE_STYLE_SECTION] = RESPONSE_STYLE_RULES;
+		if (mode === PI_MODE) return;
 		const prompt = readModePrompt(mode);
 		if (prompt !== undefined) event.systemPromptOptions.customPrompt = prompt;
 	});
