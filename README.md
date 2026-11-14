@@ -19,7 +19,7 @@ Then start `pi`. **Work mode** (the ADHD output contract) is the default.
 
 ## 60-second start
 
-1. Run `pi install npm:@couralabs/pi-adhd`.
+1. Run `pi install git:github.com/CouraLabs/pi-adhd`.
 2. Run `pi`.
 3. Confirm the footer starts with `⦵ Work`.
 4. Type a request; the first line of the reply is the action.
@@ -31,7 +31,7 @@ About 2 minutes.
 
 ## What you get
 
-Sixteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`, which opens a list where Enter flips the highlighted extension; the same list carries the feature toggles (settings-backed options such as Loading Phrases).
+Eighteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`, which opens a list where Enter flips the highlighted extension; the same list carries the feature toggles (settings-backed options such as Loading Phrases).
 
 | Job | Extension | What it adds |
 |---|---|---|
@@ -52,6 +52,7 @@ Sixteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`,
 | Use Antigravity | `agy` | `agy/*` models backed by the `agy` CLI over stream-json, with a forced Google mode and resumed `--conversation` sessions |
 | Use OpenCode | `opencode` | `opencode-free/*` anonymous free models and `opencode-go/*` keyed models via the OpenCode Zen gateway |
 | Name sessions | `session-title` | Names each session from its last user prompt; `/couralabs:session-title` picks the model |
+| Browse sessions | `session-dashboard` | `/couralabs:session-dashboard`: opens a local web UI to scroll, search, and tail sessions; `--stop` shuts it down |
 
 ## Quick reference: every command
 
@@ -63,6 +64,7 @@ Sixteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`,
 | `/plan` `/grill` `/straight` | Toggle one submode |
 | `/couralabs:toggle [name]` | Open a list to toggle extensions and feature toggles, or flip one by name |
 | `/couralabs:session-title` | Show session-title state and pick the model that names sessions |
+| `/couralabs:session-dashboard [--stop]` | Open the browser session dashboard, or stop its server |
 | `/couralabs:claude-limit-handoff` | Pick the model that takes over when the Claude rate limit is reached (none: wait for the reset, then auto-continue) |
 | `/full-cwd [on\|off]` | Show the full working directory or only its last folder |
 | `/spawn:settings` `/spawn:sessions` | Tune spawn limits and retention, open a transcript |
