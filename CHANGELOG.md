@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- CI typechecks the test suite (`tsconfig.test.json`).
+- `package.json` `files` allowlist and `engines.node >= 22`; the npm tarball no longer ships tests, fixtures, or `.agents/`.
+
+### Fixed
+
+- README: extension count, missing `session-dashboard` rows, and the 60-second start install command (the npm package is not published).
+- `/couralabs:toggle` described `ask-user` as `ask_user`; the tool is `ask`.
+- session-dashboard help text named `/session-dashboard --stop` instead of `/couralabs:session-dashboard --stop`.
+- Test type errors in spawn settings, package exclusions, web public-url, and editor tests.
+
 ## [0.9.0] - 2026-11-14
 
 ### Added
