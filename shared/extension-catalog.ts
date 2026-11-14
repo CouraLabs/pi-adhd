@@ -20,6 +20,7 @@ export const EXTENSION_CATALOG: readonly ExtensionCatalogEntry[] = [
 	{ name: "ask-user", aliases: ["askUser", "ask"], description: "ask tool: tabbed clarifying-question dialog" },
 	{ name: "job", description: "background terminal jobs" },
 	{ name: "pomodoro", description: "pomodoro work/break sessions" },
+	{ name: "remote", aliases: ["pi-remote"], description: "password-protected web terminal mirroring pi, with Cloudflare/Tailscale links" },
 	{ name: "session-title", aliases: ["sessionTitle", "titles"], description: "automatic session titles from the last user prompt" },
 	{ name: "session-dashboard", description: "browser session dashboard served by a background process" },
 	{ name: "spawn", description: "spawn tool and sub-agents" },

@@ -12,6 +12,7 @@ export type ExtensionName =
 	| "modes"
 	| "opencode"
 	| "pomodoro"
+	| "remote"
 	| "session-dashboard"
 	| "session-title"
 	| "spawn"

@@ -52,6 +52,7 @@ Eighteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`
 | Use Antigravity | `agy` | `agy/*` models backed by the `agy` CLI over stream-json, with a forced Google mode and resumed `--conversation` sessions |
 | Use OpenCode | `opencode` | `opencode-free/*` anonymous free models and `opencode-go/*` keyed models via the OpenCode Zen gateway |
 | Name sessions | `session-title` | Names each session from its last user prompt; `/couralabs:session-title` picks the model |
+| Drive pi from a browser | `remote` | Password-protected web terminal that mirrors the running pi session; auto-starts with Cloudflare quick-tunnel and Tailscale links; `/couralabs:pi-remote` shows them |
 | Browse sessions | `session-dashboard` | `/couralabs:session-dashboard`: opens a local web UI to scroll, search, and tail sessions; `--stop` shuts it down |
 
 ## Quick reference: every command
@@ -64,6 +65,7 @@ Eighteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`
 | `/plan` `/grill` `/straight` | Toggle one submode |
 | `/couralabs:toggle [name]` | Open a list to toggle extensions and feature toggles, or flip one by name |
 | `/couralabs:session-title` | Show session-title state and pick the model that names sessions |
+| `/couralabs:pi-remote [status\|start\|stop\|restart]` | Show the remote web links and password, or control the server |
 | `/couralabs:session-dashboard [--stop]` | Open the browser session dashboard, or stop its server |
 | `/couralabs:claude-limit-handoff` | Pick the model that takes over when the Claude rate limit is reached (none: wait for the reset, then auto-continue) |
 | `/full-cwd [on\|off]` | Show the full working directory or only its last folder |
@@ -398,6 +400,36 @@ Timers are session-scoped: they are created by the command and cancelled on `ses
 Each row cycles through presets with Enter/Space; the last row starts the session, and Esc cancels without saving. The chosen values are persisted under the `pomodoro` settings key, so the next dialog opens on the last-used configuration. On hosts without the TUI (RPC, print) the command starts straight away with the saved configuration.
 
 Every phase is a normal countdown in the same registry as `/timer`, so the footer shows it exactly the same way (`🍅 Work 1/4 12m30s`, `☕ Break 4m`). When a work phase ends the next break is scheduled automatically — a short break between rounds and a long break after the last one — and the session ends when the long break completes. Each boundary rings the bell and pushes an OS notification (`Work 1/4 finished — break time.`). `/pomodoro stop` cancels early; the pending phase is also cancelled on `session_shutdown`. The pomodoro shares the `timer.osNotification` switch.
+
+## Remote web terminal: `remote`
+
+The extension starts with pi and serves a web page that mirrors the session you are in: the same TUI, the same scrollback, and a live keyboard, all in your browser. Rendering uses xterm.js with its WebGL (GPU) renderer and falls back to the DOM renderer when WebGL is not available (append `?renderer=dom` to force it). It does not start a second pi: it mirrors the running process's stdout and feeds browser keystrokes into stdin.
+
+Run `/couralabs:pi-remote` to see the links and the password:
+
+```
+pi remote
+  password    Xk3…  (random — set PI_ADHD_REMOTE_PASS to pin it)
+  cloudflare  https://some-words.trycloudflare.com
+  tailscale   http://my-mac.tail1234.ts.net:53520
+  local       http://127.0.0.1:53520
+  one-tap     https://some-words.trycloudflare.com/#pass=Xk3…
+  clients     0 connected
+```
+
+- **Password.** `PI_ADHD_REMOTE_PASS` sets it. Without it, a random password is generated for the pi process; `/couralabs:pi-remote` shows it. The one-tap link carries it in the URL fragment, which the browser never sends to the server or the tunnel.
+- **Cloudflare.** A [quick tunnel](https://try.cloudflare.com) gives a public `https://*.trycloudflare.com` URL with no Cloudflare account. If `cloudflared` is not on `PATH`, the official binary is downloaded once from Cloudflare's GitHub releases into `~/.pi/couralabs/bin/`. The URL changes every time the tunnel starts.
+- **Tailscale.** Tailscale has no account-free mode. If Tailscale is installed and signed in, the server also listens on your tailnet IP and the link uses your MagicDNS name. Otherwise the line explains why it is unavailable.
+- **Mirror vs Fit.** By default the page scales to the local terminal's size. **Fit** resizes pi to the browser window instead (handy on a phone); turning it off or closing the tab gives the size back to the local terminal. On touch screens the keyboard's Enter inserts a newline, a **Send** button submits, and a key bar adds Esc, Ctrl, Tab, arrows, ^C, and PgUp/PgDn.
+- **Security.** Sessions use an `HttpOnly`, `SameSite=Strict` cookie (also `Secure` over the tunnel). The WebSocket checks the cookie and origin. Ten wrong passwords in five minutes lock the login. Anyone with the password controls pi, and through it your shell, so treat the password like an SSH key.
+
+| Variable | Default | Effect |
+|---|---|---|
+| `PI_ADHD_REMOTE_PASS` | random per process | Login password |
+| `PI_ADHD_REMOTE_PORT` | `53520` | First local port tried; the next 19 are tried if it is busy |
+| `PI_ADHD_REMOTE_TUNNEL` | `cloudflare,tailscale` | Which tunnels to open; `none` keeps it local-only |
+
+The server keeps running across `/new`, `/resume`, and `/reload` so links stay valid, and stops when pi quits. `/couralabs:pi-remote stop` shuts it down, and `restart` opens fresh tunnels. Disable the extension with `/couralabs:toggle remote`.
 
 ## Claude provider: `claude`
 

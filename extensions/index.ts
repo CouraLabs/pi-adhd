@@ -16,6 +16,7 @@ import submodes from "./agent/submodes/index.ts";
 import askUser from "./tools/ask-user/index.ts";
 import job from "./tools/job/index.ts";
 import pomodoro from "./tools/pomodoro/index.ts";
+import remote from "./tools/remote/index.ts";
 import sessionDashboard from "./tools/session-dashboard/index.ts";
 import spawn from "./tools/spawn/index.ts";
 import timer from "./tools/timer/index.ts";
@@ -48,6 +49,7 @@ export default function piAdhd(pi: ExtensionAPI): void {
 	const toolsApi = enabled.has("claude") ? withClaudeCommandRedirects(pi) : pi;
 	if (enabled.has("job")) job(toolsApi);
 	if (enabled.has("pomodoro")) pomodoro(pi);
+	if (enabled.has("remote")) remote(pi);
 	if (enabled.has("session-dashboard")) sessionDashboard(pi);
 	if (enabled.has("spawn")) spawn(toolsApi);
 	if (enabled.has("timer")) timer(pi);
