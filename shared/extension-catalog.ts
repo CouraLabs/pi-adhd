@@ -17,7 +17,7 @@ export const EXTENSION_CATALOG: readonly ExtensionCatalogEntry[] = [
 	{ name: "modes", description: "Pi/Work agent modes" },
 	{ name: "submodes", description: "Plan/Grill/Straight submodes" },
 	{ name: "commands", description: "/cmd:<name> prompt commands from .agents + .claude" },
-	{ name: "ask-user", aliases: ["askUser", "ask"], description: "ask_user tool" },
+	{ name: "ask-user", aliases: ["askUser", "ask"], description: "ask tool: tabbed clarifying-question dialog" },
 	{ name: "job", description: "background terminal jobs" },
 	{ name: "pomodoro", description: "pomodoro work/break sessions" },
 	{ name: "session-title", aliases: ["sessionTitle", "titles"], description: "automatic session titles from the last user prompt" },

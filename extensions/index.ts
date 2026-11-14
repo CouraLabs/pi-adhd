@@ -38,7 +38,7 @@ export default function piAdhd(pi: ExtensionAPI): void {
 	if (enabled.has("footer")) footer(pi);
 	if (enabled.has("messages")) messages(pi);
 	if (enabled.has("thinking")) thinking(pi);
-if (enabled.has("session-title")) sessionTitle(pi);
+	if (enabled.has("session-title")) sessionTitle(pi);
 
 	if (enabled.has("modes")) modes(pi);
 	if (enabled.has("submodes")) submodes(pi);

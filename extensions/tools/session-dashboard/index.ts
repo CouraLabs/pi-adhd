@@ -101,7 +101,7 @@ export default function (pi: ExtensionAPI) {
     markExtensionLoaded("session-dashboard");
     pi.registerCommand("couralabs:session-dashboard", {
         description:
-            "Open the session dashboard in your browser (http://127.0.0.1:53510 by default; override with SESSION_DASHBOARD_PORT; BROWSER=none suppresses auto-open). The server outlives the session — use /session-dashboard --stop to terminate it.",
+            "Open the session dashboard in your browser (http://127.0.0.1:53510 by default; override with SESSION_DASHBOARD_PORT; BROWSER=none suppresses auto-open). The server outlives the session — use /couralabs:session-dashboard --stop to terminate it.",
         async handler(args, ctx) {
             const trimmed = (args ?? "").trim();
 
