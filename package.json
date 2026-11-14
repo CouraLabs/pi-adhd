@@ -8,6 +8,20 @@
   ],
   "type": "module",
   "license": "MIT",
+  "files": [
+    "extensions",
+    "shared",
+    "themes",
+    "demo.png",
+    "CHANGELOG.md",
+    "!**/*.test.ts",
+    "!**/*.test.tsx",
+    "!extensions/tools/session-dashboard/server/tests",
+    "!extensions/tools/session-dashboard/server/fixtures"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test": "vitest run"
   },
