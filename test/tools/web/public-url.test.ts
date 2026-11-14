@@ -7,7 +7,7 @@ vi.mock("node:dns", () => ({
 	promises: { lookup },
 }));
 
-const fetchMock = vi.fn<() => Promise<Response>>();
+const fetchMock = vi.fn<(input: string, init?: RequestInit) => Promise<Response>>();
 
 function okResponse(body = "ok"): Response {
 	return new Response(body, { status: 200 });

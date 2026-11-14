@@ -266,7 +266,7 @@ describe("rendering", () => {
 		for (let i = 0; i < 5; i++) editor.handleInput(SHIFT_LEFT);
 		const lines = editor.render(80);
 		const joined = lines.join("\n");
-		expect(joined).toContain("selectedBg" === "" ? "never" : "\x1b[4");
+		expect(joined).toContain("\x1b[4");
 		expect(lines.map(stripTerminalSequences).join("\n")).toContain("hello world");
 		expect(cursorCells(lines)).toEqual(["w"]);
 	});

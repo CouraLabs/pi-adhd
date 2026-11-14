@@ -5,11 +5,12 @@ pi-adhd — pi coding-agent extensions that shape agent output for an ADHD reade
 ## Commands
 
 ```bash
-npx tsc --noEmit    # typecheck (no build step, no linter)
+npx tsc --noEmit                         # typecheck sources (no build step, no linter)
+npx tsc --noEmit -p tsconfig.test.json   # typecheck sources + tests
 npx vitest run      # test suite (test/**/*.test.ts)
 ```
 
-There is no lint config. Verify changes by typechecking (`npx tsc --noEmit`) and running the test suite (`npx vitest run`, tests live in `test/`), then running `pi -e /path/to/pi-adhd` and exercising the affected command/tool.
+There is no lint config. Verify changes by typechecking (`npx tsc --noEmit` and `npx tsc --noEmit -p tsconfig.test.json`) and running the test suite (`npx vitest run`, tests live in `test/`), then running `pi -e /path/to/pi-adhd` and exercising the affected command/tool.
 
 ## Architecture
 
@@ -21,7 +22,7 @@ A pi extension package. `package.json` exposes one manifest entry (`extensions/i
 - `extensions/tools/` — agent tools and their commands: `ask-user`, `job`, `pomodoro`, `spawn`, `timer`, `web`.
 - `extensions/providers/claude/` — `claude/*` models backed by the Claude Agent SDK (bridge, tool swap, session host).
 - `shared/` — cross-extension helpers (settings, timer registry, spawn service, glyphs, formatting, extension registry). Nothing in `shared/` may import from `extensions/`.
-- `.agents/commands/` — saved prompts shipped with the package (e.g. `promote.md`).
+- `.agents/commands/` — saved prompts for working on this repo (e.g. `promote.md`); not shipped in the npm tarball.
 - `themes/` — pi theme JSON files.
 
 ### Key invariants

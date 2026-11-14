@@ -66,6 +66,7 @@ describe("createExcludedPackagesStorage", () => {
 		);
 		storage.withLock("global", (json) => {
 			captured = json;
+			return undefined;
 		});
 		expect(JSON.parse(captured ?? "")).toEqual({ packages: [{ source: "github.com/x", extensions: [] }] });
 	});
@@ -83,6 +84,7 @@ describe("createExcludedPackagesStorage", () => {
 		);
 		storage.withLock("project", (json) => {
 			captured = json;
+			return undefined;
 		});
 		expect(JSON.parse(captured ?? "")).toEqual({ packages: [{ source: "github.com/x", extensions: [] }] });
 	});

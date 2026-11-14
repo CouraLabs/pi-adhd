@@ -76,7 +76,7 @@ describe("saveSettings", () => {
 
 describe("SettingsManager", () => {
 	it("loads stored settings and clamps defaults", () => {
-		saveSettings({ defaultMaxTurns: 6, wrapUpTurns: 3 });
+		saveSettings({ defaultMaxTurns: 6, wrapUpTurns: 3, consumedSessionRetentionMinutes: 10, unconsumedSessionRetentionMinutes: 720 });
 		const manager = new SettingsManager({ emit: () => {} });
 		manager.load();
 		expect(manager.defaultMaxTurns).toBe(6);
@@ -92,7 +92,7 @@ describe("SettingsManager", () => {
 	});
 
 	it("treats 0 as unlimited and persists it", () => {
-		saveSettings({ defaultMaxTurns: 5, wrapUpTurns: 2 });
+		saveSettings({ defaultMaxTurns: 5, wrapUpTurns: 2, consumedSessionRetentionMinutes: 10, unconsumedSessionRetentionMinutes: 720 });
 		const manager = new SettingsManager({ emit: () => {} });
 		manager.load();
 		const result = manager.applyDefaultMaxTurns(0);

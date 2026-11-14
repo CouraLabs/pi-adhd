@@ -46,7 +46,7 @@ describe("registerImageBytes", () => {
 		const marker = await registerImageBytes(PNG_HEADER, true);
 		const entry = imageEntry(1);
 		expect(entry).toBeDefined();
-		await rm(entry.path, { force: true });
+		await rm(entry!.path, { force: true });
 		const attached = await attachImageMarkers(`before ${marker} after`);
 		expect(attached.images).toHaveLength(0);
 		expect(attached.text).toBe("before  after");
