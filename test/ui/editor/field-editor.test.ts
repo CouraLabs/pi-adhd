@@ -278,3 +278,14 @@ describe("rendering", () => {
 		expect(lines.map(stripTerminalSequences).join("\n")).toContain("[Image #1]");
 	});
 });
+
+describe("location label", () => {
+	it("renders the cwd and git info on the top border", () => {
+		const lines = editor.render(80).map((line) => stripTerminalSequences(line));
+		const top = lines.findIndex((line) => line.includes("╭") || line.includes("┌"));
+		const bottom = lines.findIndex((line) => line.includes("╰") || line.includes("└"));
+		expect(lines[top]).toContain("demo");
+		expect(lines[top]).toContain("⌥ main +1");
+		expect(lines[bottom]).not.toContain("demo");
+	});
+});

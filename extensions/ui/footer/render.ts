@@ -1,10 +1,9 @@
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
-import { mixColors, truncateToWidth, type Color } from "@earendil-works/pi-tui";
+import { mixColors, truncateToWidth } from "@earendil-works/pi-tui";
 import { formatTokens } from "../../../shared/format.ts";
 import {
 	CONTEXT_GLYPH,
 	ELLIPSIS,
-	GAUGE_GLYPHS,
 	POMODORO_BREAK,
 	POMODORO_WORK,
 	RATE_LIMIT_FIVE_HOUR_LABEL,
@@ -16,7 +15,7 @@ import {
 	TIMER_GLYPH,
 } from "../../../shared/glyphs.ts";
 import { prettyModelName } from "../../../shared/model-name.ts";
-import { agentModeColor, agentModeLabel, type AgentMode } from "../../../shared/modes.ts";
+import { agentModeColor, agentModeLabel, isClaudeProvider, type AgentMode } from "../../../shared/modes.ts";
 import { formatTimeUntilReset, type RateLimits, type RateLimitWindow } from "../../../shared/rate-limits.ts";
 import { SUBMODE_LABEL, submodeColor, type Submode } from "../../../shared/submodes.ts";
 import { earliestTimer, formatCountdown, remainingMs, type ActiveTimer } from "../../../shared/timers.ts";
@@ -47,71 +46,9 @@ export interface FooterState {
 	sections: readonly string[];
 }
 
-export function contextBar(theme: Theme, percent: number, positions = 5): string {
-	const clamped = Math.max(0, Math.min(100, percent));
-	const consumed = (clamped / 100) * positions;
-	const full = Math.floor(consumed);
-	const color = mixColors(theme.colors.success, theme.colors.error, clamped / 100);
-	const glyphs: string[] = [];
-	for (let position = 0; position < positions; position++) {
-		if (position < full) {
-			glyphs.push(GAUGE_GLYPHS[3]);
-			continue;
-		}
-		if (position > full || full === positions) {
-			glyphs.push(GAUGE_GLYPHS[0]);
-			continue;
-		}
-		const remainder = consumed - full;
-		glyphs.push(
-			remainder <= 0
-				? GAUGE_GLYPHS[0]
-				: remainder <= 1 / 3
-					? GAUGE_GLYPHS[1]
-					: remainder <= 2 / 3
-						? GAUGE_GLYPHS[2]
-						: GAUGE_GLYPHS[3],
-		);
-	}
-
-	const lit = full + (full < positions && consumed - full > 0 ? 1 : 0);
-	const colored = glyphs
-		.map((glyph, position) => (position < lit ? theme.style(glyph, { fg: color }) : theme.fg("dim", glyph)));
-	return colored.join("");
-}
-
 function contextColor(theme: Theme, percent: number, text: string): string {
 	const amount = Math.max(0, Math.min(1, percent / 100));
 	return theme.style(text, { fg: mixColors(theme.colors.success, theme.colors.error, amount) });
-}
-
-const PLAN_GAUGE_POSITIONS = 5;
-const PLAN_GAUGE_PARTIAL_THRESHOLD = 0.5;
-
-function gradientColor(stops: readonly Color[], amount: number): Color {
-	const clamped = Math.max(0, Math.min(1, amount));
-	const scaled = clamped * (stops.length - 1);
-	const lower = Math.min(Math.floor(scaled), stops.length - 2);
-	try {
-		return mixColors(stops[lower], stops[lower + 1], scaled - lower);
-	} catch {
-		return stops[Math.round(scaled)];
-	}
-}
-
-function planGaugeColor(theme: Theme, percent: number): Color {
-	return gradientColor([theme.colors.text, theme.colors.warning, theme.colors.error], percent / 100);
-}
-
-function planGauge(theme: Theme, percent: number): string {
-	const consumed = (Math.max(0, Math.min(100, percent)) / 100) * PLAN_GAUGE_POSITIONS;
-	const full = Math.floor(consumed);
-	const partial = full < PLAN_GAUGE_POSITIONS && consumed - full >= PLAN_GAUGE_PARTIAL_THRESHOLD ? 1 : 0;
-	const color = planGaugeColor(theme, percent);
-	const filled = GAUGE_GLYPHS[3].repeat(full);
-	const partialCell = partial ? GAUGE_GLYPHS[2] : "";
-	const empty = GAUGE_GLYPHS[0].repeat(PLAN_GAUGE_POSITIONS - full - partial);
-	return `${filled ? theme.style(filled, { fg: color }) : ""}${partialCell ? theme.style(partialCell, { fg: color }) : ""}${empty ? theme.fg("dim", empty) : ""}`;
 }
 
 function planWindowSegment(theme: Theme, label: string, window: RateLimitWindow | undefined): string | undefined {
@@ -122,7 +59,6 @@ function planWindowSegment(theme: Theme, label: string, window: RateLimitWindow 
 	return [
 		theme.fg("accent", label),
 		theme.fg("muted", `${Math.round(window.percent)}%`),
-		planGauge(theme, window.percent),
 		mutedDim("in"),
 		theme.fg("text", timeLeft),
 	].join(" ");
@@ -178,8 +114,10 @@ export function renderFooter(state: FooterState, width: number, theme: Theme): s
 	} else if (submodeLabel) {
 		parts.push(submodeLabel);
 	}
+	const claudeAgent = isClaudeProvider(state.model?.provider);
 	if (state.model) {
-		parts.push(`${theme.fg("muted", state.model.provider)} ${theme.fg("text", prettyModelName(state.model))}`);
+		const modelName = theme.fg("text", prettyModelName(state.model));
+		parts.push(claudeAgent ? modelName : `${theme.fg("muted", state.model.provider)} ${modelName}`);
 		if (state.model.reasoning) {
 			const level = state.thinkingLevel;
 			const glyph = THINKING_LEVELS[level];
@@ -194,7 +132,7 @@ export function renderFooter(state: FooterState, width: number, theme: Theme): s
 		const label = `${formatTokens(contextUsage.tokens ?? 0)}/${formatTokens(contextWindow)}`;
 		const gaugeColor = mixColors(theme.colors.success, theme.colors.error, Math.max(0, Math.min(100, percent)) / 100);
 		const icon = theme.style(CONTEXT_GLYPH, { fg: gaugeColor });
-		parts.push(`${icon} ${theme.fg("dim", `${Math.round(percent)}%`)} ${contextBar(theme, percent)} ${contextColor(theme, percent, label)}`);
+		parts.push(`${icon} ${theme.fg("dim", `${Math.round(percent)}%`)} ${contextColor(theme, percent, label)}`);
 	} else if (contextWindow) {
 		parts.push(theme.fg("dim", `ctx ?/${formatTokens(contextWindow)}`));
 	}
@@ -205,7 +143,7 @@ export function renderFooter(state: FooterState, width: number, theme: Theme): s
 	if (state.thinkingTokens > 0) {
 		parts.push(`${theme.fg("accent", THINKING_TOKENS_GLYPH)} ${theme.fg("thinkingText", formatTokens(state.thinkingTokens))}`);
 	}
-	const cost = usageCost(totals, theme, state.spawnCost);
+	const cost = claudeAgent ? "" : usageCost(totals, theme, state.spawnCost);
 	if (cost) parts.push(cost);
 	if (state.mode === "claude") parts.push(planRateLimitSegment(theme, state.rateLimits));
 

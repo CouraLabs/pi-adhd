@@ -276,14 +276,14 @@ export class FieldEditor extends CustomEditor {
 		if (placeholder && this.getText() === "" && content.length > 0) {
 			content[0] = this.placeholderRow(truncateToWidth(placeholder, contentWidth), dim);
 		}
-		const topLabel = hiddenAbove > 0 ? dim(`↑${hiddenAbove}`) : "";
-		const bottomLabel = [
+		const topLabel = [
 			this.locationSegment(),
-			hiddenBelow > 0 ? dim(`↓${hiddenBelow}`) : "",
+			hiddenAbove > 0 ? dim(`↑${hiddenAbove}`) : "",
 		]
 			.filter(Boolean)
 			.join(theme ? theme.fg("dim", SEPARATOR) : SEPARATOR);
-		const out: string[] = [pad + this.borderLine(boxWidth, BOX_TOP_LEFT, BOX_TOP_RIGHT, topLabel, "left") + pad];
+		const bottomLabel = hiddenBelow > 0 ? dim(`↓${hiddenBelow}`) : "";
+		const out: string[] = [pad + this.borderLine(boxWidth, BOX_TOP_LEFT, BOX_TOP_RIGHT, topLabel) + pad];
 		content.forEach((line, index) => {
 			const prefix = index === 0 ? `${info ? info.theme.fg("text", PROMPT) : PROMPT} ` : "  ";
 			const padded = line + " ".repeat(Math.max(0, contentWidth - visibleWidth(line)));
@@ -720,7 +720,6 @@ export class FieldEditor extends CustomEditor {
 		leftCorner: string,
 		rightCorner: string,
 		label: string,
-		align: "left" | "right" = "right",
 	): string {
 		if (width <= 0) return "";
 		if (width < 2) return this.paint(leftCorner.slice(0, width));
@@ -737,13 +736,6 @@ export class FieldEditor extends CustomEditor {
 		}
 
 		const fill = inner - labelWidth - 3;
-		if (align === "left") {
-			return (
-				this.paint(`${leftCorner}${BOX_HORIZONTAL} `) +
-				text +
-				this.paint(` ${BOX_HORIZONTAL.repeat(fill)}${rightCorner}`)
-			);
-		}
 		return (
 			this.paint(`${leftCorner}${BOX_HORIZONTAL.repeat(fill)} `) +
 			text +
