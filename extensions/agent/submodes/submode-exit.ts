@@ -1,11 +1,12 @@
 import type { ExtensionToolContext, ThemeColor, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { defineTool } from "@earendil-works/pi-coding-agent";
-import { StringEnum } from "@earendil-works/pi-ai";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { SUBMODE_LABEL } from "../../../shared/submodes.ts";
 
-export type SubmodeExitMode = "exit" | "plan" | "grill" | "straight";
+const SUBMODE_EXIT_MODES = ["exit", "plan", "grill", "straight"] as const;
+
+export type SubmodeExitMode = (typeof SUBMODE_EXIT_MODES)[number];
 
 export interface SubmodeExitDeps {
 	transition: (mode: SubmodeExitMode, ctx: ExtensionToolContext) => string;
@@ -46,9 +47,10 @@ export function createSubmodeExitTool(deps: SubmodeExitDeps): ToolDefinition {
 		defaultActive: false,
 		executionMode: "sequential",
 		parameters: Type.Object({
-			mode: StringEnum(["exit", "plan", "grill", "straight"] as const, {
-				description: 'Target: "exit" to leave, "plan", "grill", or "straight" to switch.',
-			}),
+			mode: Type.Union(
+				SUBMODE_EXIT_MODES.map((mode) => Type.Literal(mode)),
+				{ description: 'Target: "exit" to leave, "plan", "grill", or "straight" to switch.' },
+			),
 		}),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx: ExtensionToolContext) {
 			const mode = params.mode as SubmodeExitMode;
