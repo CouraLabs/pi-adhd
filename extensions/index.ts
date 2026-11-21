@@ -18,6 +18,7 @@ import job from "./tools/job/index.ts";
 import pomodoro from "./tools/pomodoro/index.ts";
 import sessionDashboard from "./tools/session-dashboard/index.ts";
 import spawn from "./tools/spawn/index.ts";
+import taskManager from "./tools/task-manager/index.ts";
 import timer from "./tools/timer/index.ts";
 import web from "./tools/web/index.ts";
 
@@ -50,6 +51,7 @@ if (enabled.has("session-title")) sessionTitle(pi);
 	if (enabled.has("pomodoro")) pomodoro(pi);
 	if (enabled.has("session-dashboard")) sessionDashboard(pi);
 	if (enabled.has("spawn")) spawn(toolsApi);
+	if (enabled.has("task-manager")) taskManager(pi);
 	if (enabled.has("timer")) timer(pi);
 	if (enabled.has("web")) web(pi);
 

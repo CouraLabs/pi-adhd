@@ -1,0 +1,14 @@
+{
+  "name": "task-manager-extension",
+  "private": true,
+  "version": "0.2.0",
+  "description": "Manages project tasks via Markdown files. Cross-platform (Windows, macOS, Linux).",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "isomorphic-dompurify": "^2.0.0",
+    "marked": "^14.0.0"
+  }
+}

@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Task Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/vendor/pico.min.css">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="server-banner" class="server-banner" hidden>
+    Cannot reach dashboard server.
+  </div>
+  <header class="container-fluid header-bar">
+    <div class="header-titles">
+      <h1>Task Dashboard</h1>
+      <div class="header-controls">
+        <label class="search-label" for="search-input">
+          <input
+            id="search-input"
+            type="search"
+            placeholder="Search tasks in this workspace…"
+            autocomplete="off"
+            spellcheck="false"
+            aria-label="Search tasks"
+          >
+          <span id="search-status" class="search-status" hidden></span>
+        </label>
+      </div>
+    </div>
+    <div role="group">
+      <select id="workspace-select" aria-label="Project"></select>
+      <button id="new-task-btn" title="Create a new task">New Task</button>
+      <button id="refresh-btn" class="secondary">Refresh</button>
+      <button id="kill-btn" class="contrast outline" title="Stop the dashboard server">Off</button>
+    </div>
+  </header>
+  <main class="container-fluid">
+    <div id="empty-state" hidden>
+      <p>No tasks yet &mdash; create one with <code>/task-create</code> in pi or the <strong>New Task</strong> button.</p>
+    </div>
+    <div id="lanes-container"></div>
+  </main>
+  <dialog id="task-modal">
+    <article>
+      <header>
+        <button id="modal-close" aria-label="Close" rel="prev"></button>
+        <h2 id="modal-title"></h2>
+        <div id="modal-meta"></div>
+      </header>
+      <div id="modal-view">
+        <div id="modal-view-body"></div>
+        <footer class="modal-footer">
+          <button type="button" id="modal-view-close" class="secondary">Close</button>
+          <button type="button" id="modal-edit-btn">Edit</button>
+        </footer>
+      </div>
+      <form id="task-form" hidden>
+        <label for="field-title">Title
+          <input id="field-title" name="title" type="text" required autocomplete="off" placeholder="Task title">
+        </label>
+        <label for="field-priority">Priority
+          <select id="field-priority" name="priority">
+            <option value="low">Low</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High</option>
+            <option value="critical">Critical</option>
+          </select>
+        </label>
+        <label for="field-tags">Tags
+          <input id="field-tags" name="tags" type="text" autocomplete="off" placeholder="comma, separated">
+        </label>
+        <div id="create-fields" class="create-fields">
+          <label for="field-workspace">Workspace
+            <select id="field-workspace" name="workspace"></select>
+          </label>
+          <label for="field-lane">Lane
+            <select id="field-lane" name="lane">
+              <option value="Backlog" selected>Backlog</option>
+              <option value="Active">Active</option>
+              <option value="user-qa">user-qa</option>
+              <option value="Closed">Closed</option>
+            </select>
+          </label>
+        </div>
+        <label for="field-body">Notes (Markdown)
+          <textarea id="field-body" name="body" rows="12" placeholder="Write the task notes in Markdown..."></textarea>
+        </label>
+        <div id="modal-error" class="modal-error" hidden></div>
+        <footer class="modal-footer">
+          <button type="button" id="modal-cancel" class="secondary">Cancel</button>
+          <button type="submit" id="modal-save">Save</button>
+        </footer>
+      </form>
+    </article>
+  </dialog>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
