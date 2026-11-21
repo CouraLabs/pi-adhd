@@ -15,6 +15,7 @@ import { randomUUID } from "node:crypto";
 import { exec, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
+import { isChildSession } from "../../../shared/child-sessions.ts";
 import { promisify } from "node:util";
 import { Text } from "@earendil-works/pi-tui";
 import {
@@ -81,10 +82,19 @@ function runNpmInstall(): Promise<void> {
     });
 }
 
-function ensureDependencies(): Promise<void> {
-    if (existsSync(resolvePath(EXTENSION_ROOT, "node_modules", "marked"))) return Promise.resolve();
+async function missingDependencies(): Promise<string[]> {
+    const manifest = JSON.parse(await readFile(resolvePath(EXTENSION_ROOT, "package.json"), "utf8")) as { dependencies?: Record<string, string> };
+    return Object.keys(manifest.dependencies ?? {}).filter(
+        (name) => !existsSync(resolvePath(EXTENSION_ROOT, "node_modules", name, "package.json")),
+    );
+}
+
+async function ensureDependencies(): Promise<void> {
+    if ((await missingDependencies()).length === 0) return;
     installInFlight ??= runNpmInstall().finally(() => { installInFlight = null; });
-    return installInFlight;
+    await installInFlight;
+    const stillMissing = await missingDependencies();
+    if (stillMissing.length > 0) throw new Error(`npm install finished but ${stillMissing.join(", ")} is still missing (cwd: ${EXTENSION_ROOT})`);
 }
 
 interface DashboardServerModule {
@@ -398,6 +408,7 @@ export default function registerTaskManager(pi: ExtensionAPI): void {
 
     // Session start: notify about active tasks
     pi.on("session_start", async (_event, ctx) => {
+        if (!ctx.hasUI || isChildSession(ctx.sessionManager.getSessionId())) return;
         const workspace = getWorkspaceName(ctx.cwd);
         const activeTasks = (await listTasksInLane(workspace, "Active"));
 
@@ -1429,15 +1440,16 @@ ${content}
             const withInitialWorkspace = (baseUrl: string) =>
                 isSafeWsId ? `${baseUrl}?workspace=${encodeURIComponent(cwdWorkspace)}` : baseUrl;
 
+            let dashboardServer: DashboardServerModule;
             try {
                 await ensureDependencies();
+                dashboardServer = await loadDashboardServer();
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
-                ctx.ui.notify(`Dependency install failed: ${message}`, "error");
+                ctx.ui.notify(`Dashboard setup failed: ${message}`, "error");
                 return;
             }
-
-            const { startDashboardServer, clearShutdownHandler } = await loadDashboardServer();
+            const { startDashboardServer, clearShutdownHandler } = dashboardServer;
 
             // Idempotency: reuse the running server if we already started one
             // in this session. Per spec §6.3 the handle is module-scoped.
