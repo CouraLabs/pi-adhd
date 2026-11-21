@@ -23,6 +23,7 @@ export const EXTENSION_CATALOG: readonly ExtensionCatalogEntry[] = [
 	{ name: "session-title", aliases: ["sessionTitle", "titles"], description: "automatic session titles from the last user prompt" },
 	{ name: "session-dashboard", description: "browser session dashboard served by a background process" },
 	{ name: "spawn", description: "spawn tool and sub-agents" },
+	{ name: "task-manager", aliases: ["tasks"], description: "Markdown task lanes, tasks tool, and /couralabs:task-dashboard" },
 	{ name: "timer", description: "/timer bell countdown" },
 	{ name: "web", description: "web fetch and search tools" },
 	{ name: "opencode", description: "OpenCode free and Go providers with CLI-identity bypass" },

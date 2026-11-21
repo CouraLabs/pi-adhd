@@ -16,6 +16,7 @@ export type ExtensionName =
 	| "session-title"
 	| "spawn"
 	| "submodes"
+	| "task-manager"
 	| "thinking"
 	| "timer"
 	| "web";

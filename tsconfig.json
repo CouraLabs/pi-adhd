@@ -12,5 +12,5 @@
     "isolatedModules": true
   },
   "include": ["extensions/**/*.ts", "shared/**/*.ts"],
-  "exclude": ["extensions/tools/session-dashboard"]
+  "exclude": ["extensions/tools/session-dashboard", "extensions/tools/task-manager"]
 }

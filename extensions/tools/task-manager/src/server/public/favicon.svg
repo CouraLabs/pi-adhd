@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Circle background -->
+  <circle cx="16" cy="16" r="14" fill="#3B82F6"/>
+  <!-- Lightning bolt -->
+  <path d="M18 5L9 17h6l-1 10 8-12h-6z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="1" stroke-linejoin="round"/>
+</svg>
