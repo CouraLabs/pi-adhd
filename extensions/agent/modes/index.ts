@@ -30,15 +30,15 @@ import { applyModeModel, resolveModeModelSwitch } from "./model-switch.ts";
 import { applyStagedModeModel, registerNewSessionCommand } from "./new-session.ts";
 import { resolveConfiguredDefaultModel } from "../../tools/spawn/config/default-model.ts";
 
-const packagedWorkPrompt = readFileSync(
-	path.join(path.dirname(fileURLToPath(import.meta.url)), "prompts", "work.md"),
-	"utf8",
-);
+const packagedModePrompts = ["work.md", "manager.md"].map((file) => ({
+	file,
+	content: readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "prompts", file), "utf8"),
+}));
 
 export default function (pi: ExtensionAPI) {
 	markExtensionLoaded("modes");
 
-	offloadPrompt("modes", "work.md", packagedWorkPrompt);
+	for (const { file, content } of packagedModePrompts) offloadPrompt("modes", file, content);
 
 	let childSession = false;
 

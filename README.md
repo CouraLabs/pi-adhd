@@ -79,9 +79,10 @@ Sixteen extensions, grouped by job. Toggle any of them with `/couralabs:toggle`,
 
 ## The output contract: `modes`
 
-One built-in mode plus any number of user modes, all switched with `/mode`:
+Two packaged modes plus any number of user modes, all switched with `/mode`:
 
 - **⦵ Work** (default) replaces pi's default system prompt with the pi-adhd [Work rules](extensions/agent/modes/prompts/work.md). The rules are the ADHD contract: lead with the next action, number multi-step tasks, restate state every turn, cap lists, no preamble or closers. Work mode also makes the agent an orchestrator — delegate to `spawn` to keep the parent context small, use `ask` before inferring anything unknown.
+- **◈ Manager** ([manager.md](extensions/agent/modes/prompts/manager.md)) makes the agent a coordinator that never implements: it delegates planning, work and review to other agents and tracks each subtask with the `tasks` tool. Its frontmatter is `model: default`, so activating it switches to the configured default model.
 - **π Pi** leaves pi's default system prompt (or a user `SYSTEM.md`) untouched.
 - **◈ Any user mode** — every `<name>.md` in `~/.pi/couralabs/prompts/modes/` is a mode that replaces pi's default system prompt with the file's content. Bare `/mode` cycles through all of them (pi included) in alphabetical order; `/mode <name>` switches directly and an unknown name reports the available ones.
 
@@ -560,6 +561,7 @@ pi --use-theme synthwave84
 | You want to change… | Edit… |
 |---|---|
 | The ADHD output rules | `~/.pi/couralabs/prompts/modes/work.md` (offloaded from `extensions/agent/modes/prompts/work.md` on load) |
+| The Manager mode prompt | `~/.pi/couralabs/prompts/modes/manager.md` (offloaded from `extensions/agent/modes/prompts/manager.md` on load) |
 | A `/cmd:<name>` prompt command | `extensions/agent/commands/index.ts` (scans `.agents/commands` + `.claude/commands`) |
 | A submode's prompt | `~/.pi/couralabs/prompts/submodes/<name>.md` (offloaded from `extensions/agent/submodes/prompts/<name>.md` on load) |
 | A spawned agent's prompt, model, or tools | `~/.pi/agents/<name>.md` (project: `<project>/.pi/agents/<name>.md`; read-only extras: `~/.agents/agents/`, `<project>/.agents/agents/`) |
