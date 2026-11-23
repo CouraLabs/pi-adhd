@@ -146,6 +146,36 @@ describe("agy session_tree", () => {
 	});
 });
 
+describe("agy queued turn", () => {
+	it("reseeds a turn that was waiting behind a running one when the tree switches", async () => {
+		const prompts: { prompt: string; conversationId: string | undefined }[] = [];
+		let release: () => void = () => undefined;
+		runAgyTurn.mockReset();
+		runAgyTurn.mockImplementationOnce(
+			(request: { prompt: string; conversationId: string | undefined }) =>
+				new Promise((resolve) => {
+					prompts.push(request);
+					release = () => resolve({ result: { conversation_id: "old", status: "SUCCESS", response: "ok", usage }, conversationId: "old", stderr: "" });
+				}),
+		);
+		runAgyTurn.mockImplementation(async (request: { prompt: string; conversationId: string | undefined }) => {
+			prompts.push(request);
+			return { result: { conversation_id: "new", status: "SUCCESS", response: "ok", usage }, conversationId: "new", stderr: "" };
+		});
+		registerAgySessionHost(SESSION, host(), undefined);
+		const running = runTurn([user("a")]);
+		await vi.waitFor(() => expect(prompts).toHaveLength(1));
+		const queued = runTurn([user("a"), assistant("ok"), user("b")]);
+		handleAgySessionTree(SESSION, host());
+		release();
+		await Promise.all([running, queued]);
+		expect(prompts[1]!.conversationId).toBeUndefined();
+		expect(prompts[1]!.prompt).toContain("[user]\na");
+		expect(getAgyConversationId(SESSION)).toBe("new");
+		disposeAgySession(SESSION);
+	});
+});
+
 describe("agy provider registration", () => {
 	it("advertises text input only", () => {
 		const registerProvider = vi.fn();

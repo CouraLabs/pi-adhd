@@ -98,8 +98,9 @@ export function streamAgyTurn(
 			translator.finishAborted();
 			return;
 		}
-		const session = ensureSession(sessionKey);
+		let session = ensureSession(sessionKey);
 		await session.activeTurn;
+		session = ensureSession(sessionKey);
 		if (signal?.aborted) {
 			translator.finishAborted();
 			return;
