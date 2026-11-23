@@ -12,7 +12,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { resolve, basename, dirname, resolve as resolvePath } from "node:path";
 import { readdir, readFile, writeFile, appendFile, mkdir, rename, unlink, stat } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { exec, spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { markExtensionLoaded } from "../../../shared/extension-registry.ts";
 import { isChildSession } from "../../../shared/child-sessions.ts";
@@ -34,7 +34,14 @@ import {
 import type { TaskInfo, Lane, TasksParams } from "./src/tasks/index.ts";
 
 const VERSION = "0.2.0";
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+
+function openWithDefaultApp(target: string): Promise<unknown> {
+    // The target is passed as an argument, never through a shell.
+    // shortcut: win32 path (rundll32) is untested; revisit if it misbehaves on Windows.
+    if (process.platform === "win32") return execFileAsync("rundll32", ["url.dll,FileProtocolHandler", target]);
+    return execFileAsync(process.platform === "darwin" ? "open" : "xdg-open", [target]);
+}
 
 /**
  * Module-scoped handle for the dashboard HTTP server. Set on first
@@ -59,10 +66,7 @@ let dashboardServerHandle: {
  */
 function openBrowser(url: string): void {
     if (process.env.BROWSER === "none") return;
-    const cmd = process.platform === "darwin" ? "open"
-              : process.platform === "win32"  ? "start"
-              : "xdg-open";
-    execAsync(`${cmd} "${url}"`).catch(() => {
+    openWithDefaultApp(url).catch(() => {
         // Swallow: the URL was already surfaced via ctx.ui.notify.
     });
 }
@@ -859,11 +863,7 @@ export default function registerTaskManager(pi: ExtensionAPI): void {
 
     async function openTaskFileInEditor(filePath: string, title: string, ctx: any) {
         try {
-            const platform = process.platform;
-            const cmd = platform === "win32" ? `start "" "${filePath}"`
-                : platform === "darwin" ? `open "${filePath}"`
-                : `xdg-open "${filePath}"`;
-            await execAsync(cmd);
+            await openWithDefaultApp(filePath);
             ctx.ui.notify(`Opened "${title}" in editor`, "info");
         } catch (error) {
             ctx.ui.notify(`Error opening task: ${error instanceof Error ? error.message : String(error)}`, "error");
