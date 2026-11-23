@@ -14,9 +14,7 @@ export default defineConfig({
         ws: false,
         configure: (proxy) => {
           proxy.on("proxyReq", (proxyReq) => {
-            if (proxyReq.getHeader("origin")) {
-              proxyReq.setHeader("origin", "http://127.0.0.1:53510");
-            }
+            proxyReq.removeHeader("origin");
           });
         },
       },

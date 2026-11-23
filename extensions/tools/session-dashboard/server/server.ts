@@ -686,7 +686,7 @@ function parseUrl(req: http.IncomingMessage): URL {
 
 function checkRequestOrigin(req: http.IncomingMessage): string | null {
   const port = req.socket.localPort;
-  const host = req.headers.host;
+  const host = req.headers.host?.toLowerCase();
   if (!host || (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`)) {
     return "forbidden host";
   }

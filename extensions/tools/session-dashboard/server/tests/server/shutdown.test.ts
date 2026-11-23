@@ -264,6 +264,8 @@ describe("request origin checks", () => {
                 headers: { host: `localhost:${port}`, origin: `http://localhost:${port}` },
             });
             expect(viaLocalhost.status).toBe(200);
+            const upperCase = await rawRequest(url, { path: "/api/health", headers: { host: `LOCALHOST:${port}` } });
+            expect(upperCase.status).toBe(200);
         });
     });
 
