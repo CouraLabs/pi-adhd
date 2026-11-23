@@ -10,8 +10,15 @@ export default defineConfig({
     proxy: {
       "/api": {
         target: "http://127.0.0.1:53510",
-        changeOrigin: false,
+        changeOrigin: true,
         ws: false,
+        configure: (proxy) => {
+          proxy.on("proxyReq", (proxyReq) => {
+            if (proxyReq.getHeader("origin")) {
+              proxyReq.setHeader("origin", "http://127.0.0.1:53510");
+            }
+          });
+        },
       },
     },
   },

@@ -66,7 +66,10 @@ export async function killDashboard(button: HTMLButtonElement | null): Promise<v
     // close the socket before the response arrives, which surfaces as a
     // fetch rejection rather than a successful 200.
     try {
-        await fetch(SHUTDOWN_ENDPOINT, { method: "POST" });
+        await fetch(SHUTDOWN_ENDPOINT, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+        });
     } catch {
         /* ignore */
     }
