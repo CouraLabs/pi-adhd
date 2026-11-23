@@ -2,9 +2,10 @@ import type { Api, AssistantMessageEventStream, Model, SimpleStreamOptions, Tran
 import { AGY_SYNC_ENTRY_TYPE } from "./identity.ts";
 import { extractAgyPrompt } from "./prompt.ts";
 import { runAgyTurn } from "./runner.ts";
-import { getAgySessionHost, takeAgyRestoredRecord } from "./session-host.ts";
+import { getAgySessionHost, registerAgySessionHost, takeAgyRestoredRecord } from "./session-host.ts";
 import { buildAgySubmodeAppend } from "./submode.ts";
 import { AgyTurnTranslator, createAgyAssistantShell } from "./translate.ts";
+import type { AgySessionHost } from "./session-host.ts";
 import type { AgySyncRecord } from "./identity.ts";
 
 interface AgySessionState {
@@ -97,8 +98,9 @@ export function streamAgyTurn(
 			translator.finishAborted();
 			return;
 		}
-		const session = ensureSession(sessionKey);
+		let session = ensureSession(sessionKey);
 		await session.activeTurn;
+		session = ensureSession(sessionKey);
 		if (signal?.aborted) {
 			translator.finishAborted();
 			return;
@@ -116,10 +118,11 @@ export function streamAgyTurn(
 				signal,
 				onEvent: (event) => translator.handle(event),
 			});
-			session.conversationId = outcome.conversationId;
-			session.modelId = model.id;
-			const hostAfter = getAgySessionHost(sessionKey);
-			hostAfter?.persistRecord({ piSessionId: sessionKey, conversationId: outcome.conversationId, modelId: model.id });
+			if (sessions.get(sessionKey) === session) {
+				session.conversationId = outcome.conversationId;
+				session.modelId = model.id;
+				getAgySessionHost(sessionKey)?.persistRecord({ piSessionId: sessionKey, conversationId: outcome.conversationId, modelId: model.id });
+			}
 			translator.finishWithResult(outcome.result, outcome.stderr, model);
 		})();
 
@@ -142,6 +145,11 @@ export function resetAgySession(sessionKey: string): boolean {
 	const existed = sessions.has(sessionKey);
 	sessions.delete(sessionKey);
 	return existed;
+}
+
+export function handleAgySessionTree(sessionKey: string, host: AgySessionHost): void {
+	registerAgySessionHost(sessionKey, host, undefined);
+	resetAgySession(sessionKey);
 }
 
 export function setAgySessionModel(sessionKey: string, modelId: string): boolean {

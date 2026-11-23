@@ -44,7 +44,6 @@ function truncate(text: string, limit: number): string {
 export class AgyTurnTranslator {
 	private textIndex: number | undefined;
 	private thinkingIndex: number | undefined;
-	private thinkingText = "";
 	private finished = false;
 
 	constructor(
@@ -146,7 +145,6 @@ export class AgyTurnTranslator {
 		const target = this.output.content[this.thinkingIndex];
 		if (target?.type !== "thinking") return;
 		target.thinking += delta;
-		this.thinkingText += delta;
 		this.stream.push({ type: "thinking_delta", contentIndex: this.thinkingIndex, delta, partial: this.output });
 	}
 
@@ -160,7 +158,9 @@ export class AgyTurnTranslator {
 
 	private closeThinking(): void {
 		if (this.thinkingIndex === undefined) return;
-		this.stream.push({ type: "thinking_end", contentIndex: this.thinkingIndex, content: this.thinkingText, partial: this.output });
+		const target = this.output.content[this.thinkingIndex];
+		const content = target?.type === "thinking" ? target.thinking : "";
+		this.stream.push({ type: "thinking_end", contentIndex: this.thinkingIndex, content, partial: this.output });
 		this.thinkingIndex = undefined;
 	}
 
