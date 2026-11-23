@@ -8,7 +8,8 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createServer, type Server } from "node:http";
+import { connect } from "node:net";
+import { createServer, request as httpRequest, type Server } from "node:http";
 import {
     createHandler,
     setShutdownHandler,
@@ -16,6 +17,27 @@ import {
 } from "../../server";
 
 let activeServer: Server | null = null;
+
+const JSON_HEADERS = { "content-type": "application/json" };
+
+function rawRequest(
+    url: string,
+    opts: { method?: string; path: string; headers: Record<string, string> },
+): Promise<{ status: number; body: string }> {
+    const { port } = new URL(url);
+    return new Promise((resolve, reject) => {
+        const req = httpRequest(
+            { host: "127.0.0.1", port, method: opts.method ?? "GET", path: opts.path, headers: opts.headers },
+            (res) => {
+                let body = "";
+                res.on("data", (c) => (body += c));
+                res.on("end", () => resolve({ status: res.statusCode ?? 0, body }));
+            },
+        );
+        req.on("error", reject);
+        req.end();
+    });
+}
 
 async function startServer(sessionsDir: string): Promise<{ url: string; server: Server }> {
     const handler = createHandler({ sessionsDir, serveStatic: false });
@@ -50,7 +72,7 @@ describe("POST /api/shutdown", () => {
         const dir = mkdtempSync(join(tmpdir(), "shutdown-noop-"));
         try {
             const { url } = await startServer(dir);
-            const res = await fetch(`${url}/api/shutdown`, { method: "POST" });
+            const res = await fetch(`${url}/api/shutdown`, { method: "POST", headers: JSON_HEADERS });
             expect(res.status).toBe(200);
             const body = await res.json();
             expect(body).toEqual({ ok: true });
@@ -100,7 +122,7 @@ describe("POST /api/shutdown", () => {
             // are valid outcomes — we just need to confirm the handler
             // was invoked.
             try {
-                await fetch(`${url}/api/shutdown`, { method: "POST" });
+                await fetch(`${url}/api/shutdown`, { method: "POST", headers: JSON_HEADERS });
             } catch {
                 /* socket closed before response — expected */
             }
@@ -127,11 +149,136 @@ describe("POST /api/shutdown", () => {
             });
             clearShutdownHandler();
 
-            const res = await fetch(`${url}/api/shutdown`, { method: "POST" });
+            const res = await fetch(`${url}/api/shutdown`, { method: "POST", headers: JSON_HEADERS });
             expect(res.status).toBe(200);
             expect(invoked).toBe(0);
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
+    });
+});
+
+describe("request origin checks", () => {
+    async function withServer(fn: (url: string, port: number) => Promise<void>): Promise<void> {
+        const dir = mkdtempSync(join(tmpdir(), "origin-"));
+        try {
+            const { url } = await startServer(dir);
+            await fn(url, Number(new URL(url).port));
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    }
+
+    it("rejects shutdown without a JSON content-type and does not invoke the handler", async () => {
+        await withServer(async (url) => {
+            let invoked = 0;
+            setShutdownHandler(() => {
+                invoked++;
+            });
+            const none = await fetch(`${url}/api/shutdown`, { method: "POST" });
+            expect(none.status).toBe(415);
+            const text = await fetch(`${url}/api/shutdown`, {
+                method: "POST",
+                headers: { "content-type": "text/plain" },
+            });
+            expect(text.status).toBe(415);
+            expect(invoked).toBe(0);
+        });
+    });
+
+    it("accepts a JSON content-type with a charset parameter", async () => {
+        await withServer(async (url) => {
+            const res = await fetch(`${url}/api/shutdown`, {
+                method: "POST",
+                headers: { "content-type": "application/json; charset=utf-8" },
+            });
+            expect(res.status).toBe(200);
+        });
+    });
+
+    it("rejects a foreign Origin on reads and on shutdown", async () => {
+        await withServer(async (url) => {
+            let invoked = 0;
+            setShutdownHandler(() => {
+                invoked++;
+            });
+            const read = await fetch(`${url}/api/sessions`, { headers: { origin: "https://evil.example" } });
+            expect(read.status).toBe(403);
+            expect(read.headers.get("access-control-allow-origin")).toBeNull();
+            const kill = await fetch(`${url}/api/shutdown`, {
+                method: "POST",
+                headers: { ...JSON_HEADERS, origin: "https://evil.example" },
+            });
+            expect(kill.status).toBe(403);
+            expect(invoked).toBe(0);
+        });
+    });
+
+    it("rejects Origin: null", async () => {
+        await withServer(async (url) => {
+            const res = await fetch(`${url}/api/health`, { headers: { origin: "null" } });
+            expect(res.status).toBe(403);
+        });
+    });
+
+    it("rejects an Origin on another local port", async () => {
+        await withServer(async (url, port) => {
+            const res = await fetch(`${url}/api/health`, { headers: { origin: `http://127.0.0.1:${port + 1}` } });
+            expect(res.status).toBe(403);
+        });
+    });
+
+    it("rejects a Host that is not loopback on this port", async () => {
+        await withServer(async (url, port) => {
+            for (const host of ["evil.example", `evil.example:${port}`, `127.0.0.1:${port + 1}`, "127.0.0.1"]) {
+                const res = await rawRequest(url, { path: "/api/health", headers: { host } });
+                expect(res.status).toBe(403);
+            }
+        });
+    });
+
+    it("rejects a request with no Host header", async () => {
+        await withServer(async (url) => {
+            const { port } = new URL(url);
+            const status = await new Promise<number>((resolve, reject) => {
+                const sock = connect(Number(port), "127.0.0.1", () => {
+                    sock.write("GET /api/health HTTP/1.0\r\n\r\n");
+                });
+                let data = "";
+                sock.on("data", (c) => (data += c));
+                sock.on("end", () => resolve(Number(data.split(" ")[1])));
+                sock.on("error", reject);
+            });
+            expect(status).toBe(403);
+        });
+    });
+
+    it("accepts same-origin requests with 127.0.0.1 and localhost hosts", async () => {
+        await withServer(async (url, port) => {
+            const plain = await fetch(`${url}/api/health`);
+            expect(plain.status).toBe(200);
+            const sameOrigin = await fetch(`${url}/api/health`, { headers: { origin: `http://127.0.0.1:${port}` } });
+            expect(sameOrigin.status).toBe(200);
+            const viaLocalhost = await rawRequest(url, {
+                path: "/api/health",
+                headers: { host: `localhost:${port}`, origin: `http://localhost:${port}` },
+            });
+            expect(viaLocalhost.status).toBe(200);
+            const upperCase = await rawRequest(url, { path: "/api/health", headers: { host: `LOCALHOST:${port}` } });
+            expect(upperCase.status).toBe(200);
+        });
+    });
+
+    it("sends no CORS headers and has no OPTIONS handler", async () => {
+        await withServer(async (url, port) => {
+            const res = await fetch(`${url}/api/health`);
+            expect(res.headers.get("access-control-allow-origin")).toBeNull();
+            const pre = await fetch(`${url}/api/shutdown`, {
+                method: "OPTIONS",
+                headers: { origin: `http://127.0.0.1:${port}`, "access-control-request-method": "POST" },
+            });
+            expect(pre.status).toBe(404);
+            expect(pre.headers.get("access-control-allow-origin")).toBeNull();
+        });
     });
 });

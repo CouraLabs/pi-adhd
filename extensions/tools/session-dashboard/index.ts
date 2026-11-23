@@ -9,7 +9,7 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { spawn } from "node:child_process";
-import { exec } from "node:child_process";
+import { exec, execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { resolve as resolvePath } from "node:path";
 import { existsSync } from "node:fs";
@@ -18,6 +18,7 @@ import { ensureBuilt } from "./ensure-built";
 import { startServer, stopServer } from "./server-launcher";
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /**
  * Module-scoped handle for the spawned session-dashboard server. Set on
@@ -57,8 +58,12 @@ const DEFAULT_PORT = 53510;
  */
 function openBrowser(url: string): void {
     if (process.env.BROWSER === "none") return;
-    const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-    execAsync(`${cmd} "${url}"`).catch(() => {
+    // The URL is passed as an argument, never through a shell.
+    // shortcut: win32 path (rundll32) is untested; revisit if it misbehaves on Windows.
+    const opened = process.platform === "win32"
+        ? execFileAsync("rundll32", ["url.dll,FileProtocolHandler", url])
+        : execFileAsync(process.platform === "darwin" ? "open" : "xdg-open", [url]);
+    opened.catch(() => {
         // Swallow: the URL was already surfaced via ctx.ui.notify.
     });
 }

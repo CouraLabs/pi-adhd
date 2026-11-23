@@ -684,6 +684,19 @@ function parseUrl(req: http.IncomingMessage): URL {
   return new URL(req.url ?? "/", `http://${host}`);
 }
 
+function checkRequestOrigin(req: http.IncomingMessage): string | null {
+  const port = req.socket.localPort;
+  const host = req.headers.host?.toLowerCase();
+  if (!host || (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`)) {
+    return "forbidden host";
+  }
+  const origin = req.headers.origin;
+  if (origin !== undefined && origin !== `http://${host}`) {
+    return "forbidden origin";
+  }
+  return null;
+}
+
 export async function readBody(filepath: string): Promise<SessionDetail> {
   const headerObj = await parseSessionHeader(filepath);
   const entries: SessionEntry[] = [];
@@ -893,11 +906,14 @@ export function createHandler(opts: HandlerOptions = {}): (req: http.IncomingMes
   const staticRoot = opts.staticRoot ?? path.join(import.meta.dirname ?? process.cwd(), "dist");
 
   return async (req: http.IncomingMessage, res: http.ServerResponse) => {
+    // Host allow-list (blocks DNS rebinding) and Origin check (blocks
+    // cross-site requests). No CORS headers are sent on purpose: browsers
+    // then refuse to expose responses to other origins.
+    const rejection = checkRequestOrigin(req);
+    if (rejection) return sendJson(res, 403, { error: rejection });
+
     const url = parseUrl(req);
     const method = req.method ?? "GET";
-
-    // CORS (for local dev convenience).
-    res.setHeader("access-control-allow-origin", "*");
 
     try {
       // --- API routes -------------------------------------------------------
@@ -965,6 +981,13 @@ export function createHandler(opts: HandlerOptions = {}): (req: http.IncomingMes
       // Off button to terminate the server from the browser. Only POST is
       // accepted. Mirrors the task-manager pattern.
       if (url.pathname === "/api/shutdown" && method === "POST") {
+        // Require a JSON content type: a cross-site form post cannot set
+        // it, and a cross-site fetch with it needs a CORS preflight, which
+        // this server never approves.
+        const contentType = (req.headers["content-type"] ?? "").split(";")[0].trim().toLowerCase();
+        if (contentType !== "application/json") {
+          return sendJson(res, 415, { error: "content-type must be application/json" });
+        }
         if (shutdownHandler) {
           // Schedule the close AFTER we send the response so the client
           // gets a clean 200 before the socket goes away. The handler

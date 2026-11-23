@@ -111,7 +111,10 @@ describe("Off button — SessionListView", () => {
             ),
         );
         fireEvent.click(btn);
-        expect(fetch).toHaveBeenCalledWith("/api/shutdown", { method: "POST" });
+        expect(fetch).toHaveBeenCalledWith("/api/shutdown", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+        });
     });
 
     it("disables itself while the shutdown request is in flight", () => {
@@ -213,7 +216,10 @@ describe("Off button — SessionView", () => {
         );
         const btn = screen.getByRole("button", { name: /stop the dashboard server/i });
         fireEvent.click(btn);
-        expect(fetch).toHaveBeenCalledWith("/api/shutdown", { method: "POST" });
+        expect(fetch).toHaveBeenCalledWith("/api/shutdown", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+        });
     });
 });
 
